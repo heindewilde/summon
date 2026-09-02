@@ -181,11 +181,13 @@ struct FolderRow: View {
     @Binding var renameText: String
     let onToggle: () -> Void
 
-    @State private var dropZone: FolderDropZone?
     @State private var pickingIcon = false
     @FocusState private var nameFocused: Bool
 
     private var isSelected: Bool { model.sidebarSelection == .folder(folder.id) }
+    private var dropZone: FolderDropZone? {
+        model.folderDropTarget?.folderID == folder.id ? model.folderDropTarget?.zone : nil
+    }
     private var isRenaming: Bool { model.renamingFolderID == folder.id }
 
     var body: some View {
@@ -272,7 +274,7 @@ struct FolderRow: View {
         }
         .onDrop(of: [.text, .fileURL],
                 delegate: FolderDropDelegate(folder: folder, model: model,
-                                             rowHeight: rowHeight, zone: $dropZone))
+                                             rowHeight: rowHeight))
         .contextMenu { menu }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(count(for: folder))
@@ -316,9 +318,12 @@ struct FolderRow: View {
 }
 
 /// A folder row's insertion indicator.
+///
+/// Quiet on purpose: a 2pt bar of near-white was the loudest thing on screen for
+/// something that only says "the drop goes here".
 private var dropLine: some View {
-    Rectangle()
-        .fill(Theme.primaryText)
-        .frame(height: 2)
+    Capsule()
+        .fill(Theme.secondaryText.opacity(0.55))
+        .frame(height: 1.5)
         .padding(.horizontal, Theme.Space.xs)
 }

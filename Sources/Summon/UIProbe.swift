@@ -12,6 +12,12 @@ import SummonUI
 enum UIProbe {
     static var isRequested: Bool { ProcessInfo.processInfo.environment["SUMMON_UIPROBE"] == "1" }
 
+    /// Posting real mouse and keyboard events is opt-in, because they go to whatever
+    /// is under the pointer or frontmost — not necessarily to this app.
+    static var mayPostInput: Bool {
+        ProcessInfo.processInfo.environment["SUMMON_UIPROBE_INPUT"] == "1"
+    }
+
     private static func attribute(_ element: AXUIElement, _ name: String) -> CFTypeRef? {
         var value: CFTypeRef?
         return AXUIElementCopyAttributeValue(element, name as CFString, &value) == .success ? value : nil
@@ -54,13 +60,15 @@ enum UIProbe {
         }
     }
 
-    static func run() async -> Never {
+    static func run(controller: PanelController) async -> Never {
         let model = Services.model
+        model.isHarness = true
         await model.seedStarterLibraryIfEmpty()
         try? await Task.sleep(for: .seconds(2))
         model.store.refresh()
         model.sidebarSelection = .all
         model.mainSelection = nil
+        let handlerSet = model.showMainWindowHandler != nil
         model.showMainWindowHandler?()
         // A first click on a background window only activates it — AppKit does not
         // deliver it to the view unless acceptsFirstMouse is true. Without this the
@@ -81,6 +89,7 @@ enum UIProbe {
 
         let app = AXUIElementCreateApplication(ProcessInfo.processInfo.processIdentifier)
         let windows = (attribute(app, kAXWindowsAttribute as String) as? [AXUIElement]) ?? []
+        line("open-library handler wired: \(handlerSet)")
         line("windows: \(windows.count)")
         for window in windows { line("  · \(role(window))  “\(title(window))”") }
 
@@ -131,7 +140,7 @@ enum UIProbe {
         // Sidebar first: folder rows gained .onDrag, which is exactly what swallowed
         // the selection click on item rows.
         let sidebarBefore = model.sidebarSelection
-        for (_, element) in found {
+        for (_, element) in found where mayPostInput {
             guard title(element).contains("Client Replies"),
                   let box = frame(of: element), box.width > 100, box.width < 320 else { continue }
             let point = CGPoint(x: box.midX, y: box.midY)
@@ -152,7 +161,7 @@ enum UIProbe {
         var clicked = false
         // Matched by label rather than by role: the middle column is a LazyVStack now,
         // not a List, so there are no AXRows in it to look for.
-        for (_, element) in found {
+        for (_, element) in found where mayPostInput {
             let label = title(element)
             guard titles.contains(where: { !$0.isEmpty && label.contains($0) }) else { continue }
             guard let frame = frame(of: element), frame.width > 250, frame.height > 20 else { continue }
@@ -186,6 +195,94 @@ enum UIProbe {
         } else {
             line("FAIL  found no item row with a clickable frame")
         }
+
+        // Does summoning drag the library window forward with it?
+        line("app windows: " + NSApp.windows.map { "\($0.title.isEmpty ? "(untitled)" : $0.title)[\($0.isVisible)]" }.joined(separator: ", "))
+        let libraryWindow = NSApp.windows.first { $0.isVisible && !($0 is SummonPanel) && $0.contentView != nil }
+        libraryWindow?.makeKeyAndOrderFront(nil)
+        try? await Task.sleep(for: .milliseconds(400))
+
+        // Step out of the way first, the way another app would be frontmost in real
+        // use. If summoning re-activates us, every window this app owns comes forward
+        // with the panel — which is what put the library on top of your work.
+        model.dismissPanel()
+        let libraryOpenBefore = NSApp.windows.contains { $0.isVisible && !($0 is SummonPanel) && !$0.title.isEmpty }
+        line("library window open before summon: \(libraryOpenBefore)")
+        // The probe forced .regular earlier so it could click; a menu-bar app is
+        // .accessory, and the distinction decides whether ordering a window front
+        // activates the whole app.
+        NSApp.setActivationPolicy(.accessory)
+        NSApp.deactivate()
+        try? await Task.sleep(for: .milliseconds(800))
+        let wasActive = NSApp.isActive
+
+        model.summon()
+        try? await Task.sleep(for: .seconds(1))
+        // What the person actually sees: where Summon's windows sit in the on-screen
+        // stack across every application. NSApp.isActive does not answer that.
+        func onScreenStack() -> [(owner: String, name: String)] {
+            let info = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements],
+                                                  kCGNullWindowID) as? [[String: Any]] ?? []
+            return info.compactMap { entry in
+                guard let owner = entry[kCGWindowOwnerName as String] as? String,
+                      (entry[kCGWindowLayer as String] as? Int) == 0 || owner == "Summon"
+                else { return nil }
+                return (owner, (entry[kCGWindowName as String] as? String) ?? "")
+            }
+        }
+
+        let libraryOpenAfter = NSApp.windows.contains { $0.isVisible && !($0 is SummonPanel) && !$0.title.isEmpty }
+        line(libraryOpenAfter && !libraryOpenBefore
+             ? "FAIL  summoning re-opened the library window"
+             : "PASS  summoning did not re-open a closed library window")
+
+        let stack = onScreenStack()
+        line("front-to-back: " + stack.prefix(6).map { "\($0.owner)/\($0.name)" }.joined(separator: " | "))
+
+        let summonIndices = stack.enumerated().filter { $0.element.owner == "Summon" }.map(\.offset)
+        let otherAppIndex = stack.firstIndex { $0.owner != "Summon" }
+        // The panel reports an empty window name; the library window carries the
+        // title of whatever section is showing.
+        let libraryIndex = stack.firstIndex { $0.owner == "Summon" && !$0.name.isEmpty }
+
+        line("   app active: \(NSApp.isActive), was active before summon: \(wasActive)")
+        if let libraryIndex, let otherAppIndex {
+            line(libraryIndex < otherAppIndex
+                 ? "FAIL  the library window sits in front of another app's window"
+                 : "PASS  the library window stayed behind the app you were using")
+        } else if libraryIndex == nil {
+            line("····  no library window on screen to judge")
+        } else {
+            line("····  no other app's window on screen to compare against")
+        }
+        _ = summonIndices
+
+        let panel = controller.debugPanel
+        line("panel visible: \(panel?.isVisible == true)")
+        line(panel?.isKeyWindow == true
+             ? "PASS  the panel takes key focus, so typing reaches it"
+             : "FAIL  the panel is not key — typing would go elsewhere")
+
+        _ = libraryWindow
+
+        // The decisive test: does typing actually reach the panel? isKeyWindow alone
+        // does not prove keystrokes are routed here when the app is not active.
+        model.query = ""
+        try? await Task.sleep(for: .milliseconds(300))
+        guard mayPostInput else {
+            line("····  synthetic input skipped (set SUMMON_UIPROBE_INPUT=1 to enable)")
+            try? report.write(toFile: "/tmp/summon-uiprobe.txt", atomically: true, encoding: .utf8)
+            exit(0)
+        }
+        let source = CGEventSource(stateID: .hidSystemState)
+        for down in [true, false] {
+            CGEvent(keyboardEventSource: source, virtualKey: 0x00, keyDown: down)?  // "a"
+                .post(tap: .cghidEventTap)
+        }
+        try? await Task.sleep(for: .milliseconds(600))
+        line(model.query == "a"
+             ? "PASS  typing reaches the panel without activating the app"
+             : "FAIL  typing did not reach the panel (query is “\(model.query)”)")
 
         try? report.write(toFile: "/tmp/summon-uiprobe.txt", atomically: true, encoding: .utf8)
         exit(0)

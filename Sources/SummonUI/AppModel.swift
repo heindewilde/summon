@@ -3,6 +3,15 @@ import Observation
 import SwiftUI
 import SummonKit
 
+public struct FolderDropTarget: Equatable, Sendable {
+    public let folderID: UUID
+    public let zone: FolderDropZone
+    public init(folderID: UUID, zone: FolderDropZone) {
+        self.folderID = folderID
+        self.zone = zone
+    }
+}
+
 /// What is layered over the results, if anything.
 public enum PanelOverlay: Equatable, Sendable {
     case none
@@ -155,6 +164,12 @@ public final class AppModel {
     /// `/Folder` splits on spaces, so a folder called "Client Replies" cannot be
     /// expressed there at all.
     public private(set) var folderScope: String?
+
+    /// Which folder row is currently showing a drop indicator, and what the drop
+    /// would do. One value for the whole sidebar: with a `@State` per row, a row that
+    /// never received `dropExited` — exactly what happens when the drop lands on a
+    /// different row — kept its indicator on screen afterwards.
+    public var folderDropTarget: FolderDropTarget?
 
     /// Focus tokens. The search field and the overlay field each watch their own, so
     /// opening or closing the overlay moves first responder without either of them
@@ -641,7 +656,29 @@ public final class AppModel {
         deliver(id, style: style)
     }
 
+    /// Set by the test harnesses. Delivery is *recorded* instead of performed: no
+    /// pasteboard write, no synthesised ⌘V.
+    ///
+    /// The self-test used to exercise ⌘1–⌘9 by really activating an item, which wrote
+    /// the clipboard and pasted into whatever app happened to be frontmost. It did
+    /// that on someone's machine while they were writing an email. A harness must
+    /// never reach outside the app.
+    /// Defaults to true whenever *any* harness env var is set, so a new harness
+    /// cannot forget to opt in. Belt and braces: the opt-in is also explicit in each
+    /// harness, but the default is the one that matters.
+    @ObservationIgnored public var isHarness = ProcessInfo.processInfo.environment.keys.contains {
+        $0.hasPrefix("SUMMON_") && $0 != "SUMMON_DEMO" && $0 != "SUMMON_APPEARANCE"
+    }
+    @ObservationIgnored public private(set) var lastDelivery: (id: UUID, style: UseStyle)?
+
     private func deliver(_ id: UUID, style: UseStyle) {
+        if isHarness {
+            lastDelivery = (id, style)
+            store.recordUse(id: id, inApp: focus.previousBundleID)
+            dismissPanel()
+            return
+        }
+
         let clipboardText = inserter.currentClipboardText()
         guard let payload = store.payload(for: id, fieldValues: fieldValues, clipboard: clipboardText) else {
             show(Toast(text: "Couldn’t read that item", symbol: "exclamationmark.triangle", tone: .danger))
@@ -964,9 +1001,29 @@ public final class AppModel {
         // An untitled snippet with no body is removed again when you leave it.
         let item = store.createSnippet(title: "", body: "", folder: folder)
         store.refresh()
+
+        // Show it where it actually landed. Creating from Pinned, a tag or a type
+        // filter made an item the current section could never display, so it looked
+        // like nothing had happened — the snippet was real, just filtered out.
+        if !sectionShows(item.id) {
+            sidebarSelection = folder.map { .folder($0.id) } ?? .all
+        }
         runSearch()
         mainSelection = item.id
         focusNewItemTitle = true
+    }
+
+    /// Would the current sidebar section display this item?
+    private func sectionShows(_ id: UUID) -> Bool {
+        itemsForSidebar().contains { $0.id == id }
+    }
+
+    /// Where a new item would go, for the menu to say so out loud.
+    public var newItemDestination: String {
+        guard case .folder(let id) = sidebarSelection,
+              let folder = store.allFolders().first(where: { $0.id == id })
+        else { return "All Items" }
+        return folder.name
     }
 
     /// Drops a snippet that was created and then left completely empty, so abandoning

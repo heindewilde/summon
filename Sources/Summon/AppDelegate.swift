@@ -38,7 +38,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         if UIProbe.isRequested {
-            Task { await UIProbe.run() }
+            Task { await UIProbe.run(controller: controller) }
             return
         }
 

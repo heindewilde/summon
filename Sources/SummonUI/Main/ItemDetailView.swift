@@ -18,6 +18,7 @@ public struct ItemDetailView: View {
     @State private var pin = ""
     @FocusState private var pinFocused: Bool
     @FocusState private var titleFocused: Bool
+    @State private var filePreview: AppModel.PreviewData?
 
     public init(model: AppModel, itemID: UUID) {
         self.model = model
@@ -46,6 +47,10 @@ public struct ItemDetailView: View {
         .task(id: itemID) {
             load()
             showingDetails = false
+            filePreview = nil
+            if let snapshot, !snapshot.kind.isTextual, !snapshot.isLocked {
+                filePreview = model.previewData(for: itemID)
+            }
             // A snippet created from the + menu exists already and is selected; the
             // cursor lands in its title so you can just start typing.
             if model.focusNewItemTitle {
@@ -151,8 +156,8 @@ public struct ItemDetailView: View {
                 }
             }
         } else if let snapshot {
-            PanelPreview(snapshot: snapshot, bodyText: filePreview.body,
-                         fileURL: filePreview.fileURL, thumbnailURL: filePreview.thumbnailURL)
+            PanelPreview(snapshot: snapshot, bodyText: filePreview?.body,
+                         fileURL: filePreview?.fileURL, thumbnailURL: filePreview?.thumbnailURL)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
@@ -195,9 +200,9 @@ public struct ItemDetailView: View {
             && model.intelligence.status.isReady
     }
 
-    private var filePreview: AppModel.PreviewData {
-        model.previewData(for: itemID)
-    }
+    /// Resolved in `.task`, never in `body`. Read from `body` it ran a full sorted
+    /// SwiftData fetch plus a decrypt — and for a sealed blob a decrypt-to-disk — on
+    /// every render, which is what made clicking between items feel heavy.
 
     /// The PIN field sits where the content would be. Summoning the panel to ask for
     /// a PIN meant a window appeared over the thing you were already looking at.

@@ -4,7 +4,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 /// Where a dragged folder would land relative to the row under the pointer.
-public enum FolderDropZone: Equatable {
+public enum FolderDropZone: Equatable, Sendable {
     case before
     case into
     case after
@@ -19,18 +19,19 @@ public enum FolderDropZone: Equatable {
 public struct FolderDropDelegate: DropDelegate {
     let folder: SummonFolder
     let model: AppModel
-    @Binding var zone: FolderDropZone?
 
     /// Passed in rather than assumed: the delegate turns a pointer position into an
     /// intent, so it has to know how tall the row actually is.
     let rowHeight: CGFloat
 
-    public init(folder: SummonFolder, model: AppModel, rowHeight: CGFloat,
-                zone: Binding<FolderDropZone?>) {
+    public init(folder: SummonFolder, model: AppModel, rowHeight: CGFloat) {
         self.folder = folder
         self.model = model
         self.rowHeight = rowHeight
-        _zone = zone
+    }
+
+    private func mark(_ zone: FolderDropZone?) {
+        model.folderDropTarget = zone.map { FolderDropTarget(folderID: folder.id, zone: $0) }
     }
 
     private func zone(for location: CGPoint) -> FolderDropZone {
@@ -44,17 +45,23 @@ public struct FolderDropDelegate: DropDelegate {
         info.hasItemsConforming(to: [.text]) || info.hasItemsConforming(to: [.fileURL])
     }
 
-    public func dropEntered(info: DropInfo) { zone = zone(for: info.location) }
-    public func dropExited(info: DropInfo) { zone = nil }
+    public func dropEntered(info: DropInfo) { mark(zone(for: info.location)) }
+
+    public func dropExited(info: DropInfo) {
+        // Only clear if this row is still the one being marked: another row may have
+        // taken over as the pointer moved on.
+        if model.folderDropTarget?.folderID == folder.id { mark(nil) }
+    }
 
     public func dropUpdated(info: DropInfo) -> DropProposal? {
-        zone = zone(for: info.location)
+        mark(zone(for: info.location))
         return DropProposal(operation: .move)
     }
 
     public func performDrop(info: DropInfo) -> Bool {
-        let target = zone ?? .into
-        zone = nil
+        let target = model.folderDropTarget?.folderID == folder.id
+            ? (model.folderDropTarget?.zone ?? .into) : .into
+        model.folderDropTarget = nil
 
         if info.hasItemsConforming(to: [.text]) {
             let providers = info.itemProviders(for: [.text])
@@ -136,6 +143,7 @@ public struct RootFolderDropDelegate: DropDelegate {
 
     public func performDrop(info: DropInfo) -> Bool {
         isTargeted = false
+        model.folderDropTarget = nil
         let providers = info.itemProviders(for: [.text])
         Task { @MainActor in
             guard let dragged = await FolderDropDelegate.folderID(from: providers),

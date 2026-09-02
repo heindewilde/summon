@@ -36,8 +36,11 @@ struct SummonApp: App {
         MenuBarExtra {
             MenuBarContent(model: model)
         } label: {
-            Image(systemName: "sparkles")
-                .accessibilityLabel("Summon")
+            // The wiring lives on the label, not on the menu's content. A `.menu`
+            // style MenuBarExtra only builds its content when the menu is opened, so
+            // handlers set there stayed nil until you happened to click the icon —
+            // and ⌘L, which goes through one of them, did nothing at all.
+            MenuBarLabel(model: model)
         }
         .menuBarExtraStyle(.menu)
 
@@ -51,6 +54,27 @@ struct SummonApp: App {
 enum WindowID {
     static let main = "summon.main"
     static let onboarding = "summon.onboarding"
+}
+
+/// The menu bar icon, and the one view guaranteed to be alive for the whole session.
+struct MenuBarLabel: View {
+    @Bindable var model: AppModel
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        Image(systemName: "sparkles")
+            .accessibilityLabel("Summon")
+            .onAppear {
+                model.showMainWindowHandler = {
+                    NSApp.activate()
+                    openWindow(id: WindowID.main)
+                }
+                model.showOnboardingHandler = {
+                    NSApp.activate()
+                    openWindow(id: WindowID.onboarding)
+                }
+            }
+    }
 }
 
 /// Wraps the menu bar content so it can reach `openWindow`, which is only available
@@ -69,15 +93,6 @@ struct MenuBarContent: View {
                 openSettings()
             }
         )
-        .onAppear {
-            // Wired from here, not from the library window: the handler that opens
-            // the library cannot live on the thing it opens.
-            model.showMainWindowHandler = openLibrary
-            model.showOnboardingHandler = {
-                NSApp.activate()
-                openWindow(id: WindowID.onboarding)
-            }
-        }
     }
 
     private func openLibrary() {
@@ -95,6 +110,12 @@ struct SummonCommands: Commands {
                 .keyboardShortcut("n")
             Button("New Folder") { model.beginNewFolder() }
                 .keyboardShortcut("n", modifiers: [.command, .shift])
+        }
+        // ⌘L had no app-level binding at all: it existed only inside the menu bar
+        // menu, which does not register a shortcut with the menu system.
+        CommandGroup(after: .windowList) {
+            Button("Library") { model.showMainWindowHandler?() }
+                .keyboardShortcut("l")
         }
         CommandGroup(after: .newItem) {
             Button("Import Files…") { model.presentImportPanel() }

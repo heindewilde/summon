@@ -8,6 +8,10 @@ public struct ItemListView: View {
     @Bindable var model: AppModel
     let items: [ItemSnapshot]
     @State private var gridColumns = 1
+    /// So a click hands the keyboard to the list. Without it, selecting with the
+    /// mouse and then pressing an arrow key did nothing — focus was still wherever
+    /// you left it, usually a text field in the detail pane.
+    @FocusState private var listFocused: Bool
 
     public init(model: AppModel, items: [ItemSnapshot]) {
         self.model = model
@@ -36,6 +40,13 @@ public struct ItemListView: View {
         }
     }
 
+    /// Selecting always hands the keyboard to the list, so the mouse and the arrow
+    /// keys drive the same thing instead of taking turns.
+    private func select(_ id: UUID) {
+        model.mainSelection = id
+        listFocused = true
+    }
+
     private var currentFolder: SummonFolder? {
         guard case .folder(let id) = model.sidebarSelection else { return nil }
         return model.store.allFolders().first { $0.id == id }
@@ -53,7 +64,7 @@ public struct ItemListView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     ForEach(items) { item in
-                        ItemRow(model: model, item: item).id(item.id)
+                        ItemRow(model: model, item: item, onSelect: select).id(item.id)
                     }
                 }
                 .padding(.horizontal, Theme.Space.xs)
@@ -61,6 +72,7 @@ public struct ItemListView: View {
             }
             .focusable()
             .focusEffectDisabled()
+            .focused($listFocused)
             .onKeyPress(.upArrow) { model.moveMainSelection(by: -1); return .handled }
             .onKeyPress(.downArrow) { model.moveMainSelection(by: 1); return .handled }
             .onChange(of: model.mainSelection) { _, new in
@@ -138,6 +150,7 @@ public struct ItemListView: View {
 struct ItemRow: View {
     @Bindable var model: AppModel
     let item: ItemSnapshot
+    let onSelect: (UUID) -> Void
 
     var body: some View {
         // The same 40pt row the panel and the menu bar draw. Three surfaces had
@@ -149,10 +162,10 @@ struct ItemRow: View {
             // Double-click copies. Registered before the single tap so the single
             // click still only selects.
             .onTapGesture(count: 2) {
-                model.mainSelection = item.id
+                onSelect(item.id)
                 model.use(item.id, style: .copy)
             }
-            .onTapGesture { model.mainSelection = item.id }
+            .onTapGesture { onSelect(item.id) }
             .contextMenu { ItemContextMenu(model: model, item: item) }
             .onDrag { model.dragProvider(for: item.id) ?? NSItemProvider() }
     }

@@ -88,15 +88,36 @@ final class PanelController: NSObject, NSWindowDelegate {
         router.beginModifierTracking()
 
         position(panel)
-        panel.orderFrontRegardless()
+
+        // Activation is unavoidable: a .nonactivatingPanel only takes key focus while
+        // the app is already active, so without this, typing goes to whatever app you
+        // came from. Measured, not assumed — see UIProbe.
+        //
+        // The cost is that activating raises every window the app owns, which dragged
+        // an open library window to the front on top of your work each time you
+        // summoned. So the library is sent straight back behind the other apps'
+        // windows, leaving only the panel in front.
+        // Dropping below the normal level is what actually keeps them down: window
+        // level orders across applications, whereas order(.below:) only reshuffles
+        // this app's own list. Restored in hide().
+        loweredWindows = NSApp.windows.filter { $0 !== panel && $0.isVisible && !$0.title.isEmpty }
+        for window in loweredWindows {
+            window.level = NSWindow.Level(rawValue: NSWindow.Level.normal.rawValue - 1)
+        }
         NSApp.activate()
+        panel.orderFrontRegardless()
         panel.makeKeyAndOrderFront(nil)
     }
 
     func hide() {
         router.endModifierTracking()
         panel?.orderOut(nil)
+        for window in loweredWindows { window.level = .normal }
+        loweredWindows = []
     }
+
+    /// Windows pushed below normal level while the panel is up.
+    private var loweredWindows: [NSWindow] = []
 
     private func makePanel() -> SummonPanel {
         let panel = SummonPanel(

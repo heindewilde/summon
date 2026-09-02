@@ -68,10 +68,14 @@ public struct MainWindowView: View {
     private var toolbar: some ToolbarContent {
         ToolbarItem(placement: .primaryAction) {
             Menu {
-                Button("New Snippet", systemImage: "text.alignleft") { model.beginNewSnippet() }
-                    .keyboardShortcut("n")
-                Button("New Folder", systemImage: "folder.badge.plus") { model.beginNewFolder() }
-                    .keyboardShortcut("n", modifiers: [.command, .shift])
+                // The menu says where the thing will go, so creating from a filtered
+                // section is not a surprise.
+                Section("Add to \(model.newItemDestination)") {
+                    Button("New Snippet", systemImage: "text.alignleft") { model.beginNewSnippet() }
+                        .keyboardShortcut("n")
+                    Button("New Folder", systemImage: "folder.badge.plus") { model.beginNewFolder() }
+                        .keyboardShortcut("n", modifiers: [.command, .shift])
+                }
                 Divider()
                 Button("Import Files…", systemImage: "square.and.arrow.down") {
                     model.presentImportPanel(into: currentFolder)

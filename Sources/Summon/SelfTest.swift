@@ -31,6 +31,9 @@ enum SelfTest {
 
     static func run(controller: PanelController) async {
         let model = Services.model
+        // Nothing this test does may reach outside the app: no clipboard writes, no
+        // synthesised keystrokes into whatever is frontmost.
+        model.isHarness = true
         print("\n=== Summon self-test ===")
 
         // MARK: Environment
@@ -62,6 +65,13 @@ enum SelfTest {
               detail: "\(pdf?.searchableText.count ?? 0) characters")
 
         // MARK: The panel window
+        //
+        // The harness activates; the app deliberately does not. This binary is run
+        // directly rather than through `open`, so it is never properly launched and
+        // will not put a window on screen unless asked. In real use the panel appears
+        // without activating — which is the point, since activating raises every
+        // window the app owns. UIProbe checks that path against a real launch.
+        NSApp.activate()
         model.summon()
         try? await Task.sleep(for: .milliseconds(400))
         check("Panel becomes visible on summon", controller.isVisible)
@@ -186,10 +196,24 @@ enum SelfTest {
         // The panel drew ⌘1–⌘9 on every row for an entire release with no handler
         // behind them. These assert the bindings actually reach behaviour, not just
         // that PanelKeyMap resolves them — that is already unit-tested.
+        // Re-establish the preconditions rather than inherit them: the vault and
+        // folder sections above mutate the library, and these checks were passing or
+        // failing depending on what those left behind.
+        NSApp.activate()
         model.summon()
-        try? await Task.sleep(for: .milliseconds(200))
+        model.store.refresh()
         model.query = ""
+        model.runSearch()
         model.selectedIndex = 0
+        // Wait for the state rather than guess at a delay: a fixed sleep passed on a
+        // warm run and failed on the first one after a rebuild.
+        for _ in 0..<40 where model.results.isEmpty || !model.isPanelVisible {
+            try? await Task.sleep(for: .milliseconds(50))
+            model.runSearch()
+        }
+        check("There is something to act on",
+              !model.results.isEmpty && model.isPanelVisible,
+              detail: "\(model.results.count) results, panel visible \(model.isPanelVisible)")
 
         check("⌘K opens the action menu", {
             model.route(KeyChord(.character("k"), .command))
@@ -212,9 +236,8 @@ enum SelfTest {
             let third = model.results[2].id
             check("⌘3 activates the third result", {
                 model.route(KeyChord(.character("3"), .command))
-                return model.selectedIndex == 2
+                return model.selectedIndex == 2 && model.lastDelivery?.id == third
             }(), detail: model.results[2].item.title)
-            _ = third
         }
 
         check("⌘↑ and ⌘↓ jump to the ends", {
@@ -316,6 +339,20 @@ enum SelfTest {
 
         model.store.deleteFolder(inner)
         model.store.deleteFolder(top)
+
+        // MARK: A new item lands somewhere you can see it
+        model.sidebarSelection = .pinned
+        model.beginNewSnippet()
+        try? await Task.sleep(for: .milliseconds(150))
+        check("Creating from a filtered section moves you to where the item went",
+              model.visibleItems.contains { $0.id == model.mainSelection },
+              detail: "section is now \(model.sidebarTitle)")
+        if let created = model.mainSelection {
+            model.discardIfEmpty(created)
+            check("An untouched new snippet removes itself again",
+                  model.store.item(id: created) == nil)
+        }
+        model.sidebarSelection = .all
 
         check("Panel hides on dismiss", !controller.isVisible)
 

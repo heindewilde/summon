@@ -122,3 +122,15 @@ heuristics. Settings shows the real status rather than pretending.
 containers, so the library window (`NavigationSplitView` + `List`) has to be
 reviewed live. `SnapshotSafeScrollView` and `EnvironmentValues.isSnapshotting`
 exist only to serve that harness; behaviour in the shipped app is unchanged.
+
+`SUMMON_LIVE=library|grid|detail|panel|menubar|settings` puts that surface on
+screen in a real window and writes its window number to `SUMMON_LIVE_INFO`, so it
+can be captured with `screencapture -l` — one window, not the whole screen.
+`SUMMON_APPEARANCE=dark` forces this app's appearance only, leaving the system
+setting alone:
+
+```bash
+SUMMON_DEMO=1 SUMMON_LIVE=library SUMMON_LIVE_INFO=/tmp/win \
+  open -n dist/Summon.app && sleep 6 && \
+  screencapture -o -l "$(cat /tmp/win)" library.png
+```

@@ -14,7 +14,7 @@ struct SummonApp: App {
                 .frame(minWidth: 900, minHeight: 560)
                 .onAppear { wireWindowHandlers() }
         }
-        .defaultSize(width: 1080, height: 680)
+        .defaultSize(width: 1180, height: 720)
         .commands { SummonCommands(model: model) }
 
         Window("Welcome to Summon", id: WindowID.onboarding) {

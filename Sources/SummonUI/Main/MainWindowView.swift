@@ -17,12 +17,13 @@ public struct MainWindowView: View {
     public var body: some View {
         NavigationSplitView {
             SidebarView(model: model)
-                .navigationSplitViewColumnWidth(min: 200, ideal: 232, max: 300)
+                .navigationSplitViewColumnWidth(min: 196, ideal: 224, max: 280)
         } content: {
             ItemListView(model: model, items: items)
+                .frame(minWidth: 300)
+                .navigationSplitViewColumnWidth(min: 300, ideal: 360, max: 560)
                 .navigationTitle(model.sidebarTitle)
                 .navigationSubtitle(subtitle)
-                .navigationSplitViewColumnWidth(min: 280, ideal: 360)
                 .searchable(text: $model.mainSearch, placement: .toolbar, prompt: "Search this view")
         } detail: {
             if let id = model.mainSelection, items.contains(where: { $0.id == id }) {
@@ -31,6 +32,7 @@ public struct MainWindowView: View {
                 detailPlaceholder
             }
         }
+        .navigationSplitViewStyle(.balanced)
         .toolbar { toolbar }
         .overlay(alignment: .bottom) {
             if let toast = model.toast {

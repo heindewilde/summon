@@ -22,6 +22,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         applyActivationPolicy()
 
+        if let live = LiveCapture.mode {
+            Task { await LiveCapture.run(mode: live, controller: controller) }
+            return
+        }
+
         if SelfTest.isRequested {
             Task { await SelfTest.run(controller: controller) }
             return

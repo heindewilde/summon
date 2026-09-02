@@ -109,46 +109,65 @@ struct ItemRow: View {
             ThumbnailView(itemID: item.id, kind: item.kind, isLocked: item.isLocked,
                           thumbnailURL: model.thumbnailURL(for: item.id), size: 34)
 
+            // Two lines, with only the badges and the timestamp fixed-width. The
+            // column can get narrow, and a title that truncates is fine — a title
+            // that disappears is not.
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: Theme.Space.xxs) {
                     Text(item.title)
                         .font(.system(size: 13, weight: .medium))
                         .lineLimit(1)
-                    if item.isPinned {
-                        Image(systemName: "pin.fill").font(.system(size: 8.5))
-                            .foregroundStyle(Theme.spark)
-                    }
-                    if item.isSensitive {
-                        Image(systemName: "lock.fill").font(.system(size: 8.5))
-                            .foregroundStyle(Theme.spark)
-                    }
-                    if item.hasPlaceholders {
-                        Image(systemName: "square.dashed.inset.filled").font(.system(size: 9))
-                            .foregroundStyle(Theme.accent)
-                    }
+                        .truncationMode(.tail)
+                        .layoutPriority(1)
+                    badges
+                    Spacer(minLength: 0)
                 }
-                Text(item.previewLine)
-                    .font(.system(size: 11))
-                    .foregroundStyle(Theme.secondaryText)
-                    .lineLimit(1)
-            }
 
-            Spacer(minLength: Theme.Space.xs)
-
-            if !item.tagNames.isEmpty {
-                HStack(spacing: 3) {
-                    ForEach(item.tagNames.prefix(2), id: \.self) { TagChip(name: $0) }
+                HStack(spacing: Theme.Space.xxs) {
+                    Text(item.previewLine)
+                        .font(.system(size: 11))
+                        .foregroundStyle(Theme.secondaryText)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .layoutPriority(1)
+                    Spacer(minLength: Theme.Space.xxs)
+                    Text(item.updatedAt.formatted(.relative(presentation: .numeric)))
+                        .font(.system(size: 10))
+                        .foregroundStyle(Theme.tertiaryText)
+                        .lineLimit(1)
+                        .fixedSize()
                 }
             }
-
-            Text(item.updatedAt.formatted(.relative(presentation: .numeric)))
-                .font(.system(size: 10.5))
-                .foregroundStyle(Theme.tertiaryText)
-                .frame(width: 66, alignment: .trailing)
         }
         .padding(.vertical, 3)
         .contextMenu { ItemContextMenu(model: model, item: item) }
         .draggable(DraggedItem(id: item.id, title: item.title))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilityLabel)
+    }
+
+    @ViewBuilder
+    private var badges: some View {
+        if item.isPinned {
+            Image(systemName: "pin.fill").font(.system(size: 8.5))
+                .foregroundStyle(Theme.spark)
+        }
+        if item.isSensitive {
+            Image(systemName: "lock.fill").font(.system(size: 8.5))
+                .foregroundStyle(Theme.spark)
+        }
+        if item.hasPlaceholders {
+            Image(systemName: "square.dashed.inset.filled").font(.system(size: 9))
+                .foregroundStyle(Theme.accent)
+        }
+    }
+
+    private var accessibilityLabel: String {
+        var parts = [item.title, item.kind.displayName]
+        if item.isPinned { parts.append("pinned") }
+        if item.isSensitive { parts.append("sensitive") }
+        if !item.tagNames.isEmpty { parts.append("tagged \(item.tagNames.joined(separator: ", "))") }
+        return parts.joined(separator: ", ")
     }
 }
 

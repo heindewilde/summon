@@ -102,9 +102,11 @@ public struct SidebarView: View {
                 }
                 .padding(.horizontal, Theme.Space.s)
                 .padding(.vertical, Theme.Space.xs)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(.rect)
             }
             .buttonStyle(.plain)
+            .background(.bar)
         }
     }
 }

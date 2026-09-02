@@ -470,6 +470,12 @@ public final class LibraryStore {
         return folder
     }
 
+    public func setFolderIcon(_ folder: SummonFolder, symbolName: String, colorName: String) {
+        folder.symbolName = symbolName
+        folder.colorName = colorName
+        save(); refresh()
+    }
+
     public func renameFolder(_ folder: SummonFolder, to name: String) {
         folder.name = name
         save(); refresh()

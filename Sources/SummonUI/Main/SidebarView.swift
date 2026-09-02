@@ -136,6 +136,7 @@ struct FolderRow: View {
     @State private var isExpanded = true
     @State private var isTargeted = false
     @State private var dropZone: FolderDropZone?
+    @State private var pickingIcon = false
 
     var body: some View {
         Group {
@@ -182,8 +183,21 @@ struct FolderRow: View {
                 }
             }
         } icon: {
-            Image(systemName: folder.symbolName)
-                .foregroundStyle(Theme.folderColor(folder.colorName))
+            // The icon is the button. Changing a folder's icon should not require
+            // finding it in a menu — you click the thing you want to change.
+            Button {
+                pickingIcon = true
+            } label: {
+                Image(systemName: folder.symbolName)
+                    .foregroundStyle(Theme.folderColor(folder.colorName))
+                    .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .help("Change icon")
+            .accessibilityLabel("Change the icon for \(folder.name)")
+            .popover(isPresented: $pickingIcon, arrowEdge: .trailing) {
+                FolderIconPicker(model: model, folder: folder, isPresented: $pickingIcon)
+            }
         }
         .tag(SidebarSelection.folder(folder.id))
         // Highlights differently depending on what the drop would do: a fill means
@@ -207,6 +221,7 @@ struct FolderRow: View {
                 renameText = folder.name
                 renamingFolder = folder.id
             }
+            Button("Change Icon…") { pickingIcon = true }
             Button("New Folder Inside") {
                 _ = model.store.createFolder(name: "New Folder", parent: folder)
             }

@@ -303,6 +303,17 @@ enum SelfTest {
         let order = model.store.children(of: nil).map(\.id)
         check("Reordering persists an explicit order",
               (order.firstIndex(of: inner.id) ?? 99) < (order.firstIndex(of: top.id) ?? 0))
+        check("A folder's icon and colour can be changed", {
+            model.store.setFolderIcon(top, symbolName: "building.columns", colorName: "teal")
+            return top.symbolName == "building.columns" && top.colorName == "teal"
+        }())
+        check("Every icon the picker offers is a real symbol",
+              FolderIcon.all.allSatisfy {
+                  NSImage(systemSymbolName: $0.name, accessibilityDescription: nil) != nil
+              }, detail: "\(FolderIcon.all.count) icons")
+        check("Icon search matches meaning, not just the symbol's name",
+              FolderIcon.search("money").contains { $0.name == "dollarsign.circle" })
+
         model.store.deleteFolder(inner)
         model.store.deleteFolder(top)
 

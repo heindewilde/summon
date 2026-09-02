@@ -14,6 +14,7 @@ public struct ItemDetailView: View {
     @State private var tagText = ""
     @State private var loadedID: UUID?
     @State private var rewriting = false
+    @State private var showingDetails = false
 
     public init(model: AppModel, itemID: UUID) {
         self.model = model
@@ -25,151 +26,224 @@ public struct ItemDetailView: View {
     }
 
     public var body: some View {
-        SnapshotSafeScrollView {
-            VStack(alignment: .leading, spacing: Theme.Space.m) {
-                header
-                if let snapshot, snapshot.isLocked {
-                    lockedNotice
-                } else {
-                    contentEditor
-                }
-                metadataSection
-                actionsSection
+        VStack(spacing: 0) {
+            titleBar
+            Divider().overlay(Theme.hairline)
+
+            if let snapshot, snapshot.isLocked {
+                lockedNotice
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                content
             }
-            .padding(Theme.Space.m)
+
+            Divider().overlay(Theme.hairline)
+            metadataFooter
         }
-        .task(id: itemID) { load() }
+        .task(id: itemID) { load(); showingDetails = false }
         .onDisappear(perform: commit)
     }
 
-    // MARK: - Sections
+    // MARK: - Title bar
+    //
+    // The item's name, and the two things you do to an item often enough to deserve
+    // being visible. Everything else is behind the overflow menu — a window has room
+    // to show its actions, which is why the panel's ⌘K does not appear here.
 
-    private var header: some View {
-        HStack(alignment: .top, spacing: Theme.Space.s) {
-            ThumbnailView(itemID: itemID, kind: snapshot?.kind ?? .file,
-                          isLocked: snapshot?.isLocked ?? false,
-                          thumbnailURL: model.thumbnailURL(for: itemID), size: 44)
+    private var titleBar: some View {
+        HStack(spacing: Theme.Space.s) {
+            KindGlyph(kind: snapshot?.kind ?? .file, isLocked: snapshot?.isLocked ?? false, size: 16)
 
-            VStack(alignment: .leading, spacing: 2) {
-                TextField("Title", text: $title)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 17, weight: .semibold))
-                    .onSubmit(commit)
+            TextField("Title", text: $title)
+                .textFieldStyle(.plain)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(Theme.primaryText)
+                .onSubmit(commit)
 
-                HStack(spacing: Theme.Space.xs) {
-                    Text(snapshot?.kind.displayName ?? "")
-                    if let size = snapshot?.byteSize, size > 0 {
-                        Text(ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file))
-                    }
-                    if let uses = snapshot?.useCount, uses > 0 {
-                        Text("Used \(uses)×")
-                    }
-                }
-                .font(.system(size: 10.5))
-                .foregroundStyle(Theme.tertiaryText)
-            }
-
-            Spacer()
+            Spacer(minLength: Theme.Space.s)
 
             Button {
                 model.togglePin(itemID)
             } label: {
                 Image(systemName: snapshot?.isPinned == true ? "pin.fill" : "pin")
-                    .foregroundStyle(snapshot?.isPinned == true ? Theme.secondaryText : Theme.secondaryText)
+                    .font(.system(size: 12))
+                    .foregroundStyle(snapshot?.isPinned == true ? Theme.primaryText : Theme.tertiaryText)
             }
             .buttonStyle(.plain)
             .help(snapshot?.isPinned == true ? "Unpin" : "Pin to the top of the panel")
+            .accessibilityLabel(snapshot?.isPinned == true ? "Unpin" : "Pin")
+
+            Menu {
+                Button("Copy", systemImage: "doc.on.doc") { model.use(itemID, style: .copy) }
+                if snapshot?.kind.isBlobBacked == true {
+                    Button("Open", systemImage: "arrow.up.forward.app") { model.use(itemID, style: .open) }
+                    Button("Reveal in Finder", systemImage: "folder") { model.revealInFinder(itemID) }
+                }
+                Divider()
+                Toggle("Sensitive", isOn: Binding(
+                    get: { snapshot?.isSensitive ?? false },
+                    set: { model.setItemSensitive(itemID, $0) }
+                ))
+                Divider()
+                Button("Delete", systemImage: "trash", role: .destructive) {
+                    model.mainSelection = itemID
+                    model.requestDeleteSelected()
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.tertiaryText)
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .accessibilityLabel("More actions")
         }
+        .padding(.horizontal, Theme.Space.l)
+        .frame(height: 52)
     }
 
-    private var lockedNotice: some View {
-        HStack(spacing: Theme.Space.s) {
-            Image(systemName: "lock.fill").foregroundStyle(Theme.secondaryText)
-            VStack(alignment: .leading, spacing: 1) {
-                Text("Contents are encrypted").font(.system(size: 12, weight: .medium))
-                Text("Unlock to view or edit this item.")
-                    .font(.system(size: 11)).foregroundStyle(Theme.secondaryText)
-            }
-            Spacer()
-            Button("Unlock") { model.summonForUnlock() }
-                .buttonStyle(.borderedProminent)
-                .tint(Theme.primaryText)
-        }
-        .padding(Theme.Space.s)
-        .cardBackground()
-    }
+    // MARK: - Content
+    //
+    // The body owns the window. It used to sit inside a bordered card, under a
+    // CONTENT label, above four more labelled fields all at the same weight — so the
+    // thing you came to read had no more presence than the folder picker.
 
     @ViewBuilder
-    private var contentEditor: some View {
+    private var content: some View {
         if let snapshot, snapshot.kind.isTextual {
-            VStack(alignment: .leading, spacing: Theme.Space.xs) {
-                HStack {
-                    Text("CONTENT")
-                        .font(.system(size: 9.5, weight: .semibold))
-                        .tracking(0.6)
-                        .foregroundStyle(Theme.tertiaryText)
-                    Spacer()
-                    if snapshot.kind == .richText {
-                        Label("Formatting preserved", systemImage: "textformat")
-                            .font(.system(size: 10))
-                            .foregroundStyle(Theme.secondaryText)
-                            .labelStyle(.titleAndIcon)
-                    }
-                    if snapshot.hasPlaceholders {
-                        Label("Has fill-in fields", systemImage: "square.dashed.inset.filled")
-                            .font(.system(size: 10))
-                            .foregroundStyle(Theme.primaryText)
-                            .labelStyle(.titleAndIcon)
-                    }
-                }
+            VStack(alignment: .leading, spacing: 0) {
                 Group {
                     if snapshot.kind == .richText {
                         SnippetEditor(attributed: $attributed)
                             .onChange(of: attributed) { _, _ in scheduleCommit() }
                     } else {
                         TextEditor(text: $body_)
-                            .font(.system(size: 12.5))
+                            .font(.system(size: 13))
                             .scrollContentBackground(.hidden)
-                            .padding(Theme.Space.xs)
                             .onChange(of: body_) { _, _ in scheduleCommit() }
                     }
                 }
-                .frame(minHeight: 180)
-                .cardBackground(raised: true)
+                .padding(.horizontal, Theme.Space.l)
+                .padding(.vertical, Theme.Space.m)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
 
-                Text("Use {{name}} for a fill-in field, {{name:default}} for one with a default, and {{date}}, {{clipboard}} or {{cursor}} for the rest.")
-                    .font(.system(size: 10.5))
-                    .foregroundStyle(Theme.tertiaryText)
-                    .fixedSize(horizontal: false, vertical: true)
+                if snapshot.hasPlaceholders || snapshot.kind == .richText || rewriteAvailable {
+                    contentAffordances(snapshot)
+                }
             }
         } else if let snapshot {
-            filePreviewCard(snapshot)
+            PanelPreview(snapshot: snapshot, bodyText: filePreview.body,
+                         fileURL: filePreview.fileURL, thumbnailURL: filePreview.thumbnailURL)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 
-    private func filePreviewCard(_ snapshot: ItemSnapshot) -> some View {
-        let data = model.previewData(for: itemID)
-        return VStack(alignment: .leading, spacing: Theme.Space.xs) {
-            PanelPreview(snapshot: snapshot, bodyText: data.body,
-                         fileURL: data.fileURL, thumbnailURL: data.thumbnailURL)
-                .frame(height: 300)
-                .cardBackground()
-        }
-    }
-
-    private var metadataSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Space.s) {
-            labelled("TAGS") {
-                TextField("Add tags, separated by commas", text: $tagText)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 12))
-                    .padding(.horizontal, Theme.Space.xs)
-                    .padding(.vertical, 5)
-                    .cardBackground(radius: Theme.Radius.small, raised: true)
-                    .onSubmit(commitTags)
+    /// The row under the editor: only what applies to this item, and nothing when
+    /// none of it does.
+    private func contentAffordances(_ snapshot: ItemSnapshot) -> some View {
+        HStack(spacing: Theme.Space.m) {
+            if snapshot.hasPlaceholders {
+                Label("Fill-in fields", systemImage: "square.dashed.inset.filled")
+                    .labelStyle(.titleAndIcon)
+                    .help("Use {{name}}, {{name:default}}, {{date}}, {{clipboard}} or {{cursor}}")
             }
+            if snapshot.kind == .richText {
+                Label("Formatted", systemImage: "textformat").labelStyle(.titleAndIcon)
+            }
+            Spacer()
+            if rewriteAvailable {
+                if rewriting {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Menu("Rewrite") {
+                        ForEach(RewriteTone.allCases, id: \.self) { tone in
+                            Button(tone.rawValue) { rewrite(tone) }
+                        }
+                    }
+                    .menuStyle(.borderlessButton)
+                    .fixedSize()
+                }
+            }
+        }
+        .font(Theme.Typography.meta)
+        .foregroundStyle(Theme.tertiaryText)
+        .padding(.horizontal, Theme.Space.l)
+        .padding(.bottom, Theme.Space.s)
+    }
 
-            labelled("FOLDER") {
+    private var rewriteAvailable: Bool {
+        snapshot?.kind.isTextual == true && snapshot?.isLocked == false
+            && model.intelligence.status.isReady
+    }
+
+    private var filePreview: AppModel.PreviewData {
+        model.previewData(for: itemID)
+    }
+
+    private var lockedNotice: some View {
+        VStack(spacing: Theme.Space.s) {
+            Image(systemName: "lock.fill")
+                .font(.system(size: 22))
+                .foregroundStyle(Theme.tertiaryText)
+            Text("Contents are encrypted")
+                .font(Theme.Typography.title)
+                .foregroundStyle(Theme.primaryText)
+            Text("Unlock to view or edit this item.")
+                .font(Theme.Typography.meta)
+                .foregroundStyle(Theme.secondaryText)
+            Button("Unlock") { model.summonForUnlock() }
+                .controlSize(.small)
+                .padding(.top, Theme.Space.xs)
+        }
+    }
+
+    // MARK: - Metadata footer
+    //
+    // One quiet line, because none of this is why you opened the item. It expands
+    // into real fields when you actually want to change something.
+
+    private var metadataFooter: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                withAnimation(Theme.panelIn) { showingDetails.toggle() }
+            } label: {
+                HStack(spacing: Theme.Space.m) {
+                    Label(snapshot?.folderPath.isEmpty == false
+                          ? snapshot!.folderLabel : "No folder", systemImage: "folder")
+                        .labelStyle(.titleAndIcon)
+
+                    if let tags = snapshot?.tagNames, !tags.isEmpty {
+                        Text(tags.prefix(3).map { "#\($0)" }.joined(separator: " "))
+                        if tags.count > 3 { Text("+\(tags.count - 3)") }
+                    }
+
+                    Spacer(minLength: Theme.Space.s)
+
+                    if let size = snapshot?.byteSize, size > 0 {
+                        Text(ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file))
+                    }
+                    if let uses = snapshot?.useCount, uses > 0 { Text("Used \(uses)×") }
+                    Image(systemName: snapshot?.isSensitive == true ? "lock.fill" : "lock.open")
+                    Image(systemName: showingDetails ? "chevron.down" : "chevron.up")
+                        .font(.system(size: 9))
+                }
+                .font(Theme.Typography.meta)
+                .foregroundStyle(Theme.tertiaryText)
+                .padding(.horizontal, Theme.Space.l)
+                .frame(height: 34)
+                .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(showingDetails ? "Hide details" : "Show details")
+
+            if showingDetails { detailFields }
+        }
+    }
+
+    private var detailFields: some View {
+        VStack(alignment: .leading, spacing: Theme.Space.s) {
+            field("Folder") {
                 Picker("", selection: folderBinding) {
                     Text("No folder").tag(UUID?.none)
                     ForEach(model.store.allFolders(), id: \.id) { folder in
@@ -178,78 +252,31 @@ public struct ItemDetailView: View {
                 }
                 .labelsHidden()
                 .pickerStyle(.menu)
+                .fixedSize()
             }
-
-            labelled("NOTES") {
-                TextField("Anything you want to remember about this", text: $notes, axis: .vertical)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 12))
-                    .lineLimit(1...4)
-                    .padding(.horizontal, Theme.Space.xs)
-                    .padding(.vertical, 5)
-                    .cardBackground(radius: Theme.Radius.small, raised: true)
+            field("Tags") {
+                TextField("Separated by commas", text: $tagText)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit(commitTags)
+            }
+            field("Notes") {
+                TextField("Anything worth remembering", text: $notes, axis: .vertical)
+                    .textFieldStyle(.roundedBorder)
+                    .lineLimit(1...3)
                     .onSubmit(commit)
             }
-
-            Toggle(isOn: Binding(
-                get: { snapshot?.isSensitive ?? false },
-                set: { model.setItemSensitive(itemID, $0) }
-            )) {
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Sensitive").font(.system(size: 12, weight: .medium))
-                    Text("Encrypts the contents. The title stays visible so you can still find it.")
-                        .font(.system(size: 10.5))
-                        .foregroundStyle(Theme.tertiaryText)
-                }
-            }
-            .toggleStyle(.switch)
-            .tint(Theme.primaryText)
         }
+        .font(Theme.Typography.body)
+        .padding(.horizontal, Theme.Space.l)
+        .padding(.bottom, Theme.Space.m)
     }
 
-    private var actionsSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Space.xs) {
-            HStack(spacing: Theme.Space.xs) {
-                Button("Copy", systemImage: "doc.on.doc") { model.use(itemID, style: .copy) }
-                if snapshot?.kind.isBlobBacked == true {
-                    Button("Open", systemImage: "arrow.up.forward.app") { model.use(itemID, style: .open) }
-                    Button("Reveal", systemImage: "folder") { model.revealInFinder(itemID) }
-                }
-                Spacer()
-                Button("Delete", systemImage: "trash", role: .destructive) {
-                    model.deleteItem(itemID)
-                    model.mainSelection = nil
-                }
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-
-            if snapshot?.kind.isTextual == true, model.intelligence.status.isReady,
-               snapshot?.isLocked == false {
-                HStack(spacing: Theme.Space.xs) {
-                    Text("REWRITE")
-                        .font(.system(size: 9.5, weight: .semibold))
-                        .tracking(0.6)
-                        .foregroundStyle(Theme.tertiaryText)
-                    ForEach(RewriteTone.allCases, id: \.self) { tone in
-                        Button(tone.rawValue) { rewrite(tone) }
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
-                            .disabled(rewriting)
-                    }
-                    if rewriting { ProgressView().controlSize(.small) }
-                }
-                .padding(.top, Theme.Space.xxs)
-            }
-        }
-    }
-
-    private func labelled<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: Theme.Space.xxs) {
-            Text(title)
-                .font(.system(size: 9.5, weight: .semibold))
-                .tracking(0.6)
+    private func field<Content: View>(_ label: String, @ViewBuilder content: () -> Content) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: Theme.Space.m) {
+            Text(label)
+                .font(Theme.Typography.meta)
                 .foregroundStyle(Theme.tertiaryText)
+                .frame(width: 52, alignment: .leading)
             content()
         }
     }

@@ -299,19 +299,29 @@ public final class AppModel {
         mainSelection.flatMap { id in store.snapshots.first { $0.id == id }?.isPinned } ?? false
     }
 
+    /// Set when the library asks to delete something. The panel confirms inside its
+    /// ⌘K overlay; a window has room for a real alert and should use one.
+    public var pendingDeleteID: UUID?
+
+    public var pendingDeleteTitle: String {
+        pendingDeleteID.flatMap { id in store.snapshots.first { $0.id == id }?.title } ?? "this item"
+    }
+
     public func requestDeleteSelected() {
-        guard actionTarget != nil else { return }
-        overlay = .confirmDelete
+        guard let id = mainSelection ?? actionTarget?.id else { return }
+        pendingDeleteID = id
+    }
+
+    public func confirmPendingDelete() {
+        guard let id = pendingDeleteID else { return }
+        pendingDeleteID = nil
+        deleteItem(id)
     }
 
     /// Routes a chord in the library window. Returns false to let the window have it.
     @discardableResult
     public func routeMainWindow(_ chord: KeyChord, columns: Int) -> Bool {
         switch (chord.key, chord.modifiers) {
-        case (.character("k"), .command):
-            guard mainSelection != nil else { return false }
-            if case .none = overlay { openActionMenu() } else { closeOverlay() }
-            return true
         case (.down, []): moveMainSelection(by: useGridLayout ? columns : 1); return true
         case (.up, []): moveMainSelection(by: useGridLayout ? -columns : -1); return true
         case (.right, []) where useGridLayout: moveMainSelection(by: 1); return true

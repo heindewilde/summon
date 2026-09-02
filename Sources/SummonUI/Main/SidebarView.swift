@@ -6,6 +6,7 @@ public struct SidebarView: View {
     @Bindable var model: AppModel
     @State private var renamingFolder: UUID?
     @State private var renameText = ""
+    @State private var rootTargeted = false
 
     public init(model: AppModel) { self.model = model }
 
@@ -39,6 +40,12 @@ public struct SidebarView: View {
                         .foregroundStyle(Theme.secondaryText)
                 }
                 .buttonStyle(.plain)
+                // Doubles as the top-level drop target: without somewhere to drop
+                // *outside* every folder, a nested folder could be nested further but
+                // never dragged back out.
+                .background(rootTargeted ? Theme.selection : .clear)
+                .onDrop(of: [.text],
+                        delegate: RootFolderDropDelegate(model: model, isTargeted: $rootTargeted))
             }
 
             let tags = model.store.tagsInUse()
@@ -112,6 +119,14 @@ public struct SidebarView: View {
 }
 
 /// A folder and everything under it. Recursive, with drop targets on every node.
+/// A folder row's insertion indicator.
+private var dropLine: some View {
+    Rectangle()
+        .fill(Theme.primaryText)
+        .frame(height: 2)
+        .padding(.horizontal, Theme.Space.xs)
+}
+
 struct FolderRow: View {
     @Bindable var model: AppModel
     let folder: SummonFolder
@@ -120,6 +135,7 @@ struct FolderRow: View {
     @Binding var renameText: String
     @State private var isExpanded = true
     @State private var isTargeted = false
+    @State private var dropZone: FolderDropZone?
 
     var body: some View {
         Group {
@@ -170,15 +186,22 @@ struct FolderRow: View {
                 .foregroundStyle(Theme.folderColor(folder.colorName))
         }
         .tag(SidebarSelection.folder(folder.id))
-        .background(isTargeted ? Theme.selection : .clear)
-        .onDrop(of: [.fileURL], isTargeted: $isTargeted) { providers in
-            Task {
-                let urls = await FolderRow.urls(from: providers)
-                guard !urls.isEmpty else { return }
-                model.importDroppedFiles(urls, into: folder)
-            }
-            return true
+        // Highlights differently depending on what the drop would do: a fill means
+        // "inside this folder", a line means "beside it".
+        .background(dropZone == .into ? Theme.selection : .clear)
+        .overlay(alignment: .top) {
+            if dropZone == .before { dropLine }
         }
+        .overlay(alignment: .bottom) {
+            if dropZone == .after { dropLine }
+        }
+        .onDrag {
+            // Prefixed so a folder drag is distinguishable from arbitrary text
+            // dropped in from another app.
+            NSItemProvider(object: (FolderDragPrefix + folder.id.uuidString) as NSString)
+        }
+        .onDrop(of: [.text, .fileURL],
+                delegate: FolderDropDelegate(folder: folder, model: model, zone: $dropZone))
         .contextMenu {
             Button("Rename") {
                 renameText = folder.name

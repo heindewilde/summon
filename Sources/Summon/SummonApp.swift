@@ -9,12 +9,17 @@ struct SummonApp: App {
     @State private var model = Services.model
 
     var body: some Scene {
-        Window("Summon", id: WindowID.main) {
+        // Suppressed on launch. A `Window` scene otherwise opens itself, so the
+        // library existed from the moment the app started — and because summoning
+        // activates the app, it came forward with the panel every single time. The
+        // library is a place you go deliberately, not something that arrives with a
+        // hotkey meant to paste one line of text.
+        Window("Summon Library", id: WindowID.main) {
             MainWindowView(model: model)
                 .frame(minWidth: 900, minHeight: 560)
-                .onAppear { wireWindowHandlers() }
         }
         .defaultSize(width: 1180, height: 720)
+        .defaultLaunchBehavior(.suppressed)
         .commands { SummonCommands(model: model) }
 
         Window("Welcome to Summon", id: WindowID.onboarding) {
@@ -22,24 +27,25 @@ struct SummonApp: App {
         }
         .windowResizability(.contentSize)
         .defaultPosition(.center)
+        .defaultLaunchBehavior(.suppressed)
 
+        // A plain menu, not a second copy of the library. Its list of pinned and
+        // recent items duplicated exactly what the panel shows on an empty query,
+        // which is one keystroke away. What a menu bar item is genuinely good at is
+        // being a visible way in when you have forgotten the shortcut.
         MenuBarExtra {
             MenuBarContent(model: model)
         } label: {
             Image(systemName: "sparkles")
                 .accessibilityLabel("Summon")
         }
-        .menuBarExtraStyle(.window)
+        .menuBarExtraStyle(.menu)
 
         Settings {
             SettingsView(model: model)
         }
     }
 
-    private func wireWindowHandlers() {
-        // Assigned here rather than in the delegate because opening a SwiftUI window
-        // requires the environment action, which only exists inside a scene.
-    }
 }
 
 enum WindowID {
@@ -55,27 +61,28 @@ struct MenuBarContent: View {
     @Environment(\.openSettings) private var openSettings
 
     var body: some View {
-        MenuBarView(
+        MenuBarMenu(
             model: model,
-            openMainWindow: {
-                NSApp.activate()
-                openWindow(id: WindowID.main)
-            },
+            openMainWindow: openLibrary,
             openSettings: {
                 NSApp.activate()
                 openSettings()
             }
         )
         .onAppear {
-            model.showMainWindowHandler = {
-                NSApp.activate()
-                openWindow(id: WindowID.main)
-            }
+            // Wired from here, not from the library window: the handler that opens
+            // the library cannot live on the thing it opens.
+            model.showMainWindowHandler = openLibrary
             model.showOnboardingHandler = {
                 NSApp.activate()
                 openWindow(id: WindowID.onboarding)
             }
         }
+    }
+
+    private func openLibrary() {
+        NSApp.activate()
+        openWindow(id: WindowID.main)
     }
 }
 
@@ -93,12 +100,9 @@ struct SummonCommands: Commands {
             Button("Import Files…") { model.presentImportPanel() }
                 .keyboardShortcut("o")
             Divider()
-            // ⌘K means Actions in every surface. It used to summon the panel from
-            // here, which both overloaded the key and duplicated ⌥Space — already
-            // global, already reachable from anywhere.
-            Button("Actions…") { model.toggleActions() }
-                .keyboardShortcut("k")
-                .disabled(model.actionTarget == nil)
+            // ⌘K is a solution to not having room, so it stays in the panel. A
+            // window has room, and shows its actions instead of hiding them a level
+            // down. ⌘L opens the library; ⌥Space stays the only way to the panel.
             Button(model.mainSelectionIsPinned ? "Unpin" : "Pin") {
                 if let id = model.mainSelection { model.togglePin(id) }
             }

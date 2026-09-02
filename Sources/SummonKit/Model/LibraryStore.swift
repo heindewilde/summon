@@ -78,13 +78,7 @@ public final class LibraryStore {
         (try? context.fetch(FetchDescriptor<SummonFolder>())) ?? []
     }
 
-    public func rootFolders() -> [SummonFolder] {
-        allFolders().filter { $0.parent == nil }.sorted {
-            $0.sortIndex == $1.sortIndex
-                ? $0.name.localizedStandardCompare($1.name) == .orderedAscending
-                : $0.sortIndex < $1.sortIndex
-        }
-    }
+    public func rootFolders() -> [SummonFolder] { children(of: nil) }
 
     public func allTags() -> [SummonTag] {
         ((try? context.fetch(FetchDescriptor<SummonTag>())) ?? [])
@@ -492,17 +486,60 @@ public final class LibraryStore {
         save(); refresh()
     }
 
-    public func moveFolder(_ folder: SummonFolder, under parent: SummonFolder?) {
-        // Refuse to make a folder its own ancestor.
+    /// Would moving `folder` under `parent` create a cycle?
+    ///
+    /// Dropping a folder into its own descendant would detach the whole subtree from
+    /// the tree and leave it unreachable, so this is checked before every move — and
+    /// the sidebar uses it to refuse the drop rather than accept it and lose things.
+    public func canMoveFolder(_ folder: SummonFolder, under parent: SummonFolder?) -> Bool {
+        guard parent?.id != folder.id else { return false }
         var node = parent
         var depth = 0
-        while let n = node, depth < 64 {
-            if n.id == folder.id { return }
-            node = n.parent
+        while let current = node, depth < 64 {
+            if current.id == folder.id { return false }
+            node = current.parent
             depth += 1
         }
+        return true
+    }
+
+    public func moveFolder(_ folder: SummonFolder, under parent: SummonFolder?) {
+        guard canMoveFolder(folder, under: parent) else { return }
         folder.parent = parent
+        renumber(children(of: parent))
         save(); refresh()
+    }
+
+    /// Places `folder` immediately before or after `sibling`, adopting its parent.
+    ///
+    /// `sortIndex` has existed on the model since the first commit and nothing has
+    /// ever written to it, so folder order was whatever name sorting produced.
+    public func reorderFolder(_ folder: SummonFolder, relativeTo sibling: SummonFolder,
+                              placeAfter: Bool) {
+        guard folder.id != sibling.id else { return }
+        let parent = sibling.parent
+        guard canMoveFolder(folder, under: parent) else { return }
+
+        folder.parent = parent
+        var ordered = children(of: parent).filter { $0.id != folder.id }
+        let index = ordered.firstIndex { $0.id == sibling.id } ?? ordered.count
+        ordered.insert(folder, at: placeAfter ? index + 1 : index)
+        renumber(ordered)
+        save(); refresh()
+    }
+
+    /// Siblings in the order they are displayed.
+    public func children(of parent: SummonFolder?) -> [SummonFolder] {
+        let all = parent.map { $0.children ?? [] } ?? allFolders().filter { $0.parent == nil }
+        return all.sorted {
+            $0.sortIndex == $1.sortIndex
+                ? $0.name.localizedStandardCompare($1.name) == .orderedAscending
+                : $0.sortIndex < $1.sortIndex
+        }
+    }
+
+    private func renumber(_ folders: [SummonFolder]) {
+        for (index, folder) in folders.enumerated() { folder.sortIndex = index }
     }
 
     @discardableResult

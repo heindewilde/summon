@@ -34,14 +34,6 @@ public struct MainWindowView: View {
         }
         .navigationSplitViewStyle(.balanced)
         .toolbar { toolbar }
-        .overlay {
-            if model.overlay != .none {
-                Rectangle().fill(.black.opacity(0.22)).allowsHitTesting(false)
-            }
-        }
-        .overlay(alignment: .bottomTrailing) {
-            if model.overlay != .none { ActionMenu(model: model) }
-        }
         .overlay(alignment: .bottom) {
             if let toast = model.toast {
                 ToastView(toast: toast)
@@ -65,6 +57,14 @@ public struct MainWindowView: View {
             Button("Cancel", role: .cancel) { newFolderName = "" }
         }
         .sheet(isPresented: $model.pendingNewSnippet) { newSnippetSheet }
+        .alert("Delete “\(model.pendingDeleteTitle)”?",
+               isPresented: Binding(get: { model.pendingDeleteID != nil },
+                                    set: { if !$0 { model.pendingDeleteID = nil } })) {
+            Button("Delete", role: .destructive) { model.confirmPendingDelete() }
+            Button("Cancel", role: .cancel) { model.pendingDeleteID = nil }
+        } message: {
+            Text("This cannot be undone.")
+        }
     }
 
     private var subtitle: String {

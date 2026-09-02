@@ -282,14 +282,29 @@ enum SelfTest {
                 model.moveMainSelection(by: -50)
                 return model.mainSelection == visible[0].id
             }())
-            check("⌘K acts on the library selection when the panel is closed", {
-                model.toggleActions()
-                let opened = model.overlay == .actions && model.actionTarget?.id == visible[0].id
-                model.closeOverlay()
-                return opened
+            check("Deleting from the library asks first, in a real alert", {
+                model.requestDeleteSelected()
+                let asked = model.pendingDeleteID == visible[0].id
+                model.pendingDeleteID = nil
+                return asked
             }())
         }
         model.useGridLayout = false
+
+        // MARK: Folders can be restructured
+        let top = model.store.createFolder(name: "Probe Top")
+        let inner = model.store.createFolder(name: "Probe Inner", parent: top)
+        check("A folder nests under another", inner.parent?.id == top.id)
+        check("A folder refuses to nest inside its own descendant",
+              !model.store.canMoveFolder(top, under: inner))
+        model.store.moveFolder(inner, under: nil)
+        check("A nested folder can be dragged back to the top level", inner.parent == nil)
+        model.store.reorderFolder(inner, relativeTo: top, placeAfter: false)
+        let order = model.store.children(of: nil).map(\.id)
+        check("Reordering persists an explicit order",
+              (order.firstIndex(of: inner.id) ?? 99) < (order.firstIndex(of: top.id) ?? 0))
+        model.store.deleteFolder(inner)
+        model.store.deleteFolder(top)
 
         check("Panel hides on dismiss", !controller.isVisible)
 

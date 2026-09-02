@@ -42,7 +42,7 @@ The suite skips itself in debug with that reason attached.
 |---|---|
 | keystroke → results, 2,000 items | 0.54 ms (budget 4 ms) |
 | empty query — runs on every panel open | 0.33 ms (budget 4 ms) |
-| index build, 2,000 items | 13.1 ms (budget 25 ms) |
+| index build, 2,000 items | 13.2 ms (budget 25 ms) |
 | typing rebuilds the index | never — asserted structurally |
 
 Budgets assert on the **fastest** of many runs, not the mean or the worst. Timing
@@ -56,7 +56,8 @@ a vault and marks items sensitive; without the reset its *second* run reports fa
 that are really leftovers. That reset cannot happen inside the app — the SwiftData
 container is opened when the `App` struct initialises, before `applicationDidFinishLaunching`.
 
-The self-test covers hot key registration, panel window configuration, search,
+The self-test covers hot key registration, panel window configuration, the keyboard
+bindings actually reaching behaviour, search,
 dragging, the vault lifecycle and rich-text round trips. The paste test is
 separate because it needs a real Accessibility grant: it opens a scratch document
 in TextEdit, summons a snippet into it, and reads the result back through the
@@ -69,6 +70,10 @@ experiment without touching your real one.
 
 ## The keyboard model
 
+Every binding lives in one place — `PanelKeyMap` — and every one is asserted by a
+test. The panel spent a while drawing `⌘1`–`⌘9` on each row with no handler behind
+them, which is what that arrangement is there to prevent.
+
 | Key | Does |
 |---|---|
 | `⌥Space` | Summon the panel from anywhere |
@@ -78,7 +83,20 @@ experiment without touching your real one.
 | `⌥↩` | Open the file |
 | `⇧↩` | Paste as plain text |
 | `⌘1`–`⌘9` | Jump straight to a result |
-| `⎋` | Close |
+| `⌘K` | Actions for the selected item — searchable, in every surface |
+| `⇥` | Narrow to the folder the selected item lives in |
+| `⌫` | Leave that folder again (when nothing is typed) |
+| `⌘↑` / `⌘↓` | First and last result |
+| `⌘P` | Pin or unpin |
+| `⌘⌫` | Delete, with a confirmation |
+| `⎋` | Back one level: menu → mode → query → folder → closed |
+
+Hold `⌘`, `⌥` or `⇧` and the footer says what `↩` will do right now, so the
+shortcuts are learned by using them rather than by reading this table.
+
+The panel deliberately does **not** claim `⌘C`, `⌘V`, `⌘A` or `⌘Z` — those belong to
+the search field, and the tests assert the fall-through as well as the bindings.
+One casualty: `⌘⌫` means Delete rather than the field's delete-to-start-of-line.
 
 Filter as you type: `#tag`, `/folder`, `img:`, `pdf:`, `txt:`, `file:`.
 

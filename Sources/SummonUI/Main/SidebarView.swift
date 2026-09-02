@@ -52,8 +52,10 @@ public struct SidebarView: View {
             if !tags.isEmpty {
                 Section("Tags") {
                     ForEach(tags, id: \.id) { tag in
-                        row(.tag(tag.name), "#\(tag.name)", "number",
-                            count: (tag.items ?? []).count)
+                        // The name only. The icon column already carries the “#”,
+                        // and the label repeated it — "# #banking" on every row.
+                        row(.tag(tag.name), tag.name, "number",
+                            count: (tag.items ?? []).count, tint: Theme.tertiaryText)
                     }
                 }
             }

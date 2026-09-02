@@ -225,7 +225,9 @@ public final class AppModel {
 
     // MARK: - Using an item
 
-    public enum UseStyle { case paste, copy, open, plainPaste }
+    /// Defined in SummonKit so `PanelKeyMap` can name it; aliased here so every
+    /// existing `model.use(id, style:)` call site is unchanged.
+    public typealias UseStyle = ActivationStyle
 
     public func use(_ id: UUID, style: UseStyle = .paste) {
         guard let snapshot = store.snapshots.first(where: { $0.id == id }) else { return }

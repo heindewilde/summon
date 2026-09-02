@@ -11,6 +11,7 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/heindewilde/summon/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/heindewilde/summon/actions/workflows/ci.yml/badge.svg"></a>
   <a href="LICENSE"><img alt="License: AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-blue.svg"></a>
   <img alt="Platform: macOS 26+" src="https://img.shields.io/badge/platform-macOS%2026+-000000?logo=apple&logoColor=white">
   <img alt="Swift 6.1" src="https://img.shields.io/badge/Swift-6.1-F05138?logo=swift&logoColor=white">
@@ -355,7 +356,7 @@ Sources/
 |---|---|
 | **182 tests** across 25 suites | The whole logic layer: vault round-trips and wrong-PIN rejection, ranking and frecency, placeholder parsing, folder trees and cycle refusal, every keyboard binding *and* the keys the panel deliberately declines, contrast ratios, and content edge cases from empty titles to right-to-left text |
 | **54 runtime checks** | `Scripts/selftest.sh` drives the real app: hot key registration, panel window configuration, search reaching inside a PDF, the vault lifecycle end to end, and each keyboard binding actually reaching behaviour |
-| **Performance budgets** | Asserted in release builds, and they fail the build |
+| **Performance budgets** | Asserted in release builds, and they fail the build. The wall-clock ones run locally; CI keeps the structural assertions, because timing on a shared runner measures the runner |
 | **A paste round trip** | Opens a scratch document in TextEdit, summons a snippet into it, and reads the result back through the Accessibility API — refusing to run unless TextEdit is genuinely frontmost |
 
 | Budget | Measured | Limit |

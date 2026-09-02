@@ -32,6 +32,19 @@ enum UIProbe {
             ?? ""
     }
 
+    private static func frame(of element: AXUIElement) -> CGRect? {
+        var positionValue: CFTypeRef?
+        var sizeValue: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, kAXPositionAttribute as CFString, &positionValue) == .success,
+              AXUIElementCopyAttributeValue(element, kAXSizeAttribute as CFString, &sizeValue) == .success
+        else { return nil }
+        var origin = CGPoint.zero
+        var size = CGSize.zero
+        AXValueGetValue(positionValue as! AXValue, .cgPoint, &origin)
+        AXValueGetValue(sizeValue as! AXValue, .cgSize, &size)
+        return CGRect(origin: origin, size: size)
+    }
+
     /// Every descendant, with its depth.
     private static func walk(_ element: AXUIElement, depth: Int = 0, into found: inout [(Int, AXUIElement)]) {
         guard depth < 24 else { return }
@@ -115,22 +128,36 @@ enum UIProbe {
         }
         line("elements exposing a press action: \(actionable)")
 
+        // Sidebar first: folder rows gained .onDrag, which is exactly what swallowed
+        // the selection click on item rows.
+        let sidebarBefore = model.sidebarSelection
+        for (_, element) in found {
+            guard title(element).contains("Client Replies"),
+                  let box = frame(of: element), box.width > 100, box.width < 320 else { continue }
+            let point = CGPoint(x: box.midX, y: box.midY)
+            for type in [CGEventType.leftMouseDown, .leftMouseUp] {
+                CGEvent(mouseEventSource: nil, mouseType: type,
+                        mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
+            }
+            try? await Task.sleep(for: .milliseconds(700))
+            line(model.sidebarSelection != sidebarBefore
+                 ? "PASS  clicking a folder in the sidebar selects it"
+                 : "FAIL  clicking a folder in the sidebar changed nothing")
+            break
+        }
+
         // The decisive test: put the pointer on a row and click it. Everything above
         // only says the row exists.
         let before = model.mainSelection
         var clicked = false
-        for (_, element) in found where role(element) == "AXRow" {
-            var positionValue: CFTypeRef?
-            var sizeValue: CFTypeRef?
-            guard AXUIElementCopyAttributeValue(element, kAXPositionAttribute as CFString, &positionValue) == .success,
-                  AXUIElementCopyAttributeValue(element, kAXSizeAttribute as CFString, &sizeValue) == .success
-            else { continue }
-
-            var origin = CGPoint.zero
-            var size = CGSize.zero
-            AXValueGetValue(positionValue as! AXValue, .cgPoint, &origin)
-            AXValueGetValue(sizeValue as! AXValue, .cgSize, &size)
-            guard size.width > 250, size.height > 20 else { continue }   // an item row, not a sidebar row
+        // Matched by label rather than by role: the middle column is a LazyVStack now,
+        // not a List, so there are no AXRows in it to look for.
+        for (_, element) in found {
+            let label = title(element)
+            guard titles.contains(where: { !$0.isEmpty && label.contains($0) }) else { continue }
+            guard let frame = frame(of: element), frame.width > 250, frame.height > 20 else { continue }
+            let origin = frame.origin
+            let size = frame.size
 
             let point = CGPoint(x: origin.x + size.width / 2, y: origin.y + size.height / 2)
             let onScreen = NSScreen.screens.contains { screen in

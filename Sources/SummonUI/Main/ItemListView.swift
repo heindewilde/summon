@@ -28,7 +28,7 @@ public struct ItemListView: View {
         }
         .onDrop(of: [.fileURL], isTargeted: nil) { providers in
             Task {
-                let urls = await FolderRow.urls(from: providers)
+                let urls = await FolderDropDelegate.urls(from: providers)
                 guard !urls.isEmpty else { return }
                 model.importDroppedFiles(urls, into: currentFolder)
             }
@@ -41,14 +41,33 @@ public struct ItemListView: View {
         return model.store.allFolders().first { $0.id == id }
     }
 
+    /// The same construct the panel uses, not a `List`.
+    ///
+    /// `List(selection:)` paints the system accent behind the selected row — a
+    /// saturated blue over the neutral fill the row already draws, which is far
+    /// louder than anything else in a monochrome app and cannot be restyled. Owning
+    /// the selection also ends the fight with `.onDrag`, which swallows the click a
+    /// List uses to select.
     private var list: some View {
-        List(selection: $model.mainSelection) {
-            ForEach(items) { item in
-                ItemRow(model: model, item: item)
-                    .tag(item.id)
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    ForEach(items) { item in
+                        ItemRow(model: model, item: item).id(item.id)
+                    }
+                }
+                .padding(.horizontal, Theme.Space.xs)
+                .padding(.vertical, Theme.Space.xs)
+            }
+            .focusable()
+            .focusEffectDisabled()
+            .onKeyPress(.upArrow) { model.moveMainSelection(by: -1); return .handled }
+            .onKeyPress(.downArrow) { model.moveMainSelection(by: 1); return .handled }
+            .onChange(of: model.mainSelection) { _, new in
+                guard let new else { return }
+                proxy.scrollTo(new)
             }
         }
-        .listStyle(.inset)
     }
 
     private var grid: some View {
@@ -123,13 +142,18 @@ struct ItemRow: View {
     var body: some View {
         // The same 40pt row the panel and the menu bar draw. Three surfaces had
         // grown three heights and three type scales; now there is one component.
-        LibraryRow(item: item, isSelected: model.mainSelection == item.id)
+        LibraryRow(item: item,
+                   isSelected: model.mainSelection == item.id,
+                   onCopy: { model.use(item.id, style: .copy) })
+            .contentShape(.rect)
+            // Double-click copies. Registered before the single tap so the single
+            // click still only selects.
+            .onTapGesture(count: 2) {
+                model.mainSelection = item.id
+                model.use(item.id, style: .copy)
+            }
+            .onTapGesture { model.mainSelection = item.id }
             .contextMenu { ItemContextMenu(model: model, item: item) }
-            // .onDrag swallows the click that a List uses to select, so items in the
-            // library were never clickable — and because clicking is how the list
-            // takes focus, arrow keys never worked there either. A simultaneous
-            // gesture sets the selection without taking the drag away.
-            .simultaneousGesture(TapGesture().onEnded { model.mainSelection = item.id })
             .onDrag { model.dragProvider(for: item.id) ?? NSItemProvider() }
     }
 }

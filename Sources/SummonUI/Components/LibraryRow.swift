@@ -20,18 +20,25 @@ public struct LibraryRow: View {
     public var shortcutIndex: Int?
     /// Trailing text where the panel shows the kind. The library shows the date.
     public var trailingText: String?
+    /// Shown on hover or while selected. Nil in the panel, where ↩ already copies.
+    public var onCopy: (() -> Void)?
 
     public init(item: ItemSnapshot,
                 titlePositions: [Int] = [],
                 isSelected: Bool = false,
                 shortcutIndex: Int? = nil,
-                trailingText: String? = nil) {
+                trailingText: String? = nil,
+                onCopy: (() -> Void)? = nil) {
         self.item = item
         self.titlePositions = titlePositions
         self.isSelected = isSelected
         self.shortcutIndex = shortcutIndex
         self.trailingText = trailingText
+        self.onCopy = onCopy
     }
+
+    @State private var hovering = false
+    @State private var justCopied = false
 
     /// Measured, because the same row is asked to live in a 750pt panel and a 290pt
     /// library column. Below this there is no honest room for a subtitle, and
@@ -75,6 +82,28 @@ public struct LibraryRow: View {
 
             if item.isLocked { LockPill() }
 
+            if let onCopy, !item.isLocked, hovering || isSelected || justCopied {
+                Button {
+                    onCopy()
+                    justCopied = true
+                    Task {
+                        try? await Task.sleep(for: .milliseconds(1100))
+                        justCopied = false
+                    }
+                } label: {
+                    // Confirmation lands where you clicked, so nothing else on screen
+                    // has to move to tell you it worked.
+                    Image(systemName: justCopied ? "checkmark" : "doc.on.doc")
+                        .font(.system(size: 11))
+                        .foregroundStyle(justCopied ? Theme.success : Theme.secondaryText)
+                        .frame(width: 18, height: 18)
+                        .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .help("Copy")
+                .accessibilityLabel(justCopied ? "Copied" : "Copy \(item.title)")
+            }
+
             if let trailingText {
                 Text(trailingText)
                     .font(Theme.Typography.meta)
@@ -93,6 +122,11 @@ public struct LibraryRow: View {
         .padding(.horizontal, Theme.Space.m)
         .frame(height: Theme.rowHeight)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+        .onHover { hovering = $0 }
+        .background {
+            RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous)
+                .fill(hovering && !isSelected ? Theme.rowHover : .clear)
+        }
         .background {
             RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous)
                 .fill(isSelected ? Theme.selection : .clear)

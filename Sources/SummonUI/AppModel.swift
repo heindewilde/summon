@@ -734,6 +734,23 @@ public final class AppModel {
         }
     }
 
+    /// Unlocks from the library, where there is no panel to put a PIN field in.
+    /// Returns false and leaves an explanation in `pinError` when the PIN is wrong.
+    @discardableResult
+    public func unlockInPlace(pin: String) -> Bool {
+        do {
+            try vault.unlock(pin: pin)
+            pinError = nil
+            store.refresh()
+            runSearch()
+            show(Toast(text: "Unlocked", symbol: "lock.open", tone: .success))
+            return true
+        } catch {
+            pinError = (error as? VaultError)?.errorDescription ?? error.localizedDescription
+            return false
+        }
+    }
+
     public func submitPIN() {
         do {
             try vault.unlock(pin: pinEntry)
@@ -930,17 +947,50 @@ public final class AppModel {
 
     // MARK: - Creation actions
 
-    public var pendingNewSnippet = false
-    public var pendingNewFolder = false
+
+    /// The id of a folder whose name is being typed in the sidebar, and of an item
+    /// whose title is being typed in the detail pane. Nothing is modal: the thing
+    /// exists as soon as you ask for it, and you edit it in place.
+    public var renamingFolderID: UUID?
+    public var focusNewItemTitle = false
 
     public func beginNewSnippet() {
         showMainWindowHandler?()
-        pendingNewSnippet = true
+        let folder: SummonFolder? = {
+            guard case .folder(let id) = sidebarSelection else { return nil }
+            return store.allFolders().first { $0.id == id }
+        }()
+        // Created empty and selected, rather than assembled behind a Cancel button.
+        // An untitled snippet with no body is removed again when you leave it.
+        let item = store.createSnippet(title: "", body: "", folder: folder)
+        store.refresh()
+        runSearch()
+        mainSelection = item.id
+        focusNewItemTitle = true
+    }
+
+    /// Drops a snippet that was created and then left completely empty, so abandoning
+    /// a new item does not litter the library with blanks.
+    public func discardIfEmpty(_ id: UUID) {
+        guard let item = store.item(id: id), item.kind.isTextual else { return }
+        let title = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let body = (store.resolveBodyText(item, key: vault.currentKey) ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard title.isEmpty || title == "Untitled", body.isEmpty else { return }
+        store.delete(item)
+        if mainSelection == id { mainSelection = nil }
+        runSearch()
     }
 
     public func beginNewFolder() {
         showMainWindowHandler?()
-        pendingNewFolder = true
+        let parent: SummonFolder? = {
+            guard case .folder(let id) = sidebarSelection else { return nil }
+            return store.allFolders().first { $0.id == id }
+        }()
+        let folder = store.createFolder(name: "New Folder", parent: parent)
+        sidebarSelection = .folder(folder.id)
+        renamingFolderID = folder.id
     }
 
     /// The one place a file chooser is opened, so import behaves identically

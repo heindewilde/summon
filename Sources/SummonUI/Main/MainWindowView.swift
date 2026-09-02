@@ -5,10 +5,6 @@ import SummonKit
 /// The library window: organise here, summon everywhere else.
 public struct MainWindowView: View {
     @Bindable var model: AppModel
-    @State private var newFolderName = ""
-    @State private var showingNewSnippet = false
-    @State private var newSnippetTitle = ""
-    @State private var newSnippetBody = ""
 
     public init(model: AppModel) { self.model = model }
 
@@ -42,21 +38,6 @@ public struct MainWindowView: View {
             }
         }
         .animation(Theme.panelIn, value: model.toast)
-        .alert("New Folder", isPresented: $model.pendingNewFolder) {
-            TextField("Name", text: $newFolderName)
-            Button("Create") {
-                let name = newFolderName.isEmpty ? "New Folder" : newFolderName
-                let parent: SummonFolder? = {
-                    guard case .folder(let id) = model.sidebarSelection else { return nil }
-                    return model.store.allFolders().first { $0.id == id }
-                }()
-                let folder = model.store.createFolder(name: name, parent: parent)
-                model.sidebarSelection = .folder(folder.id)
-                newFolderName = ""
-            }
-            Button("Cancel", role: .cancel) { newFolderName = "" }
-        }
-        .sheet(isPresented: $model.pendingNewSnippet) { newSnippetSheet }
         .alert("Delete “\(model.pendingDeleteTitle)”?",
                isPresented: Binding(get: { model.pendingDeleteID != nil },
                                     set: { if !$0 { model.pendingDeleteID = nil } })) {
@@ -87,8 +68,10 @@ public struct MainWindowView: View {
     private var toolbar: some ToolbarContent {
         ToolbarItem(placement: .primaryAction) {
             Menu {
-                Button("New Snippet", systemImage: "text.alignleft") { model.pendingNewSnippet = true }
-                Button("New Folder", systemImage: "folder.badge.plus") { model.pendingNewFolder = true }
+                Button("New Snippet", systemImage: "text.alignleft") { model.beginNewSnippet() }
+                    .keyboardShortcut("n")
+                Button("New Folder", systemImage: "folder.badge.plus") { model.beginNewFolder() }
+                    .keyboardShortcut("n", modifiers: [.command, .shift])
                 Divider()
                 Button("Import Files…", systemImage: "square.and.arrow.down") {
                     model.presentImportPanel(into: currentFolder)
@@ -129,48 +112,4 @@ public struct MainWindowView: View {
         return model.store.allFolders().first { $0.id == id }
     }
 
-    private var newSnippetSheet: some View {
-        VStack(alignment: .leading, spacing: Theme.Space.s) {
-            Text("New Snippet")
-                .font(.system(size: 15, weight: .semibold))
-            TextField("Title", text: $newSnippetTitle)
-                .textFieldStyle(.roundedBorder)
-            TextEditor(text: $newSnippetBody)
-                .font(.system(size: 12.5))
-                .frame(minHeight: 220)
-                .cardBackground(raised: true)
-            Text("Tip: {{first_name}} becomes a fill-in field. {{date:+3d}} inserts a date three days out.")
-                .font(.system(size: 10.5))
-                .foregroundStyle(Theme.tertiaryText)
-
-            HStack {
-                Spacer()
-                Button("Cancel") { resetNewSnippet() }
-                    .keyboardShortcut(.cancelAction)
-                Button("Create") {
-                    Task {
-                        _ = await model.importer.importText(
-                            newSnippetBody,
-                            title: newSnippetTitle.isEmpty ? nil : newSnippetTitle,
-                            into: currentFolder
-                        )
-                        model.runSearch()
-                        resetNewSnippet()
-                    }
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(Theme.primaryText)
-                .keyboardShortcut(.defaultAction)
-                .disabled(newSnippetBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-        }
-        .padding(Theme.Space.m)
-        .frame(width: 520)
-    }
-
-    private func resetNewSnippet() {
-        newSnippetTitle = ""
-        newSnippetBody = ""
-        model.pendingNewSnippet = false
-    }
 }

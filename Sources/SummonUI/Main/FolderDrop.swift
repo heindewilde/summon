@@ -21,19 +21,22 @@ public struct FolderDropDelegate: DropDelegate {
     let model: AppModel
     @Binding var zone: FolderDropZone?
 
-    /// The height of a sidebar row, used to turn a pointer position into an intent.
-    private static let rowHeight: CGFloat = 24
+    /// Passed in rather than assumed: the delegate turns a pointer position into an
+    /// intent, so it has to know how tall the row actually is.
+    let rowHeight: CGFloat
 
-    public init(folder: SummonFolder, model: AppModel, zone: Binding<FolderDropZone?>) {
+    public init(folder: SummonFolder, model: AppModel, rowHeight: CGFloat,
+                zone: Binding<FolderDropZone?>) {
         self.folder = folder
         self.model = model
+        self.rowHeight = rowHeight
         _zone = zone
     }
 
     private func zone(for location: CGPoint) -> FolderDropZone {
-        let edge = Self.rowHeight * 0.28
+        let edge = rowHeight * 0.3
         if location.y < edge { return .before }
-        if location.y > Self.rowHeight - edge { return .after }
+        if location.y > rowHeight - edge { return .after }
         return .into
     }
 
@@ -71,7 +74,7 @@ public struct FolderDropDelegate: DropDelegate {
 
         let providers = info.itemProviders(for: [.fileURL])
         Task { @MainActor in
-            let urls = await FolderRow.urls(from: providers)
+            let urls = await FolderDropDelegate.urls(from: providers)
             guard !urls.isEmpty else { return }
             model.importDroppedFiles(urls, into: folder)
         }
@@ -93,6 +96,22 @@ public struct FolderDropDelegate: DropDelegate {
             }
         }
         return nil
+    }
+}
+
+extension FolderDropDelegate {
+    /// File URLs out of a set of drag providers.
+    static func urls(from providers: [NSItemProvider]) async -> [URL] {
+        var urls: [URL] = []
+        for provider in providers {
+            if let data = try? await provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier) as? Data,
+               let url = URL(dataRepresentation: data, relativeTo: nil) {
+                urls.append(url)
+            } else if let url = try? await provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier) as? URL {
+                urls.append(url)
+            }
+        }
+        return urls
     }
 }
 

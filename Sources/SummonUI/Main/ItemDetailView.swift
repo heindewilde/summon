@@ -15,6 +15,9 @@ public struct ItemDetailView: View {
     @State private var loadedID: UUID?
     @State private var rewriting = false
     @State private var showingDetails = false
+    @State private var pin = ""
+    @FocusState private var pinFocused: Bool
+    @FocusState private var titleFocused: Bool
 
     public init(model: AppModel, itemID: UUID) {
         self.model = model
@@ -40,8 +43,22 @@ public struct ItemDetailView: View {
             Divider().overlay(Theme.hairline)
             metadataFooter
         }
-        .task(id: itemID) { load(); showingDetails = false }
-        .onDisappear(perform: commit)
+        .task(id: itemID) {
+            load()
+            showingDetails = false
+            // A snippet created from the + menu exists already and is selected; the
+            // cursor lands in its title so you can just start typing.
+            if model.focusNewItemTitle {
+                model.focusNewItemTitle = false
+                titleFocused = true
+            }
+        }
+        .onDisappear {
+            commit()
+            // A new snippet left completely untouched is removed again, so abandoning
+            // one does not litter the library with blanks.
+            model.discardIfEmpty(itemID)
+        }
     }
 
     // MARK: - Title bar
@@ -54,10 +71,11 @@ public struct ItemDetailView: View {
         HStack(spacing: Theme.Space.s) {
             KindGlyph(kind: snapshot?.kind ?? .file, isLocked: snapshot?.isLocked ?? false, size: 16)
 
-            TextField("Title", text: $title)
+            TextField("Untitled", text: $title)
                 .textFieldStyle(.plain)
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(Theme.primaryText)
+                .focused($titleFocused)
                 .onSubmit(commit)
 
             Spacer(minLength: Theme.Space.s)
@@ -181,20 +199,61 @@ public struct ItemDetailView: View {
         model.previewData(for: itemID)
     }
 
+    /// The PIN field sits where the content would be. Summoning the panel to ask for
+    /// a PIN meant a window appeared over the thing you were already looking at.
     private var lockedNotice: some View {
         VStack(spacing: Theme.Space.s) {
             Image(systemName: "lock.fill")
-                .font(.system(size: 22))
+                .font(.system(size: 20))
                 .foregroundStyle(Theme.tertiaryText)
             Text("Contents are encrypted")
                 .font(Theme.Typography.title)
                 .foregroundStyle(Theme.primaryText)
-            Text("Unlock to view or edit this item.")
-                .font(Theme.Typography.meta)
-                .foregroundStyle(Theme.secondaryText)
-            Button("Unlock") { model.summonForUnlock() }
-                .controlSize(.small)
-                .padding(.top, Theme.Space.xs)
+
+            SecureField("PIN", text: $pin)
+                // Plain, with our own well: the bordered style draws the system's
+                // blue focus ring, which is the loudest thing in a monochrome app —
+                // and AutoFill offers to fill a "Passwords…" suggestion over the top
+                // of a field that wants a local PIN, not a website login.
+                .textFieldStyle(.plain)
+                .textContentType(nil)
+                .multilineTextAlignment(.center)
+                .focused($pinFocused)
+                .onSubmit(submitPIN)
+                .onChange(of: pin) { _, _ in model.pinError = nil }
+                .padding(.horizontal, Theme.Space.s)
+                .frame(width: 148, height: 28)
+                .background(Theme.surface, in: .rect(cornerRadius: Theme.Radius.small))
+                .overlay(
+                    RoundedRectangle(cornerRadius: Theme.Radius.small)
+                        .strokeBorder(model.pinError == nil ? Theme.hairline : Theme.danger,
+                                      lineWidth: 1)
+                )
+
+            if let error = model.pinError {
+                Text(error)
+                    .font(Theme.Typography.meta)
+                    .foregroundStyle(Theme.danger)
+            } else if Vault.biometricsAvailable && model.vault.biometricsEnabled {
+                Button("Use Touch ID") { Task { await model.tryBiometricUnlock() } }
+                    .buttonStyle(.link)
+                    .font(Theme.Typography.meta)
+            } else {
+                Text("Unlocks everything sensitive until it re-locks.")
+                    .font(Theme.Typography.meta)
+                    .foregroundStyle(Theme.tertiaryText)
+            }
+        }
+        .onAppear {
+            pinFocused = true
+            if model.vault.biometricsEnabled { Task { await model.tryBiometricUnlock() } }
+        }
+    }
+
+    private func submitPIN() {
+        if model.unlockInPlace(pin: pin) {
+            pin = ""
+            load()
         }
     }
 
@@ -209,11 +268,17 @@ public struct ItemDetailView: View {
                 withAnimation(Theme.panelIn) { showingDetails.toggle() }
             } label: {
                 HStack(spacing: Theme.Space.m) {
-                    Label(snapshot?.folderPath.isEmpty == false
-                          ? snapshot!.folderLabel : "No folder", systemImage: "folder")
-                        .labelStyle(.titleAndIcon)
+                    if !showingDetails {
+                        Label(snapshot?.folderPath.isEmpty == false
+                              ? snapshot!.folderLabel : "No folder", systemImage: "folder")
+                            .labelStyle(.titleAndIcon)
+                    } else {
+                        Text("Details")
+                    }
 
-                    if let tags = snapshot?.tagNames, !tags.isEmpty {
+                    // Only while collapsed: expanded, the Tags field below shows the
+                    // same thing, and the item's tags were listed twice at once.
+                    if !showingDetails, let tags = snapshot?.tagNames, !tags.isEmpty {
                         Text(tags.prefix(3).map { "#\($0)" }.joined(separator: " "))
                         if tags.count > 3 { Text("+\(tags.count - 3)") }
                     }

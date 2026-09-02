@@ -22,6 +22,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         applyActivationPolicy()
 
+        if VerifyPaths.isRequested {
+            Task { await VerifyPaths.run(controller: controller) }
+            return
+        }
+
         if PasteTest.isRequested {
             Task { await PasteTest.run() }
             return

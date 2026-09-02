@@ -151,14 +151,59 @@ public final class Vault {
 
     // MARK: - Biometrics
 
+    /// Whether this Mac has usable biometric hardware.
     public static var biometricsAvailable: Bool {
         var err: NSError?
         return LAContext().canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &err)
     }
 
+    private static var storageProbe: Bool?
+
+    /// Whether the Keychain will actually accept a biometry-protected item.
+    ///
+    /// Having a Touch ID sensor is not enough. An item guarded by `SecAccessControl`
+    /// lives in the data-protection keychain, which requires a `keychain-access-groups`
+    /// entitlement prefixed with an Apple Team ID. A locally-signed build has no team,
+    /// and adding the entitlement unprefixed makes the app fail to launch — so the
+    /// honest answer is to detect this and not offer the feature.
+    public static var biometricStorageAvailable: Bool {
+        if let cached = storageProbe { return cached }
+        guard biometricsAvailable else {
+            storageProbe = false
+            return false
+        }
+        guard let access = SecAccessControlCreateWithFlags(
+            nil, kSecAttrAccessibleWhenUnlockedThisDeviceOnly, .biometryCurrentSet, nil
+        ) else {
+            storageProbe = false
+            return false
+        }
+
+        let probeAccount = "biometric-probe"
+        let base: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: "com.heindewilde.summon.vault",
+            kSecAttrAccount as String: probeAccount,
+        ]
+        SecItemDelete(base as CFDictionary)
+
+        var attrs = base
+        attrs[kSecValueData as String] = Data([0])
+        attrs[kSecAttrAccessControl as String] = access
+        let status = SecItemAdd(attrs as CFDictionary, nil)
+        SecItemDelete(base as CFDictionary)
+
+        let ok = status == errSecSuccess
+        if !ok {
+            Log.vault.info("Biometric key storage unavailable (status \(status)).")
+        }
+        storageProbe = ok
+        return ok
+    }
+
     public func enableBiometricUnlock() throws {
         guard let key else { throw VaultError.locked }
-        guard Vault.biometricsAvailable else { throw VaultError.biometricsUnavailable }
+        guard Vault.biometricStorageAvailable else { throw VaultError.biometricsUnavailable }
 
         var acError: Unmanaged<CFError>?
         guard let access = SecAccessControlCreateWithFlags(

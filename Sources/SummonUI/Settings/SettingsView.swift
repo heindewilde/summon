@@ -163,7 +163,7 @@ struct PrivacySettings: View {
                             .foregroundStyle(model.vault.isUnlocked ? Theme.success : Theme.spark)
                     }
 
-                    if Vault.biometricsAvailable {
+                    if Vault.biometricStorageAvailable {
                         Toggle("Unlock with Touch ID", isOn: Binding(
                             get: { model.vault.biometricsEnabled },
                             set: { enabled in
@@ -180,6 +180,16 @@ struct PrivacySettings: View {
                                 }
                             }
                         ))
+                    }
+
+                    if Vault.biometricsAvailable && !Vault.biometricStorageAvailable {
+                        Label("""
+                        Touch ID unlock needs an Apple Developer ID. A locally-signed \
+                        build can’t store a key behind the biometric sensor, so this Mac \
+                        uses the PIN.
+                        """, systemImage: "touchid")
+                            .font(.system(size: 11))
+                            .foregroundStyle(Theme.secondaryText)
                     }
 
                     Picker("Lock automatically after", selection: Binding(

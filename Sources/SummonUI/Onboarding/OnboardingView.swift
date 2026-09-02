@@ -158,7 +158,7 @@ public struct OnboardingView: View {
                             Button("Set") { setPIN() }
                                 .buttonStyle(.bordered)
                                 .disabled(pin.count < 4 || pin != pinConfirm)
-                            if Vault.biometricsAvailable {
+                            if Vault.biometricStorageAvailable {
                                 Toggle("Touch ID", isOn: $enableTouchID)
                                     .toggleStyle(.checkbox)
                                     .font(.system(size: 11))
@@ -297,7 +297,7 @@ public struct OnboardingView: View {
     private func setPIN() {
         do {
             try model.vault.setUpPIN(pin)
-            if enableTouchID, Vault.biometricsAvailable {
+            if enableTouchID, Vault.biometricStorageAvailable {
                 try? model.vault.enableBiometricUnlock()
             }
             pinError = nil

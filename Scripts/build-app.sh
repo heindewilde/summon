@@ -92,6 +92,9 @@ cat > "$DIST/Summon.entitlements" <<'ENT'
 <dict>
     <key>com.apple.security.app-sandbox</key><false/>
     <key>com.apple.security.automation.apple-events</key><true/>
+    <!-- No keychain-access-groups: without an Apple Team ID prefix the kernel
+         rejects the entitlement outright and the app will not launch. That is why
+         Touch ID unlock needs a Developer ID; see Vault.biometricStorageAvailable. -->
 </dict>
 </plist>
 ENT

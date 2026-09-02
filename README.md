@@ -26,6 +26,8 @@ app builds from the system SDK.
 swift test                           # 113 tests over the logic layer
 SUMMON_DEMO=1 SUMMON_SELFTEST=1 ./dist/Summon.app/Contents/MacOS/Summon
 SUMMON_DEMO=1 SUMMON_PASTETEST=1 open -n dist/Summon.app   # real auto-paste round trip
+SUMMON_DEMO=1 SUMMON_VERIFY=1   open -n dist/Summon.app   # hot key, Finder, Services, login item
+SUMMON_PERF=1   swift test -c release                     # search latency measurements
 ```
 
 The self-test covers hot key registration, panel window configuration, search,
@@ -124,6 +126,12 @@ heuristics. Settings shows the real status rather than pretending.
   `open` rather than exec'ing `Contents/MacOS/Summon` from a shell — a binary run
   from a terminal inherits the terminal as its responsible process, and reports
   Accessibility as denied even when the grant is in place.
+- **Touch ID unlock needs an Apple Developer ID.** A key guarded by
+  `SecAccessControl` lives in the data-protection keychain, which requires a
+  `keychain-access-groups` entitlement prefixed with a Team ID. A locally-signed
+  build has no team, and adding the entitlement unprefixed makes the app fail to
+  launch outright. Summon probes for this at runtime and hides the Touch ID option
+  rather than offering something that cannot work; the PIN is unaffected.
 - **No sync, no iOS app yet.** Deliberate: the schema is ready, the code is not.
 
 ## Signing

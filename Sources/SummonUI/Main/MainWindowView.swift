@@ -106,7 +106,9 @@ public struct MainWindowView: View {
         ToolbarItem(placement: .primaryAction) {
             Picker("Layout", selection: $model.useGridLayout) {
                 Image(systemName: "list.bullet").tag(false)
+                    .accessibilityLabel("List view")
                 Image(systemName: "square.grid.2x2").tag(true)
+                    .accessibilityLabel("Grid view")
             }
             .pickerStyle(.segmented)
             .help("Switch between list and grid")

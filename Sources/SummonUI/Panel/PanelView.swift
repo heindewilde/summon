@@ -86,6 +86,13 @@ public struct PanelView: View {
             loadDroppedURLs(providers)
             return true
         }
+        .onChange(of: model.results.count) { _, count in
+            guard model.isPanelVisible else { return }
+            let message = count == 0
+                ? "No matches"
+                : "\(count) result\(count == 1 ? "" : "s"), \(model.results[0].item.title) first"
+            AccessibilityNotification.Announcement(message).post()
+        }
         .task(id: model.selectedResult?.id) {
             guard let id = model.selectedResult?.id else {
                 preview = nil
@@ -113,6 +120,7 @@ public struct PanelView: View {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 15, weight: .regular))
                 .foregroundStyle(Theme.tertiaryText)
+                .accessibilityHidden(true)
 
             PanelSearchField(
                 text: $model.query,

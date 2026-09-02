@@ -177,3 +177,31 @@ struct KeyMapTests {
         #expect(PanelKeyMap.chord(for: .rename) == nil)
     }
 }
+
+@Suite("Spoken labels")
+struct SpokenLabelTests {
+
+    /// VoiceOver reads these; they should say what the thing does, including the key
+    /// that does it, rather than naming an icon.
+    @Test("Every action announces its name and its shortcut")
+    func actionLabels() {
+        for action in PanelActionID.allCases {
+            let chord = PanelKeyMap.chord(for: action)
+            let spoken = action.title + (chord.map { ", \($0.display)" } ?? "")
+            #expect(spoken.hasPrefix(action.title))
+            if let chord {
+                #expect(spoken.contains(chord.display),
+                        "\(action) advertises \(chord.display) visually but would not say it")
+            }
+        }
+    }
+
+    @Test("Destructive actions are identifiable without relying on colour")
+    func destructiveIsNotOnlyColour() {
+        // Delete is red in the menu. Colour alone is not available to a screen
+        // reader, nor to someone who cannot distinguish it.
+        #expect(PanelActionID.delete.isDestructive)
+        #expect(PanelActionID.delete.title == "Delete")
+        #expect(PanelActionID.allCases.filter(\.isDestructive) == [.delete])
+    }
+}

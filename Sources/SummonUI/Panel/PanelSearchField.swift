@@ -32,6 +32,10 @@ struct PanelSearchFieldRepresentable: NSViewRepresentable {
         field.cell?.wraps = false
         field.cell?.isScrollable = true
         field.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        // Without this VoiceOver announces an unnamed text field — for the one
+        // control the whole app is built around.
+        field.setAccessibilityLabel("Search your library")
+        field.setAccessibilityHelp("Type to search. Up and down arrows move through results, Return inserts, ⌘K opens actions.")
         DispatchQueue.main.async { field.window?.makeFirstResponder(field) }
         return field
     }

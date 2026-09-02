@@ -84,6 +84,7 @@ public struct ActionMenu: View {
                 .font(.system(size: 12))
                 .foregroundStyle(action.isDestructive ? Theme.danger : Theme.secondaryText)
                 .frame(width: 16)
+                .accessibilityHidden(true)
 
             Text(action.title)
                 .font(Theme.Typography.title)
@@ -107,7 +108,10 @@ public struct ActionMenu: View {
         }
         .contentShape(.rect)
         .onTapGesture { model.run(action) }
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(action.title
+            + (PanelKeyMap.chord(for: action).map { ", \($0.display)" } ?? "")
+            + (action.isDestructive ? ", destructive" : ""))
         .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
     }
 
@@ -139,6 +143,7 @@ public struct ActionMenu: View {
                                 .font(.system(size: 12))
                                 .foregroundStyle(Theme.secondaryText)
                                 .frame(width: 16)
+                                .accessibilityHidden(true)
                             Text(choice.label)
                                 .font(Theme.Typography.title)
                                 .foregroundStyle(Theme.primaryText)

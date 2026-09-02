@@ -23,7 +23,11 @@ public struct Query: Sendable, Equatable {
         var query = Query()
         var freeText: [String] = []
 
-        for token in raw.split(separator: " ", omittingEmptySubsequences: true).map(String.init) {
+        // Split on any whitespace, not just the space character. Splitting on " "
+        // alone meant a pasted newline or tab became a search term of its own, so
+        // pasting multi-line text into the field showed "No matches" instead of the
+        // default list.
+        for token in raw.split(whereSeparator: { $0.isWhitespace }).map(String.init) {
             if token.hasPrefix("#"), token.count > 1 {
                 query.tags.append(String(token.dropFirst()).lowercased())
                 continue

@@ -243,6 +243,29 @@ enum SelfTest {
             }())
         }
 
+        // MARK: State that must not survive a dismissal
+        check("Refining a query goes back to the best match", {
+            model.query = ""
+            model.selectedIndex = 3
+            model.query = "e"
+            return model.selectedIndex == 0
+        }())
+
+        model.query = ""
+        if let foldered = model.results.first(where: { !$0.item.folderPath.isEmpty }) {
+            model.selectedIndex = model.results.firstIndex { $0.id == foldered.id } ?? 0
+            model.route(KeyChord(.tab))
+            let scoped = model.folderScope != nil
+            model.openActionMenu()
+            model.dismissPanel()
+            model.summon()
+            try? await Task.sleep(for: .milliseconds(150))
+            check("A folder scope does not leak into the next summon",
+                  scoped && model.folderScope == nil)
+            check("An open action menu does not leak into the next summon",
+                  model.overlay == .none)
+        }
+
         model.dismissPanel()
         try? await Task.sleep(for: .milliseconds(200))
         check("Panel hides on dismiss", !controller.isVisible)

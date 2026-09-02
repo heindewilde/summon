@@ -24,6 +24,20 @@ public final class LibraryStore {
     public private(set) var snapshots: [ItemSnapshot] = []
     public private(set) var lastError: String?
 
+    /// Called when an operation fails. Set by `AppModel`.
+    ///
+    /// `lastError` was written in three places and read in none, so a failed save —
+    /// the path every edit takes — lost your change with nothing on screen to say so.
+    /// A store cannot present anything itself, but it can refuse to fail quietly.
+    @ObservationIgnored public var onError: ((String) -> Void)?
+
+    private func report(_ error: any Error, while action: String) {
+        let message = error.localizedDescription
+        lastError = message
+        Log.store.error("\(action) failed: \(message)")
+        onError?("\(action) failed — \(message)")
+    }
+
     /// Bumped on every change so views depending on derived data recompute.
     public private(set) var revision: Int = 0
 
@@ -268,8 +282,7 @@ public final class LibraryStore {
             item.apply(blob)
         } catch {
             context.delete(item)
-            lastError = error.localizedDescription
-            Log.store.error("Import failed: \(error.localizedDescription)")
+            report(error, while: "Import")
             return nil
         }
         save()
@@ -300,7 +313,7 @@ public final class LibraryStore {
             item.apply(blob)
         } catch {
             context.delete(item)
-            lastError = error.localizedDescription
+            report(error, while: "Import")
             return nil
         }
         save()
@@ -322,7 +335,10 @@ public final class LibraryStore {
     }
 
     public func rename(_ item: SummonItem, to title: String) {
-        item.title = title
+        // An item whose title is empty or blank renders as an invisible row: you
+        // cannot see it, identify it, or search for it by name.
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        item.title = trimmed.isEmpty ? "Untitled" : trimmed
         item.updatedAt = Date()
         save(); refresh()
     }
@@ -569,8 +585,7 @@ public final class LibraryStore {
         do {
             try context.save()
         } catch {
-            lastError = error.localizedDescription
-            Log.store.error("Save failed: \(error.localizedDescription)")
+            report(error, while: "Save")
         }
     }
 

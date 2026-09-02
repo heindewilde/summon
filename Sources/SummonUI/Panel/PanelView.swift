@@ -219,7 +219,11 @@ public struct PanelView: View {
                 // millisecond, and an animated scroll would be the slowest thing left.
                 .onChange(of: model.selectedIndex) { _, new in
                     guard model.results.indices.contains(new) else { return }
-                    proxy.scrollTo(model.results[new].id, anchor: .center)
+                    // No anchor: scroll the minimum needed to bring the row into
+                    // view. `.center` re-centred the list on every arrow press even
+                    // when the next row was already visible, which is half of why
+                    // moving through results felt jumpy.
+                    proxy.scrollTo(model.results[new].id)
                 }
             }
         }

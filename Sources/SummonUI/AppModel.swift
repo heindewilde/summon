@@ -120,7 +120,13 @@ public final class AppModel {
 
     // MARK: - Panel state
 
-    public var query: String = "" { didSet { if query != oldValue { runSearch() } } }
+    public var query: String = "" {
+        didSet {
+            guard query != oldValue else { return }
+            resetSelection()
+            runSearch()
+        }
+    }
     public private(set) var results: [SearchResult] = []
     /// The same results, grouped for display and carrying each row's absolute
     /// position. The position has to be part of observed state: computed from a side
@@ -219,6 +225,12 @@ public final class AppModel {
         applySettings()
         startAutoLockTimer()
         runSearch()
+
+        // A failure that only reaches the log is a failure the person using the app
+        // never finds out about — and for a save, that means a lost edit.
+        store.onError = { [weak self] message in
+            self?.show(Toast(text: message, symbol: "exclamationmark.triangle", tone: .danger))
+        }
     }
 
     public func applySettings() {
@@ -258,6 +270,11 @@ public final class AppModel {
         }
         if selectedIndex >= results.count { selectedIndex = max(0, results.count - 1) }
     }
+
+    /// Ranking changed, so the old position means nothing: go back to the best match.
+    /// Without this, refining a query while sitting on row 5 leaves you on row 5 of a
+    /// different list — and the next Return pastes something you never looked at.
+    private func resetSelection() { selectedIndex = 0 }
 
     public var selectedResult: SearchResult? {
         guard results.indices.contains(selectedIndex) else { return nil }
@@ -497,6 +514,11 @@ public final class AppModel {
         query = ""
         selectedIndex = 0
         mode = .search
+        // Both of these used to persist: drill into a folder, dismiss, summon again,
+        // and you were still scoped to it with no memory of why. Same for a ⌘K menu
+        // left open when the panel was dismissed.
+        folderScope = nil
+        overlay = .none
         fieldValues = [:]
         pinEntry = ""
         pinError = nil
@@ -817,6 +839,18 @@ public final class AppModel {
         Task {
             let created = await importer.importFiles(urls, into: folder)
             runSearch()
+            // Nothing imported is not a success. This used to announce
+            // "Added 0 items" in the success tone when every file had failed.
+            guard !created.isEmpty else {
+                show(Toast(text: urls.count == 1 ? "Couldn’t add that file" : "Couldn’t add those files",
+                           symbol: "exclamationmark.triangle", tone: .danger))
+                return
+            }
+            if created.count < urls.count {
+                show(Toast(text: "Added \(created.count) of \(urls.count)",
+                           symbol: "tray.and.arrow.down", tone: .warning))
+                return
+            }
             show(Toast(text: created.count == 1 ? "Added “\(created[0].title)”" : "Added \(created.count) items",
                        symbol: "tray.and.arrow.down.fill", tone: .success))
         }

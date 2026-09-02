@@ -37,12 +37,20 @@ public enum Theme {
 
     // MARK: - Text
 
-    public static let primaryText = Color(nsColor: .dyn(light: .srgb(0, 0, 0, 0.90),
+    // Alphas are chosen to clear WCAG AA against `chrome`, not by eye. The values
+    // are asserted in ContrastTests — the first draft of this palette put the row's
+    // body preview at 3.20:1 in dark and 2.65:1 in light, both under the 4.5:1 bar
+    // for text this size, and it looked fine.
+    public static let primaryText = Color(nsColor: .dyn(light: .srgb(0, 0, 0, 0.88),
                                                         dark: .srgb(1, 1, 1, 0.95)))
-    public static let secondaryText = Color(nsColor: .dyn(light: .srgb(0, 0, 0, 0.55),
-                                                          dark: .srgb(1, 1, 1, 0.55)))
-    public static let tertiaryText = Color(nsColor: .dyn(light: .srgb(0, 0, 0, 0.38),
-                                                         dark: .srgb(1, 1, 1, 0.35)))
+    public static let secondaryText = Color(nsColor: .dyn(light: .srgb(0, 0, 0, 0.64),
+                                                          dark: .srgb(1, 1, 1, 0.66)))
+    public static let tertiaryText = Color(nsColor: .dyn(light: .srgb(0, 0, 0, 0.58),
+                                                         dark: .srgb(1, 1, 1, 0.50)))
+    /// Decoration only — the ⌘-number badge, a disabled glyph. Never body text; held
+    /// to the 3:1 non-text bar rather than 4.5:1.
+    public static let faintText = Color(nsColor: .dyn(light: .srgb(0, 0, 0, 0.45),
+                                                      dark: .srgb(1, 1, 1, 0.36)))
 
     // MARK: - Status
     //

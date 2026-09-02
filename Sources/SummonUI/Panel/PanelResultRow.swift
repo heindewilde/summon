@@ -70,7 +70,7 @@ public struct PanelResultRow: View {
             if index < 9 {
                 Text("⌘\(index + 1)")
                     .font(.system(size: 11, weight: .medium, design: .rounded))
-                    .foregroundStyle(Theme.tertiaryText)
+                    .foregroundStyle(Theme.faintText)
                     .frame(width: 22, alignment: .trailing)
             } else {
                 Spacer().frame(width: 22)

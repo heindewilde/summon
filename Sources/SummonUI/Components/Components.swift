@@ -172,7 +172,9 @@ public struct ToastView: View {
         switch toast.tone {
         case .neutral: Theme.primaryText
         case .success: Theme.success
-        case .warning: Theme.secondaryText
+        // Was secondaryText, which made a warning indistinguishable from a neutral
+        // message — the tone existed but said nothing.
+        case .warning: Theme.warning
         case .danger: Theme.danger
         }
     }

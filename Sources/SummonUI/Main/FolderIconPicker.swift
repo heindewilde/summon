@@ -14,29 +14,61 @@ public struct FolderIconPicker: View {
     let folder: SummonFolder
     @Binding var isPresented: Bool
 
-    @State private var query = ""
+    @State private var query: String
     @State private var symbol: String
     @State private var colour: String
     @FocusState private var searchFocused: Bool
 
-    public init(model: AppModel, folder: SummonFolder, isPresented: Binding<Bool>) {
+    public init(model: AppModel, folder: SummonFolder, isPresented: Binding<Bool>,
+                initialQuery: String = "") {
         self.model = model
         self.folder = folder
         _isPresented = isPresented
         _symbol = State(initialValue: folder.symbolName)
         _colour = State(initialValue: folder.colorName)
+        _query = State(initialValue: initialQuery)
     }
 
     private let columns = Array(repeating: GridItem(.fixed(30), spacing: Theme.Space.xs), count: 8)
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            TextField("Search icons", text: $query)
-                .textFieldStyle(.plain)
-                .font(Theme.Typography.title)
-                .focused($searchFocused)
-                .padding(.horizontal, Theme.Space.m)
-                .frame(height: 34)
+            // A bare TextField with a placeholder reads as a window title, not
+            // something you can type into — which is exactly how it was missed. The
+            // magnifier and the inset well are what say "this is a field".
+            HStack(spacing: Theme.Space.s) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.tertiaryText)
+                    .accessibilityHidden(true)
+
+                TextField("Search icons", text: $query)
+                    .textFieldStyle(.plain)
+                    .font(Theme.Typography.title)
+                    .focused($searchFocused)
+                    .accessibilityLabel("Search icons")
+
+                if !query.isEmpty {
+                    Button {
+                        query = ""
+                        searchFocused = true
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 12))
+                            .foregroundStyle(Theme.tertiaryText)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Clear search")
+                }
+            }
+            .padding(.horizontal, Theme.Space.s)
+            .frame(height: 26)
+            .background(Theme.surface, in: .rect(cornerRadius: Theme.Radius.small))
+            .overlay(
+                RoundedRectangle(cornerRadius: Theme.Radius.small)
+                    .strokeBorder(Theme.hairline, lineWidth: 1)
+            )
+            .padding(Theme.Space.s)
 
             Divider().overlay(Theme.hairline)
 
@@ -49,13 +81,14 @@ public struct FolderIconPicker: View {
                     } else {
                         let results = FolderIcon.search(query)
                         if results.isEmpty {
-                            Text("No icons match “\(query)”")
+                            Text("Nothing matches “\(query)”. Try what it is for — money,\npeople, code, travel.")
                                 .font(Theme.Typography.meta)
                                 .foregroundStyle(Theme.tertiaryText)
+                                .fixedSize(horizontal: false, vertical: true)
                                 .padding(.horizontal, Theme.Space.m)
                                 .padding(.vertical, Theme.Space.s)
                         } else {
-                            section(nil, results)
+                            section("\(results.count) result\(results.count == 1 ? "" : "s")", results)
                         }
                     }
                 }

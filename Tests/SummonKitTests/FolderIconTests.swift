@@ -49,6 +49,37 @@ struct FolderIconTests {
         #expect(FolderIcon.search("zzzzzz").isEmpty)
     }
 
+    @Test("An exact match is not buried under fuzzy ones")
+    func exactMatchesRankFirst() {
+        // Substrings win outright when they exist: if you typed "folder" you meant
+        // the folder icon, not everything whose letters happen to contain f-o-l-d-e-r.
+        let results = FolderIcon.search("folder")
+        #expect(results.allSatisfy { $0.name.contains("folder") })
+        #expect(FolderIcon.search("envelope").first?.name == "envelope")
+    }
+
+    @Test("A partial or abbreviated query still finds the icon", arguments: [
+        ("bldcol", "building.columns"),
+        ("papclip", "paperclip"),
+        ("gradcap", "graduationcap"),
+    ])
+    func fuzzyFallback(_ pair: (String, String)) {
+        let (query, expected) = pair
+        // No symbol contains these as a substring, so this exercises the fuzzy path.
+        #expect(FolderIcon.search(query).contains { $0.name == expected },
+                "“\(query)” should still reach \(expected)")
+    }
+
+    @Test("Searching does not rebuild its tables on every call")
+    func searchIsCheap() {
+        // 300 searches over 90 symbols; if Prepared were rebuilt per call this would
+        // be the same mistake the search index already had to be corrected for.
+        let start = ContinuousClock.now
+        for _ in 0..<300 { _ = FolderIcon.search("mny") }
+        let elapsed = ContinuousClock.now - start
+        #expect(elapsed < .milliseconds(500))
+    }
+
     @Test("Every colour the picker offers resolves to a distinct choice")
     func coloursAreDistinct() {
         #expect(Set(Theme_folderColorNames).count == Theme_folderColorNames.count)

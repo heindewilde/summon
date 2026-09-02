@@ -18,6 +18,7 @@ enum LiveCapture {
 
     static func run(mode: String, controller: PanelController) async {
         let model = Services.model
+        let environment2 = ProcessInfo.processInfo.environment
         // Never steal focus for a screenshot. Someone is usually working while these
         // run, and an activating window both interrupts them and puts their next
         // keystroke somewhere neither of us intended.
@@ -72,6 +73,17 @@ enum LiveCapture {
             model.useGridLayout = true
             model.mainSelection = model.itemsForSidebar().first?.id
             window = present(MainWindowView(model: model), size: CGSize(width: 1120, height: 700))
+
+        case "iconpicker":
+            let folder = model.store.rootFolders().first
+                ?? model.store.createFolder(name: "Example")
+            window = present(
+                FolderIconPicker(model: model, folder: folder,
+                                 isPresented: .constant(true),
+                                 initialQuery: environment2["SUMMON_LIVE_QUERY"] ?? "")
+                    .background(Theme.chrome),
+                size: CGSize(width: 288, height: 372)
+            )
 
         case "menubar":
             window = present(

@@ -97,14 +97,48 @@ public enum FolderIcon {
     /// what you see until you choose otherwise.
     public static let defaultSymbol = "folder"
 
-    /// Matches on the symbol's name and its keywords, so "money" finds the currency
-    /// symbols even though neither is called that.
+    /// Prepared once. Rebuilding these per keystroke is the mistake the search index
+    /// already made and had to be corrected for.
+    private static let prepared: [(symbol: Symbol, name: FuzzyMatcher.Prepared,
+                                   keywords: [FuzzyMatcher.Prepared])] = all.map {
+        ($0, FuzzyMatcher.Prepared($0.name), $0.keywords.map(FuzzyMatcher.Prepared.init))
+    }
+
+    /// Matches on the symbol's name and on what it means, so "money" finds the
+    /// currency symbols and "vat" finds percent, though neither is called that.
+    ///
+    /// Exact substrings first, because when they exist they are what you meant. Only
+    /// when nothing contains the query does it fall back to the same fuzzy matcher the
+    /// panel uses, so "bldcol" still reaches building.columns and a typo does not end
+    /// at "No icons match".
     public static func search(_ query: String) -> [Symbol] {
         let needle = query.trimmingCharacters(in: .whitespaces).lowercased()
         guard !needle.isEmpty else { return all }
-        return all.filter { symbol in
+
+        let substring = all.filter { symbol in
             symbol.name.lowercased().contains(needle)
-                || symbol.keywords.contains { $0.hasPrefix(needle) }
+                || symbol.keywords.contains { $0.contains(needle) }
         }
+        if !substring.isEmpty { return substring }
+
+        let chars = FuzzyMatcher.scalars(needle)
+        let scratch = FuzzyMatcher.Scratch()
+        var scored: [(Symbol, Double)] = []
+        for entry in prepared {
+            var best: Double?
+            if let match = FuzzyMatcher.match(query: chars, in: entry.name,
+                                              scratch: scratch, needsPositions: false) {
+                best = match.score
+            }
+            for keyword in entry.keywords {
+                if let match = FuzzyMatcher.match(query: chars, in: keyword,
+                                                  scratch: scratch, needsPositions: false) {
+                    // Slightly behind a name match: the name is what the icon *is*.
+                    best = max(best ?? -.greatestFiniteMagnitude, match.score * 0.9)
+                }
+            }
+            if let best { scored.append((entry.symbol, best)) }
+        }
+        return scored.sorted { $0.1 > $1.1 }.map(\.0)
     }
 }

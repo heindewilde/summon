@@ -21,7 +21,7 @@ struct PanelSearchFieldRepresentable: NSViewRepresentable {
     init(
         text: Binding<String>,
         placeholder: String = "Summon anything…",
-        fontSize: CGFloat = 20,
+        fontSize: CGFloat = 18,
         focusToken: Int = 0,
         onMove: @escaping (Int) -> Void = { _ in },
         onSubmit: @escaping (NSEvent.ModifierFlags) -> Void = { _ in },
@@ -140,7 +140,7 @@ public struct PanelSearchField: View {
     public init(
         text: Binding<String>,
         placeholder: String = "Summon anything…",
-        fontSize: CGFloat = 20,
+        fontSize: CGFloat = 18,
         focusToken: Int = 0,
         onMove: @escaping (Int) -> Void = { _ in },
         onSubmit: @escaping (NSEvent.ModifierFlags) -> Void = { _ in },
@@ -167,7 +167,7 @@ public struct PanelSearchField: View {
                     .foregroundStyle(text.isEmpty ? Theme.tertiaryText : Theme.primaryText)
                     .lineLimit(1)
                 if !text.isEmpty {
-                    Rectangle().fill(Theme.accent).frame(width: 1.5, height: fontSize * 1.1)
+                    Rectangle().fill(Theme.primaryText).frame(width: 1.5, height: fontSize * 1.1)
                 }
                 Spacer(minLength: 0)
             }

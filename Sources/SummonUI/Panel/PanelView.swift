@@ -2,8 +2,9 @@ import AppKit
 import SwiftUI
 import SummonKit
 
-/// The summon panel. One field, one list, one preview, and a footer that teaches
-/// its own shortcuts. Everything here is reachable without touching the mouse.
+/// The summon panel. One field, one list, a preview when it earns its place, and a
+/// footer that teaches its own shortcuts. Everything here is reachable without the
+/// mouse.
 public struct PanelView: View {
     @Bindable var model: AppModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -13,12 +14,16 @@ public struct PanelView: View {
     /// Resolved off the render path. Never call previewData(for:) from `body`.
     @State private var preview: AppModel.PreviewData?
 
-    /// Entrance animation is state-driven, which a synchronous image render never
-    /// advances — so treat the panel as already settled while snapshotting.
+    /// Entrance is state-driven, which a synchronous image render never advances — so
+    /// treat the panel as already settled while snapshotting.
     private var settled: Bool { appeared || isSnapshotting }
 
-    public static let width: CGFloat = 760
-    public static let height: CGFloat = 470
+    public static let width: CGFloat = 750
+    public static let height: CGFloat = 475
+
+    /// The list keeps the full width until the selection is something you actually
+    /// need to look at.
+    private static let listFraction: CGFloat = 0.60
 
     public init(model: AppModel) {
         self.model = model
@@ -51,11 +56,11 @@ public struct PanelView: View {
         .overlay(alignment: .bottom) {
             if let toast = model.toast {
                 ToastView(toast: toast)
-                    .padding(.bottom, 54)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .padding(.bottom, 52)
+                    .transition(.opacity)
             }
         }
-        .animation(reduceMotion ? nil : Theme.quick, value: model.toast)
+        .animation(reduceMotion ? nil : Theme.panelIn, value: model.toast)
         .summonTransition(isVisible: settled, reduceMotion: reduceMotion)
         .onAppear { appeared = true; focusToken += 1 }
         .onDisappear { appeared = false }
@@ -75,10 +80,10 @@ public struct PanelView: View {
     // MARK: - Header
 
     private var header: some View {
-        HStack(spacing: Theme.Space.s) {
-            Image(systemName: "sparkle.magnifyingglass")
-                .font(.system(size: 16, weight: .medium))
-                .foregroundStyle(Theme.accent)
+        HStack(spacing: Theme.Space.m) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 15, weight: .regular))
+                .foregroundStyle(Theme.tertiaryText)
 
             PanelSearchField(
                 text: $model.query,
@@ -87,28 +92,24 @@ public struct PanelView: View {
                 onMove: { model.moveSelection(by: $0) },
                 onSubmit: handleSubmit,
                 onCancel: { model.dismissPanel() },
-                onTab: { /* preview focus is visual only; Tab is reserved for fill mode */ },
+                onTab: {},
                 onDelete: {}
             )
-            .frame(height: 26)
+            .frame(height: 24)
 
-            if !model.parsedQuery.filterChips.isEmpty {
-                HStack(spacing: Theme.Space.xxs) {
-                    ForEach(model.parsedQuery.filterChips, id: \.self) { chip in
-                        Text(chip)
-                            .font(.system(size: 10.5, weight: .medium))
-                            .foregroundStyle(Theme.accent)
-                            .padding(.horizontal, Theme.Space.xs)
-                            .padding(.vertical, 2)
-                            .background(Theme.accentWash, in: .capsule)
-                    }
-                }
+            ForEach(model.parsedQuery.filterChips, id: \.self) { chip in
+                Text(chip)
+                    .font(Theme.Typography.meta)
+                    .foregroundStyle(Theme.secondaryText)
+                    .padding(.horizontal, Theme.Space.s)
+                    .padding(.vertical, 3)
+                    .background(Theme.surface, in: .capsule)
             }
 
             lockButton
         }
         .padding(.horizontal, Theme.Space.m)
-        .padding(.vertical, Theme.Space.s + 2)
+        .frame(height: 52)
     }
 
     private var placeholder: String {
@@ -124,9 +125,9 @@ public struct PanelView: View {
             Button {
                 model.toggleLock()
             } label: {
-                Image(systemName: model.vault.isUnlocked ? "lock.open.fill" : "lock.fill")
+                Image(systemName: model.vault.isUnlocked ? "lock.open" : "lock.fill")
                     .font(.system(size: 12))
-                    .foregroundStyle(model.vault.isUnlocked ? Theme.success : Theme.spark)
+                    .foregroundStyle(model.vault.isUnlocked ? Theme.tertiaryText : Theme.secondaryText)
             }
             .buttonStyle(.plain)
             .help(model.vault.isUnlocked ? "Lock sensitive items" : "Unlock sensitive items")
@@ -136,64 +137,72 @@ public struct PanelView: View {
 
     // MARK: - Search body
 
-    private var searchBody: some View {
-        HStack(spacing: 0) {
-            resultsList
-                .frame(width: Self.width * 0.55)
-
-            Divider().overlay(Theme.hairline)
-
-            if let selected = model.selectedResult {
-                previewPane(for: selected)
-            } else {
-                Color.clear
-            }
+    /// A preview only when seeing it is what decides the choice. A snippet's body is
+    /// already on its row; an image or a PDF is not.
+    private var needsPreview: Bool {
+        guard let item = model.selectedResult?.item else { return false }
+        if item.isLocked { return false }
+        switch item.kind {
+        case .image, .document, .file: return true
+        case .text, .richText: return item.previewLine.count > 60
         }
     }
 
+    private var searchBody: some View {
+        HStack(spacing: 0) {
+            resultsList
+                .frame(maxWidth: needsPreview ? Self.width * Self.listFraction : .infinity)
+
+            if needsPreview, let selected = model.selectedResult {
+                Divider().overlay(Theme.hairline)
+                PanelPreview(
+                    snapshot: selected.item,
+                    bodyText: preview?.body,
+                    fileURL: preview?.fileURL,
+                    thumbnailURL: preview?.thumbnailURL
+                )
+                .frame(maxWidth: .infinity)
+                .id(selected.id)
+            }
+        }
+        .animation(reduceMotion ? nil : Theme.previewSplit, value: needsPreview)
+    }
+
+    @ViewBuilder
     private var resultsList: some View {
-        Group {
-            if model.results.isEmpty {
-                emptyState
-            } else {
-                ScrollViewReader { proxy in
-                    SnapshotSafeScrollView {
-                        SnapshotSafeLazyVStack(alignment: .leading, spacing: 1) {
-                            if model.query.isEmpty, model.results.contains(where: { $0.item.isPinned }) {
-                                sectionHeader("Pinned")
+        if model.results.isEmpty {
+            emptyState
+        } else {
+            ScrollViewReader { proxy in
+                SnapshotSafeScrollView {
+                    SnapshotSafeLazyVStack(alignment: .leading, spacing: 0) {
+                        ForEach(model.sections) { section in
+                            if let title = section.title {
+                                sectionHeader(title)
                             }
-                            ForEach(Array(model.results.enumerated()), id: \.element.id) { index, result in
-                                if model.query.isEmpty, index > 0,
-                                   model.results[index - 1].item.isPinned, !result.item.isPinned {
-                                    sectionHeader("Most used")
-                                }
+                            ForEach(section.rows) { row in
                                 PanelResultRow(
-                                    result: result,
-                                    isSelected: index == model.selectedIndex,
-                                    index: index,
-                                    thumbnailURL: model.thumbnailPath(for: result.id),
-                                    onActivate: { model.selectedIndex = index; model.use(result.id) },
-                                    onTogglePin: { model.togglePin(result.id) },
-                                    dragProvider: { model.dragProvider(for: result.id) }
-                                )
-                                .id(result.id)
-                                .opacity(settled ? 1 : 0)
-                                .animation(
-                                    (reduceMotion || isSnapshotting) ? nil
-                                        : Theme.gentle.delay(Double(min(index, 12)) * Theme.stagger),
-                                    value: appeared
+                                    result: row.result,
+                                    isSelected: row.index == model.selectedIndex,
+                                    index: row.index,
+                                    onActivate: {
+                                        model.selectedIndex = row.index
+                                        model.use(row.result.id)
+                                    },
+                                    onTogglePin: { model.togglePin(row.result.id) },
+                                    dragProvider: { model.dragProvider(for: row.result.id) }
                                 )
                             }
                         }
-                        .padding(.horizontal, Theme.Space.xs)
-                        .padding(.vertical, Theme.Space.xs)
                     }
-                    .onChange(of: model.selectedIndex) { _, new in
-                        guard model.results.indices.contains(new) else { return }
-                        withAnimation(reduceMotion ? nil : Theme.gentle) {
-                            proxy.scrollTo(model.results[new].id, anchor: .center)
-                        }
-                    }
+                    .padding(.horizontal, Theme.Space.xs)
+                    .padding(.vertical, Theme.Space.xs)
+                }
+                // Unanimated on purpose: the search behind this completes in half a
+                // millisecond, and an animated scroll would be the slowest thing left.
+                .onChange(of: model.selectedIndex) { _, new in
+                    guard model.results.indices.contains(new) else { return }
+                    proxy.scrollTo(model.results[new].id, anchor: .center)
                 }
             }
         }
@@ -201,19 +210,19 @@ public struct PanelView: View {
 
     private func sectionHeader(_ title: String) -> some View {
         Text(title.uppercased())
-            .font(.system(size: 9.5, weight: .semibold))
+            .font(Theme.Typography.section)
             .foregroundStyle(Theme.tertiaryText)
-            .tracking(0.6)
-            .padding(.horizontal, Theme.Space.s)
-            .padding(.top, Theme.Space.xs)
-            .padding(.bottom, 2)
+            .tracking(0.5)
+            .padding(.horizontal, Theme.Space.m)
+            .padding(.top, Theme.Space.m)
+            .padding(.bottom, Theme.Space.xs)
     }
 
     private var emptyState: some View {
         Group {
             if model.store.snapshots.isEmpty {
                 EmptyStateView(
-                    symbol: "sparkles",
+                    symbol: "tray",
                     title: "Nothing to summon yet",
                     message: "Copy something, then press \(model.settings.quickSaveHotKey.displayString) to save it — or drop a file straight onto this panel."
                 )
@@ -225,49 +234,37 @@ public struct PanelView: View {
                 )
             }
         }
-    }
-
-    private func previewPane(for result: SearchResult) -> some View {
-        PanelPreview(
-            snapshot: result.item,
-            bodyText: preview?.body,
-            fileURL: preview?.fileURL,
-            thumbnailURL: preview?.thumbnailURL
-        )
-        .frame(maxWidth: .infinity)
-        .id(result.id)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     // MARK: - Footer
 
     private var footer: some View {
-        HStack(spacing: Theme.Space.m) {
+        HStack(spacing: Theme.Space.l) {
             switch model.mode {
             case .search:
-                KeyHint("↩", pasteHintLabel)
-                KeyHint("⌘↩", "Copy")
-                if model.selectedResult?.item.kind.isBlobBacked == true {
-                    KeyHint("⌥↩", "Open")
-                }
-                KeyHint("⇧↩", "Paste plain")
+                Text("Summon")
+                    .font(Theme.Typography.meta)
+                    .foregroundStyle(Theme.tertiaryText)
                 Spacer()
                 if !model.accessibility.isTrusted && model.settings.autoPaste {
                     Label("Copies until Accessibility is allowed", systemImage: "info.circle")
-                        .font(.system(size: 10))
-                        .foregroundStyle(Theme.spark)
+                        .font(Theme.Typography.meta)
+                        .foregroundStyle(Theme.warning)
                         .labelStyle(.titleAndIcon)
                 }
-                KeyHint("⎋", "Close")
+                KeyHint("↩", pasteHintLabel)
+                KeyHint("⌘K", "Actions")
 
             case .fill:
                 KeyHint("⇥", "Next field")
-                KeyHint("↩", "Insert")
                 Spacer()
+                KeyHint("↩", "Insert")
                 KeyHint("⎋", "Back")
 
             case .unlock:
                 Label("Sensitive items stay encrypted until you unlock", systemImage: "lock.shield")
-                    .font(.system(size: 10.5))
+                    .font(Theme.Typography.meta)
                     .foregroundStyle(Theme.secondaryText)
                     .labelStyle(.titleAndIcon)
                 Spacer()
@@ -275,8 +272,7 @@ public struct PanelView: View {
             }
         }
         .padding(.horizontal, Theme.Space.m)
-        .padding(.vertical, Theme.Space.xs + 1)
-        .frame(height: 30)
+        .frame(height: 40)
     }
 
     private var pasteHintLabel: String {

@@ -44,6 +44,24 @@ public final class SearchEngine {
         return index.search(query, frontmostBundleID: frontmostBundleID, limit: limit)
     }
 
+    /// The panel's path, grouped for display.
+    public func sections(_ query: String,
+                         snapshots: [ItemSnapshot],
+                         revision: Int,
+                         frontmostBundleID: String? = nil,
+                         frontmostAppName: String? = nil,
+                         limit: Int = 60) -> [SearchSection] {
+        if revision != builtRevision {
+            index = SearchIndex(items: snapshots)
+            builtRevision = revision
+            buildCount &+= 1
+        }
+        return index.sections(query,
+                              frontmostBundleID: frontmostBundleID,
+                              frontmostAppName: frontmostAppName,
+                              limit: limit)
+    }
+
     /// The main window's path: an already-filtered subset. `token` identifies which
     /// subset, so switching folders rebuilds but typing within one does not.
     public func searchFiltered(_ query: String,

@@ -82,7 +82,7 @@ struct GeneralSettings: View {
                 Label("Summon will copy instead of pasting until Accessibility is allowed.",
                       systemImage: "info.circle")
                     .font(.system(size: 11))
-                    .foregroundStyle(Theme.spark)
+                    .foregroundStyle(Theme.secondaryText)
                 Spacer()
                 Button("Open Settings…") { Inserter.openAccessibilitySettings() }
                     .controlSize(.small)
@@ -160,7 +160,7 @@ struct PrivacySettings: View {
                     LabeledContent("Status") {
                         Label(model.vault.isUnlocked ? "Unlocked" : "Locked",
                               systemImage: model.vault.isUnlocked ? "lock.open.fill" : "lock.fill")
-                            .foregroundStyle(model.vault.isUnlocked ? Theme.success : Theme.spark)
+                            .foregroundStyle(model.vault.isUnlocked ? Theme.success : Theme.secondaryText)
                     }
 
                     if Vault.biometricStorageAvailable {
@@ -325,7 +325,7 @@ struct IntelligenceSettings: View {
 
     private func row(_ symbol: String, _ text: String) -> some View {
         HStack(alignment: .top, spacing: Theme.Space.xs) {
-            Image(systemName: symbol).foregroundStyle(Theme.accent).frame(width: 18)
+            Image(systemName: symbol).foregroundStyle(Theme.primaryText).frame(width: 18)
             Text(text).fixedSize(horizontal: false, vertical: true)
             Spacer()
         }
@@ -351,7 +351,7 @@ struct IntelligenceSettings: View {
         switch model.intelligence.status {
         case .ready: Theme.success
         case .disabled: Theme.secondaryText
-        case .unavailable: Theme.spark
+        case .unavailable: Theme.secondaryText
         }
     }
 }

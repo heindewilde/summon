@@ -31,7 +31,7 @@ public struct OnboardingView: View {
         }
         .frame(width: 620, height: 470)
         .background(
-            LinearGradient(colors: [Theme.accent.opacity(0.10), .clear],
+            LinearGradient(colors: [Theme.primaryText.opacity(0.10), .clear],
                            startPoint: .top, endPoint: .center)
         )
     }
@@ -104,7 +104,7 @@ public struct OnboardingView: View {
             VStack(alignment: .leading, spacing: Theme.Space.s) {
                 HStack(alignment: .top, spacing: Theme.Space.s) {
                     Image(systemName: "hand.tap")
-                        .foregroundStyle(Theme.accent)
+                        .foregroundStyle(Theme.primaryText)
                         .frame(width: 20)
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Let Summon paste for you")
@@ -131,7 +131,7 @@ public struct OnboardingView: View {
                 VStack(alignment: .leading, spacing: Theme.Space.xs) {
                     HStack(spacing: Theme.Space.s) {
                         Image(systemName: "lock.shield")
-                            .foregroundStyle(Theme.spark)
+                            .foregroundStyle(Theme.secondaryText)
                             .frame(width: 20)
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Set a PIN for sensitive items")
@@ -196,7 +196,7 @@ public struct OnboardingView: View {
                           systemImage: seeded ? "checkmark.circle.fill" : "sparkles")
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(Theme.accent)
+                .tint(Theme.primaryText)
                 .disabled(seeding || seeded)
 
                 if seeding { ProgressView().controlSize(.small) }
@@ -220,14 +220,14 @@ public struct OnboardingView: View {
     private var sparkMark: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(LinearGradient(colors: [Theme.accent, Theme.accentDeep],
+                .fill(LinearGradient(colors: [Theme.primaryText, Theme.primaryText],
                                      startPoint: .topLeading, endPoint: .bottomTrailing))
                 .frame(width: 84, height: 84)
             Image(systemName: "sparkles")
                 .font(.system(size: 36, weight: .medium))
                 .foregroundStyle(.white)
         }
-        .shadow(color: Theme.accent.opacity(0.35), radius: 18, y: 6)
+        .shadow(color: Theme.primaryText.opacity(0.35), radius: 18, y: 6)
     }
 
     private func stepTitle(_ title: String, _ subtitle: String) -> some View {
@@ -243,7 +243,7 @@ public struct OnboardingView: View {
     private func bullet(_ symbol: String, _ text: String) -> some View {
         HStack(alignment: .top, spacing: Theme.Space.s) {
             Image(systemName: symbol)
-                .foregroundStyle(Theme.accent)
+                .foregroundStyle(Theme.primaryText)
                 .frame(width: 18)
             Text(text)
                 .font(.system(size: 12))
@@ -270,9 +270,9 @@ public struct OnboardingView: View {
         HStack {
             ForEach(0...lastStep, id: \.self) { index in
                 Capsule()
-                    .fill(index == step ? Theme.accent : Theme.hairline)
+                    .fill(index == step ? Theme.primaryText : Theme.hairline)
                     .frame(width: index == step ? 18 : 6, height: 6)
-                    .animation(Theme.quick, value: step)
+                    .animation(Theme.panelIn, value: step)
             }
 
             Spacer()
@@ -285,7 +285,7 @@ public struct OnboardingView: View {
                 if step == lastStep { finish() } else { step += 1 }
             }
             .buttonStyle(.borderedProminent)
-            .tint(Theme.accent)
+            .tint(Theme.primaryText)
             .keyboardShortcut(.defaultAction)
         }
         .padding(Theme.Space.m)

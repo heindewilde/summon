@@ -41,7 +41,7 @@ public struct MainWindowView: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
-        .animation(Theme.quick, value: model.toast)
+        .animation(Theme.panelIn, value: model.toast)
         .alert("New Folder", isPresented: $model.pendingNewFolder) {
             TextField("Name", text: $newFolderName)
             Button("Create") {
@@ -149,7 +149,7 @@ public struct MainWindowView: View {
                     }
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(Theme.accent)
+                .tint(Theme.primaryText)
                 .keyboardShortcut(.defaultAction)
                 .disabled(newSnippetBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }

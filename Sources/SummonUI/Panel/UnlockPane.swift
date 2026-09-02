@@ -20,11 +20,11 @@ public struct UnlockPane: View {
 
             ZStack {
                 Circle()
-                    .fill(Theme.sparkWash)
+                    .fill(Theme.selection)
                     .frame(width: 58, height: 58)
                 Image(systemName: "lock.fill")
                     .font(.system(size: 22, weight: .medium))
-                    .foregroundStyle(Theme.spark)
+                    .foregroundStyle(Theme.secondaryText)
             }
 
             VStack(spacing: Theme.Space.xxs) {
@@ -58,7 +58,7 @@ public struct UnlockPane: View {
             HStack(spacing: Theme.Space.xs) {
                 Button("Unlock") { model.submitPIN() }
                     .buttonStyle(.borderedProminent)
-                    .tint(Theme.accent)
+                    .tint(Theme.primaryText)
                     .disabled(model.pinEntry.count < 4)
 
                 if model.vault.biometricsEnabled {

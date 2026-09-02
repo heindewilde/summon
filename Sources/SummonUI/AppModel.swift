@@ -3,6 +3,20 @@ import Observation
 import SwiftUI
 import SummonKit
 
+/// One row, with the position it occupies in the flattened result list.
+public struct DisplayRow: Identifiable, Equatable, Sendable {
+    public let index: Int
+    public let result: SearchResult
+    public var id: UUID { result.id }
+}
+
+/// A titled group of rows, ready to render.
+public struct DisplaySection: Identifiable, Equatable, Sendable {
+    public let title: String?
+    public let rows: [DisplayRow]
+    public var id: String { title ?? "" }
+}
+
 public enum SidebarSelection: Hashable, Sendable {
     case all
     case recents
@@ -75,6 +89,11 @@ public final class AppModel {
 
     public var query: String = "" { didSet { if query != oldValue { runSearch() } } }
     public private(set) var results: [SearchResult] = []
+    /// The same results, grouped for display and carrying each row's absolute
+    /// position. The position has to be part of observed state: computed from a side
+    /// table during `body`, SwiftUI does not know it changed and happily reuses a row
+    /// still showing the number it had under the previous query.
+    public private(set) var sections: [DisplaySection] = []
     public var selectedIndex: Int = 0
     public var mode: PanelMode = .search
     public var isPanelVisible: Bool = false
@@ -141,10 +160,23 @@ public final class AppModel {
     // MARK: - Search
 
     public func runSearch() {
-        results = searchEngine.search(query,
-                                      snapshots: store.snapshots,
-                                      revision: store.revision,
-                                      frontmostBundleID: focus.previousBundleID)
+        let ranked = searchEngine.sections(query,
+                                           snapshots: store.snapshots,
+                                           revision: store.revision,
+                                           frontmostBundleID: focus.previousBundleID,
+                                           frontmostAppName: focus.previousApp?.localizedName)
+        results = ranked.allResults
+
+        // Absolute positions assigned once, here, so ⌘-numbering runs across sections
+        // rather than restarting in each one.
+        var position = 0
+        sections = ranked.map { section in
+            let rows = section.results.map { result -> DisplayRow in
+                defer { position += 1 }
+                return DisplayRow(index: position, result: result)
+            }
+            return DisplaySection(title: section.title, rows: rows)
+        }
         if selectedIndex >= results.count { selectedIndex = max(0, results.count - 1) }
     }
 

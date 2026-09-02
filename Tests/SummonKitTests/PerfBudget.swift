@@ -215,3 +215,71 @@ struct ASCIIFastPathTests {
         #expect(prepared.lower.isEmpty)
     }
 }
+
+@Suite("Result sections")
+struct SearchSectionTests {
+
+    private func item(_ title: String, pinned: Bool = false,
+                      affinity: [String: Int] = [:], used: Int = 1) -> ItemSnapshot {
+        ItemSnapshot(title: title, kind: .text, isPinned: pinned,
+                     useCount: used, lastUsedAt: Date(), affinity: affinity)
+    }
+
+    @Test("A typed query returns one unlabelled section")
+    func typedQueryIsFlat() {
+        let index = SearchIndex(items: [item("Invoice"), item("Invoice two")])
+        let sections = index.sections("invoice")
+        #expect(sections.count == 1)
+        #expect(sections[0].title == nil)
+        #expect(sections[0].results.count == 2)
+    }
+
+    @Test("The app section appears only once there is real history there")
+    func appSectionNeedsHistory() {
+        let mail = "com.apple.mail"
+        let barely = SearchIndex(items: [item("Reply", affinity: [mail: 2]), item("Other")])
+        #expect(barely.sections("", frontmostBundleID: mail, frontmostAppName: "Mail")
+                    .contains { $0.title == "In Mail" } == false)
+
+        let habit = SearchIndex(items: [item("Reply", affinity: [mail: 3]), item("Other")])
+        let sections = habit.sections("", frontmostBundleID: mail, frontmostAppName: "Mail")
+        #expect(sections.first?.title == "In Mail")
+        #expect(sections.first?.results.first?.item.title == "Reply")
+    }
+
+    @Test("Pinned is its own section, and nothing appears in two sections")
+    func noDuplicates() {
+        let mail = "com.apple.mail"
+        let index = SearchIndex(items: [
+            item("Signature", pinned: true, affinity: [mail: 9]),
+            item("VAT number", pinned: true),
+            item("Headshot"),
+        ])
+        let sections = index.sections("", frontmostBundleID: mail, frontmostAppName: "Mail")
+        let titles = sections.compactMap(\.title)
+        #expect(titles == ["In Mail", "Pinned", "Recent"])
+
+        let ids = sections.allResults.map(\.id)
+        #expect(Set(ids).count == ids.count, "an item must not appear in two sections")
+    }
+
+    @Test("Flattening preserves display order, so ⌘N matches the badge")
+    func flatteningOrder() {
+        let mail = "com.apple.mail"
+        let index = SearchIndex(items: [
+            item("Reply", affinity: [mail: 5]),
+            item("VAT number", pinned: true),
+            item("Headshot"),
+        ])
+        let sections = index.sections("", frontmostBundleID: mail, frontmostAppName: "Mail")
+        #expect(sections.allResults.map(\.item.title) == ["Reply", "VAT number", "Headshot"])
+    }
+
+    @Test("With no affinity and nothing pinned there is a single unlabelled section")
+    func plainLibrary() {
+        let index = SearchIndex(items: [item("One"), item("Two")])
+        let sections = index.sections("")
+        #expect(sections.count == 1)
+        #expect(sections[0].title == nil)
+    }
+}

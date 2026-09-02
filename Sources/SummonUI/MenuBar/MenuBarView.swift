@@ -61,7 +61,7 @@ public struct MenuBarView: View {
     private var header: some View {
         HStack(spacing: Theme.Space.xs) {
             Image(systemName: "sparkles")
-                .foregroundStyle(Theme.accent)
+                .foregroundStyle(Theme.primaryText)
             Text("Summon")
                 .font(.system(size: 13, weight: .semibold))
 
@@ -72,7 +72,7 @@ public struct MenuBarView: View {
                     model.toggleLock()
                 } label: {
                     Image(systemName: model.vault.isUnlocked ? "lock.open.fill" : "lock.fill")
-                        .foregroundStyle(model.vault.isUnlocked ? Theme.success : Theme.spark)
+                        .foregroundStyle(model.vault.isUnlocked ? Theme.success : Theme.secondaryText)
                 }
                 .buttonStyle(.plain)
                 .help(model.vault.isUnlocked ? "Lock sensitive items" : "Unlock sensitive items")
@@ -193,7 +193,7 @@ struct MenuBarRow: View {
                 if item.isLocked {
                     Image(systemName: "lock.fill")
                         .font(.system(size: 9))
-                        .foregroundStyle(Theme.spark)
+                        .foregroundStyle(Theme.secondaryText)
                 }
             }
             .padding(.horizontal, Theme.Space.s)
@@ -223,7 +223,7 @@ struct ClipboardRow: View {
             if hovering {
                 Button(action: save) {
                     Image(systemName: "plus.circle.fill")
-                        .foregroundStyle(Theme.accent)
+                        .foregroundStyle(Theme.primaryText)
                 }
                 .buttonStyle(.plain)
                 .help("Save to library")

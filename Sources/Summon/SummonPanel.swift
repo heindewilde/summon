@@ -56,6 +56,17 @@ final class PanelController: NSObject, NSWindowDelegate {
         panel.contentView?.layoutSubtreeIfNeeded()
     }
 
+    /// Puts the panel on screen for a screenshot without activating the app or taking
+    /// key focus, so a capture cannot interrupt what someone is doing — and a stray
+    /// keystroke cannot reach the panel and paste into their frontmost app.
+    /// `screencapture -l` does not require the window to be key.
+    func showForCapture() {
+        let panel = panel ?? makePanel()
+        self.panel = panel
+        position(panel)
+        panel.orderFrontRegardless()
+    }
+
     func show() {
         let panel = panel ?? makePanel()
         self.panel = panel

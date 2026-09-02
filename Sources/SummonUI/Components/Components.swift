@@ -29,12 +29,18 @@ public struct KindBadge: View {
 
 /// Renders a title with the characters that matched the query picked out, so it is
 /// obvious *why* a result is in the list.
+///
+/// The emphasis is monochrome: matched runs go bolder and up to the primary tier
+/// while the rest sits at secondary. Raycast highlights nothing at all, but on a
+/// fuzzy query like "invtm" that leaves the only cue for why a surprising row is in
+/// the list — and a row you cannot explain reads as a bug. Weight and tier carry it
+/// without reintroducing a hue.
 public struct HighlightedTitle: View {
     public let text: String
     public let positions: [Int]
-    public var font: Font = .system(size: 13, weight: .medium)
+    public var font: Font = Theme.Typography.title
 
-    public init(text: String, positions: [Int], font: Font = .system(size: 13, weight: .medium)) {
+    public init(text: String, positions: [Int], font: Font = Theme.Typography.title) {
         self.text = text
         self.positions = positions
         self.font = font
@@ -45,11 +51,19 @@ public struct HighlightedTitle: View {
             .font(font)
             .lineLimit(1)
             .truncationMode(.tail)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     private var attributed: AttributedString {
+        // Nothing matched — an empty query, or a body-only hit — so the title is not
+        // being explained and reads at full strength.
+        guard !positions.isEmpty else {
+            var plain = AttributedString(text)
+            plain.foregroundColor = Theme.primaryText
+            return plain
+        }
+
         let characters = Array(text)
-        guard !positions.isEmpty else { return AttributedString(text) }
         let matched = Set(positions)
 
         // Built run by run: AttributedString indices are not integer offsets, and
@@ -61,10 +75,8 @@ public struct HighlightedTitle: View {
         func flush() {
             guard !buffer.isEmpty else { return }
             var run = AttributedString(buffer)
-            if bufferMatched {
-                run.foregroundColor = Theme.accent
-                run.font = .system(size: 13, weight: .bold)
-            }
+            run.foregroundColor = bufferMatched ? Theme.primaryText : Theme.secondaryText
+            run.font = bufferMatched ? Theme.Typography.titleMatch : Theme.Typography.title
             result.append(run)
             buffer = ""
         }
@@ -96,7 +108,7 @@ public struct TagChip: View {
             .foregroundStyle(isActive ? Color.white : Theme.secondaryText)
             .padding(.horizontal, Theme.Space.xs)
             .padding(.vertical, 2)
-            .background(isActive ? Theme.accent : Theme.hairline, in: .capsule)
+            .background(isActive ? Theme.primaryText : Theme.hairline, in: .capsule)
     }
 }
 
@@ -158,9 +170,9 @@ public struct ToastView: View {
 
     private var tint: Color {
         switch toast.tone {
-        case .neutral: Theme.accent
+        case .neutral: Theme.primaryText
         case .success: Theme.success
-        case .warning: Theme.spark
+        case .warning: Theme.secondaryText
         case .danger: Theme.danger
         }
     }
@@ -185,7 +197,7 @@ public struct EmptyStateView: View {
         VStack(spacing: Theme.Space.s) {
             Image(systemName: symbol)
                 .font(.system(size: 26, weight: .light))
-                .foregroundStyle(Theme.accent.opacity(0.7))
+                .foregroundStyle(Theme.primaryText.opacity(0.7))
                 .padding(.bottom, 2)
             Text(title)
                 .font(.system(size: 14, weight: .semibold))
@@ -197,7 +209,7 @@ public struct EmptyStateView: View {
             if let action {
                 Button(action.label, action: action.run)
                     .buttonStyle(.borderedProminent)
-                    .tint(Theme.accent)
+                    .tint(Theme.primaryText)
                     .padding(.top, Theme.Space.xs)
             }
         }
@@ -261,10 +273,10 @@ public struct LockPill: View {
             Image(systemName: "lock.fill").font(.system(size: 8.5, weight: .bold))
             Text(text).font(.system(size: 10, weight: .medium))
         }
-        .foregroundStyle(Theme.spark)
+        .foregroundStyle(Theme.secondaryText)
         .padding(.horizontal, 5)
         .padding(.vertical, 2)
-        .background(Theme.sparkWash, in: .capsule)
+        .background(Theme.selection, in: .capsule)
     }
 }
 
@@ -274,10 +286,10 @@ public struct PanelBackground: View {
     public var body: some View {
         ZStack {
             VisualEffectBackground(material: .hudWindow, blending: .behindWindow)
-            LinearGradient(
-                colors: [Theme.accent.opacity(0.10), .clear],
-                startPoint: .topLeading, endPoint: .bottom
-            )
+            // A flat, near-neutral ground over the vibrancy. The gradient that used to
+            // sit here was pure decoration: it said nothing about the content and made
+            // the top of the list a different colour from the bottom.
+            Theme.chrome
         }
     }
 }
@@ -353,7 +365,7 @@ public struct PlaceholderHighlightedText: View {
         func flushToken() {
             guard !token.isEmpty else { return }
             var run = AttributedString(token)
-            run.foregroundColor = Theme.accent
+            run.foregroundColor = Theme.primaryText
             run.font = .system(size: size, weight: .medium)
             result.append(run)
             token = ""

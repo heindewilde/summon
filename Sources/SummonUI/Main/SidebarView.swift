@@ -68,7 +68,7 @@ public struct SidebarView: View {
     }
 
     private func row(_ selection: SidebarSelection, _ title: String, _ symbol: String,
-                     count: Int, tint: Color = Theme.accent) -> some View {
+                     count: Int, tint: Color = Theme.primaryText) -> some View {
         Label {
             HStack {
                 Text(title)
@@ -95,7 +95,7 @@ public struct SidebarView: View {
             } label: {
                 HStack(spacing: Theme.Space.xs) {
                     Image(systemName: model.vault.isUnlocked ? "lock.open.fill" : "lock.fill")
-                        .foregroundStyle(model.vault.isUnlocked ? Theme.success : Theme.spark)
+                        .foregroundStyle(model.vault.isUnlocked ? Theme.success : Theme.secondaryText)
                     Text(model.vault.isUnlocked ? "Sensitive items unlocked" : "Sensitive items locked")
                         .font(.system(size: 11))
                     Spacer()
@@ -155,7 +155,7 @@ struct FolderRow: View {
                 if folder.isEffectivelySensitive {
                     Image(systemName: "lock.fill")
                         .font(.system(size: 9))
-                        .foregroundStyle(Theme.spark)
+                        .foregroundStyle(Theme.secondaryText)
                 }
                 let count = folder.allItems().count
                 if count > 0 {
@@ -170,7 +170,7 @@ struct FolderRow: View {
                 .foregroundStyle(Theme.folderColor(folder.colorName))
         }
         .tag(SidebarSelection.folder(folder.id))
-        .background(isTargeted ? Theme.accentWash : .clear)
+        .background(isTargeted ? Theme.selection : .clear)
         .onDrop(of: [.fileURL], isTargeted: $isTargeted) { providers in
             Task {
                 let urls = await FolderRow.urls(from: providers)

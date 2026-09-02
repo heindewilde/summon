@@ -18,6 +18,10 @@ enum LiveCapture {
 
     static func run(mode: String, controller: PanelController) async {
         let model = Services.model
+        // Never steal focus for a screenshot. Someone is usually working while these
+        // run, and an activating window both interrupts them and puts their next
+        // keystroke somewhere neither of us intended.
+        NSApp.setActivationPolicy(.accessory)
 
         if ProcessInfo.processInfo.environment["SUMMON_APPEARANCE"] == "dark" {
             NSApp.appearance = NSAppearance(named: .darkAqua)
@@ -31,7 +35,27 @@ enum LiveCapture {
         let window: NSWindow?
         switch mode {
         case "panel":
-            model.summon()
+            // SUMMON_LIVE_QUERY reviews the typed state — match highlighting and the
+            // adaptive preview — not just the empty panel. SUMMON_LIVE_SELECT picks a
+            // row, so an image or PDF selection can be reviewed with its preview open.
+            //
+            // The query is set *before* the panel is shown, deliberately. Assigning it
+            // afterwards writes into an NSTextField that already owns an active field
+            // editor, and the two fight: "stdtrm" arrived in the field as "stdty".
+            // That is an artefact of injecting text this way, not something a person
+            // typing can hit — `updateNSView` guards on `field.stringValue != text` —
+            // but it produced a screenshot convincing enough to send me looking for a
+            // bug in the panel that was never there.
+            let environment = ProcessInfo.processInfo.environment
+            model.focus.capture()
+            model.mode = .search
+            model.query = environment["SUMMON_LIVE_QUERY"] ?? ""
+            model.runSearch()
+            if let row = environment["SUMMON_LIVE_SELECT"], let index = Int(row) {
+                model.selectedIndex = min(index, max(0, model.results.count - 1))
+            }
+            model.isPanelVisible = true
+            controller.showForCapture()
             try? await Task.sleep(for: .milliseconds(600))
             window = controller.debugPanel
 

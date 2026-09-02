@@ -75,7 +75,7 @@ public struct ItemDetailView: View {
                 model.togglePin(itemID)
             } label: {
                 Image(systemName: snapshot?.isPinned == true ? "pin.fill" : "pin")
-                    .foregroundStyle(snapshot?.isPinned == true ? Theme.spark : Theme.secondaryText)
+                    .foregroundStyle(snapshot?.isPinned == true ? Theme.secondaryText : Theme.secondaryText)
             }
             .buttonStyle(.plain)
             .help(snapshot?.isPinned == true ? "Unpin" : "Pin to the top of the panel")
@@ -84,7 +84,7 @@ public struct ItemDetailView: View {
 
     private var lockedNotice: some View {
         HStack(spacing: Theme.Space.s) {
-            Image(systemName: "lock.fill").foregroundStyle(Theme.spark)
+            Image(systemName: "lock.fill").foregroundStyle(Theme.secondaryText)
             VStack(alignment: .leading, spacing: 1) {
                 Text("Contents are encrypted").font(.system(size: 12, weight: .medium))
                 Text("Unlock to view or edit this item.")
@@ -93,7 +93,7 @@ public struct ItemDetailView: View {
             Spacer()
             Button("Unlock") { model.summonForUnlock() }
                 .buttonStyle(.borderedProminent)
-                .tint(Theme.accent)
+                .tint(Theme.primaryText)
         }
         .padding(Theme.Space.s)
         .cardBackground()
@@ -118,7 +118,7 @@ public struct ItemDetailView: View {
                     if snapshot.hasPlaceholders {
                         Label("Has fill-in fields", systemImage: "square.dashed.inset.filled")
                             .font(.system(size: 10))
-                            .foregroundStyle(Theme.accent)
+                            .foregroundStyle(Theme.primaryText)
                             .labelStyle(.titleAndIcon)
                     }
                 }
@@ -203,7 +203,7 @@ public struct ItemDetailView: View {
                 }
             }
             .toggleStyle(.switch)
-            .tint(Theme.accent)
+            .tint(Theme.primaryText)
         }
     }
 

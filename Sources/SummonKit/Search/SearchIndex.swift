@@ -4,6 +4,26 @@ public enum MatchField: String, Sendable, Equatable {
     case title, tag, folder, summary, body, none
 }
 
+/// A titled group of results. `title == nil` is the single unlabelled group a typed
+/// query returns, so the view has exactly one shape to render.
+public struct SearchSection: Sendable, Identifiable, Equatable {
+    public var title: String?
+    public var results: [SearchResult]
+
+    public var id: String { title ?? "" }
+
+    public init(title: String?, results: [SearchResult]) {
+        self.title = title
+        self.results = results
+    }
+}
+
+public extension Array where Element == SearchSection {
+    /// Flattened in display order. `⌘1`–`⌘9` number across sections, not within them,
+    /// so a badge always matches the row's absolute position.
+    var allResults: [SearchResult] { flatMap(\.results) }
+}
+
 public struct SearchResult: Sendable, Identifiable, Equatable {
     public var item: ItemSnapshot
     public var score: Double
@@ -104,6 +124,51 @@ public struct SearchIndex: Sendable {
     public func search(_ raw: String, frontmostBundleID: String? = nil, now: Date = Date(), limit: Int = 60) -> [SearchResult] {
         search(query: Query.parse(raw), frontmostBundleID: frontmostBundleID, now: now, limit: limit)
     }
+
+    /// The panel's entry point: the same ranking, grouped for display.
+    ///
+    /// With a query typed, one unlabelled section. With an empty query, up to three —
+    /// what you reach for in the app you just left, then pinned, then recent. The
+    /// app-led section appears only once there is real affinity history for that app,
+    /// so it is never an arbitrary-looking group on day one.
+    public func sections(_ raw: String,
+                         frontmostBundleID: String? = nil,
+                         frontmostAppName: String? = nil,
+                         now: Date = Date(),
+                         limit: Int = 60) -> [SearchSection] {
+        let query = Query.parse(raw)
+        let ranked = search(query: query, frontmostBundleID: frontmostBundleID, now: now, limit: limit)
+
+        guard query.text.isEmpty else { return [SearchSection(title: nil, results: ranked)] }
+
+        var remaining = ranked
+        var sections: [SearchSection] = []
+
+        if let bundleID = frontmostBundleID {
+            let used = remaining.filter { ($0.item.affinity[bundleID] ?? 0) >= SearchIndex.affinityThreshold }
+            if !used.isEmpty {
+                let title = frontmostAppName.map { "In \($0)" } ?? "Used here"
+                sections.append(SearchSection(title: title, results: Array(used.prefix(4))))
+                let taken = Set(used.prefix(4).map(\.id))
+                remaining.removeAll { taken.contains($0.id) }
+            }
+        }
+
+        let pinned = remaining.filter { $0.item.isPinned }
+        if !pinned.isEmpty {
+            sections.append(SearchSection(title: "Pinned", results: pinned))
+            remaining.removeAll { $0.item.isPinned }
+        }
+
+        if !remaining.isEmpty {
+            sections.append(SearchSection(title: sections.isEmpty ? nil : "Recent", results: remaining))
+        }
+        return sections
+    }
+
+    /// How many recorded uses in one app before that app gets its own section. Two is
+    /// a coincidence; three is a habit.
+    static let affinityThreshold = 3
 
     public func search(query: Query, frontmostBundleID: String? = nil, now: Date = Date(), limit: Int = 60) -> [SearchResult] {
         // No text typed: this is the "before you type anything" list — pinned first,

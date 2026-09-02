@@ -50,7 +50,7 @@ public struct PanelPreview: View {
         VStack(spacing: Theme.Space.s) {
             Image(systemName: "lock.fill")
                 .font(.system(size: 22, weight: .light))
-                .foregroundStyle(Theme.spark)
+                .foregroundStyle(Theme.secondaryText)
             Text("Contents are locked")
                 .font(.system(size: 12.5, weight: .medium))
             Text("Press ↩ to unlock with Touch ID or your PIN.")

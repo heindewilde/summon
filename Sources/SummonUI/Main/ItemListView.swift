@@ -150,15 +150,15 @@ struct ItemRow: View {
     private var badges: some View {
         if item.isPinned {
             Image(systemName: "pin.fill").font(.system(size: 8.5))
-                .foregroundStyle(Theme.spark)
+                .foregroundStyle(Theme.secondaryText)
         }
         if item.isSensitive {
             Image(systemName: "lock.fill").font(.system(size: 8.5))
-                .foregroundStyle(Theme.spark)
+                .foregroundStyle(Theme.secondaryText)
         }
         if item.hasPlaceholders {
             Image(systemName: "square.dashed.inset.filled").font(.system(size: 9))
-                .foregroundStyle(Theme.accent)
+                .foregroundStyle(Theme.primaryText)
         }
     }
 
@@ -207,16 +207,16 @@ struct ItemCard: View {
                     .lineLimit(1)
                 if item.isPinned {
                     Image(systemName: "pin.fill").font(.system(size: 8))
-                        .foregroundStyle(Theme.spark)
+                        .foregroundStyle(Theme.secondaryText)
                 }
             }
         }
         .padding(Theme.Space.xs)
-        .background(isSelected ? Theme.accentWash : Theme.surface,
+        .background(isSelected ? Theme.selection : Theme.surface,
                     in: .rect(cornerRadius: Theme.Radius.medium))
         .overlay(
             RoundedRectangle(cornerRadius: Theme.Radius.medium)
-                .strokeBorder(isSelected ? Theme.accent.opacity(0.6) : Theme.hairline, lineWidth: 1)
+                .strokeBorder(isSelected ? Theme.primaryText.opacity(0.6) : Theme.hairline, lineWidth: 1)
         )
         .contextMenu { ItemContextMenu(model: model, item: item) }
         .onDrag { model.dragProvider(for: item.id) ?? NSItemProvider() }
@@ -274,7 +274,7 @@ struct ClipboardListView: View {
                             Spacer()
                             Button("Keep") { model.saveClipboardEntry(entry) }
                                 .buttonStyle(.borderless)
-                                .tint(Theme.accent)
+                                .tint(Theme.primaryText)
                         }
                         .padding(.vertical, 2)
                         .contextMenu {

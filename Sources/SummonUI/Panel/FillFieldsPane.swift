@@ -37,7 +37,7 @@ public struct FillFieldsPane: View {
             VStack(alignment: .leading, spacing: Theme.Space.m) {
                 HStack(spacing: Theme.Space.xs) {
                     Image(systemName: "square.dashed.inset.filled")
-                        .foregroundStyle(Theme.accent)
+                        .foregroundStyle(Theme.primaryText)
                     Text(snapshot?.title ?? "Fill in")
                         .font(.system(size: 13, weight: .semibold))
                 }
@@ -67,7 +67,7 @@ public struct FillFieldsPane: View {
                 HStack(spacing: Theme.Space.xs) {
                     Button("Insert", action: insert)
                         .buttonStyle(.borderedProminent)
-                        .tint(Theme.accent)
+                        .tint(Theme.primaryText)
                         .keyboardShortcut(.defaultAction)
                     Button("Back") { model.mode = .search }
                         .buttonStyle(.bordered)

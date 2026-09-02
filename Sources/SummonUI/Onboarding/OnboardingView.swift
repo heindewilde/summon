@@ -31,8 +31,7 @@ public struct OnboardingView: View {
         }
         .frame(width: 620, height: 470)
         .background(
-            LinearGradient(colors: [Theme.primaryText.opacity(0.10), .clear],
-                           startPoint: .top, endPoint: .center)
+            Theme.chrome
         )
     }
 
@@ -219,15 +218,20 @@ public struct OnboardingView: View {
 
     private var sparkMark: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(LinearGradient(colors: [Theme.primaryText, Theme.primaryText],
-                                     startPoint: .topLeading, endPoint: .bottomTrailing))
+            // The one place the app used to shout. It is the first thing anyone sees,
+            // and it should look like the app they are about to use.
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(Theme.surface)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .strokeBorder(Theme.hairline, lineWidth: 1)
+                )
                 .frame(width: 84, height: 84)
             Image(systemName: "sparkles")
                 .font(.system(size: 36, weight: .medium))
-                .foregroundStyle(.white)
+                .foregroundStyle(Theme.primaryText)
         }
-        .shadow(color: Theme.primaryText.opacity(0.35), radius: 18, y: 6)
+
     }
 
     private func stepTitle(_ title: String, _ subtitle: String) -> some View {

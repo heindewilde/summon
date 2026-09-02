@@ -52,14 +52,26 @@ public struct ItemListView: View {
 
     private var grid: some View {
         ScrollView {
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: Theme.Space.s)],
-                      spacing: Theme.Space.s) {
-                ForEach(items) { item in
-                    ItemCard(model: model, item: item, isSelected: model.mainSelection == item.id)
-                        .onTapGesture { model.mainSelection = item.id }
+            GeometryReader { geometry in
+                let columns = max(1, Int(geometry.size.width / (150 + Theme.Space.s)))
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: Theme.Space.s)],
+                          spacing: Theme.Space.s) {
+                    ForEach(items) { item in
+                        ItemCard(model: model, item: item, isSelected: model.mainSelection == item.id)
+                            .onTapGesture { model.mainSelection = item.id }
+                    }
                 }
+                .padding(Theme.Space.m)
+                // The grid was mouse-only: ItemCard had a tap gesture and nothing
+                // else, so a whole view mode could not be reached from the keyboard.
+                // Up and down move a full row, which is what "down" means in a grid.
+                .focusable()
+                .focusEffectDisabled()
+                .onKeyPress(.upArrow) { model.moveMainSelection(by: -columns); return .handled }
+                .onKeyPress(.downArrow) { model.moveMainSelection(by: columns); return .handled }
+                .onKeyPress(.leftArrow) { model.moveMainSelection(by: -1); return .handled }
+                .onKeyPress(.rightArrow) { model.moveMainSelection(by: 1); return .handled }
             }
-            .padding(Theme.Space.m)
         }
     }
 
@@ -105,69 +117,11 @@ struct ItemRow: View {
     let item: ItemSnapshot
 
     var body: some View {
-        HStack(spacing: Theme.Space.s) {
-            ThumbnailView(itemID: item.id, kind: item.kind, isLocked: item.isLocked,
-                          thumbnailURL: model.thumbnailURL(for: item.id), size: 34)
-
-            // Two lines, with only the badges and the timestamp fixed-width. The
-            // column can get narrow, and a title that truncates is fine — a title
-            // that disappears is not.
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: Theme.Space.xxs) {
-                    Text(item.title)
-                        .font(.system(size: 13, weight: .medium))
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                        .layoutPriority(1)
-                    badges
-                    Spacer(minLength: 0)
-                }
-
-                HStack(spacing: Theme.Space.xxs) {
-                    Text(item.previewLine)
-                        .font(.system(size: 11))
-                        .foregroundStyle(Theme.secondaryText)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                        .layoutPriority(1)
-                    Spacer(minLength: Theme.Space.xxs)
-                    Text(item.updatedAt.formatted(.relative(presentation: .numeric)))
-                        .font(.system(size: 10))
-                        .foregroundStyle(Theme.tertiaryText)
-                        .lineLimit(1)
-                        .fixedSize()
-                }
-            }
-        }
-        .padding(.vertical, 3)
-        .contextMenu { ItemContextMenu(model: model, item: item) }
-        .onDrag { model.dragProvider(for: item.id) ?? NSItemProvider() }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(accessibilityLabel)
-    }
-
-    @ViewBuilder
-    private var badges: some View {
-        if item.isPinned {
-            Image(systemName: "pin.fill").font(.system(size: 8.5))
-                .foregroundStyle(Theme.secondaryText)
-        }
-        if item.isSensitive {
-            Image(systemName: "lock.fill").font(.system(size: 8.5))
-                .foregroundStyle(Theme.secondaryText)
-        }
-        if item.hasPlaceholders {
-            Image(systemName: "square.dashed.inset.filled").font(.system(size: 9))
-                .foregroundStyle(Theme.primaryText)
-        }
-    }
-
-    private var accessibilityLabel: String {
-        var parts = [item.title, item.kind.displayName]
-        if item.isPinned { parts.append("pinned") }
-        if item.isSensitive { parts.append("sensitive") }
-        if !item.tagNames.isEmpty { parts.append("tagged \(item.tagNames.joined(separator: ", "))") }
-        return parts.joined(separator: ", ")
+        // The same 40pt row the panel and the menu bar draw. Three surfaces had
+        // grown three heights and three type scales; now there is one component.
+        LibraryRow(item: item, isSelected: model.mainSelection == item.id)
+            .contextMenu { ItemContextMenu(model: model, item: item) }
+            .onDrag { model.dragProvider(for: item.id) ?? NSItemProvider() }
     }
 }
 

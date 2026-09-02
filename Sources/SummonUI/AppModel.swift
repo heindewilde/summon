@@ -271,6 +271,61 @@ public final class AppModel {
         if selectedIndex >= results.count { selectedIndex = max(0, results.count - 1) }
     }
 
+    // MARK: - Main window keyboard
+    //
+    // The grid was mouse-only: ItemCard had a tap gesture and nothing else, so an
+    // entire view mode was unreachable from the keyboard.
+
+    /// Moves the library selection by `delta` positions through the visible items.
+    public func moveMainSelection(by delta: Int) {
+        let items = visibleItems
+        guard !items.isEmpty else { return }
+        guard let current = items.firstIndex(where: { $0.id == mainSelection }) else {
+            mainSelection = items.first?.id
+            return
+        }
+        let next = min(max(0, current + delta), items.count - 1)
+        mainSelection = items[next].id
+    }
+
+    /// The items the library is currently showing, in display order.
+    public var visibleItems: [ItemSnapshot] { itemsForSidebar() }
+
+    public func toggleActions() {
+        if case .none = overlay { openActionMenu() } else { closeOverlay() }
+    }
+
+    public var mainSelectionIsPinned: Bool {
+        mainSelection.flatMap { id in store.snapshots.first { $0.id == id }?.isPinned } ?? false
+    }
+
+    public func requestDeleteSelected() {
+        guard actionTarget != nil else { return }
+        overlay = .confirmDelete
+    }
+
+    /// Routes a chord in the library window. Returns false to let the window have it.
+    @discardableResult
+    public func routeMainWindow(_ chord: KeyChord, columns: Int) -> Bool {
+        switch (chord.key, chord.modifiers) {
+        case (.character("k"), .command):
+            guard mainSelection != nil else { return false }
+            if case .none = overlay { openActionMenu() } else { closeOverlay() }
+            return true
+        case (.down, []): moveMainSelection(by: useGridLayout ? columns : 1); return true
+        case (.up, []): moveMainSelection(by: useGridLayout ? -columns : -1); return true
+        case (.right, []) where useGridLayout: moveMainSelection(by: 1); return true
+        case (.left, []) where useGridLayout: moveMainSelection(by: -1); return true
+        case (.character("p"), .command):
+            guard let id = mainSelection else { return false }
+            togglePin(id); return true
+        case (.delete, .command):
+            guard mainSelection != nil else { return false }
+            overlay = .confirmDelete; return true
+        default: return false
+        }
+    }
+
     /// Ranking changed, so the old position means nothing: go back to the best match.
     /// Without this, refining a query while sitting on row 5 leaves you on row 5 of a
     /// different list — and the next Return pastes something you never looked at.
@@ -380,7 +435,7 @@ public final class AppModel {
     // MARK: - ⌘K overlay
 
     public func openActionMenu() {
-        guard selectedResult != nil else { return }
+        guard actionTarget != nil else { return }
         overlay = .actions
         actionQuery = ""
         actionSelectedIndex = 0
@@ -395,8 +450,15 @@ public final class AppModel {
         queryFocusToken += 1
     }
 
+    /// The item the ⌘K menu is acting on: the panel's selection when the panel is up,
+    /// the library's otherwise.
+    public var actionTarget: ItemSnapshot? {
+        if isPanelVisible { return selectedResult?.item }
+        return mainSelection.flatMap { id in store.snapshots.first { $0.id == id } }
+    }
+
     private func filterActions() {
-        guard let item = selectedResult?.item else { actionResults = []; return }
+        guard let item = actionTarget else { actionResults = []; return }
         let all = PanelKeyMap.actions(isBlobBacked: item.kind.isBlobBacked, isLocked: item.isLocked)
         let needle = actionQuery.lowercased()
         actionResults = needle.isEmpty ? all : all.filter { $0.title.lowercased().contains(needle) }
@@ -426,7 +488,7 @@ public final class AppModel {
             guard folderChoices.indices.contains(folderChoiceIndex) else { return }
             commitMove(to: folderChoices[folderChoiceIndex].id)
         case .confirmDelete:
-            guard let id = selectedResult?.id else { return }
+            guard let id = actionTarget?.id else { return }
             closeOverlay()
             deleteItem(id)
         case .none:
@@ -445,8 +507,8 @@ public final class AppModel {
     }
 
     public func run(_ action: PanelActionID) {
-        guard let result = selectedResult else { return }
-        let id = result.id
+        guard let target = actionTarget else { return }
+        let id = target.id
         switch action {
         case .paste: closeOverlay(); use(id, style: .paste)
         case .pastePlain: closeOverlay(); use(id, style: .plainPaste)
@@ -456,11 +518,11 @@ public final class AppModel {
         case .togglePin: closeOverlay(); togglePin(id)
         case .toggleSensitive:
             closeOverlay()
-            setItemSensitive(id, !result.item.isSensitive)
+            setItemSensitive(id, !target.isSensitive)
         case .delete:
             overlay = .confirmDelete
         case .rename:
-            promptText = result.item.title
+            promptText = target.title
             overlay = .prompt(.rename)
             overlayFocusToken += 1
         case .addTag:

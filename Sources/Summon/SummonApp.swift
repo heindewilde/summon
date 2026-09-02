@@ -93,8 +93,20 @@ struct SummonCommands: Commands {
             Button("Import Files…") { model.presentImportPanel() }
                 .keyboardShortcut("o")
             Divider()
-            Button("Summon") { model.summon() }
+            // ⌘K means Actions in every surface. It used to summon the panel from
+            // here, which both overloaded the key and duplicated ⌥Space — already
+            // global, already reachable from anywhere.
+            Button("Actions…") { model.toggleActions() }
                 .keyboardShortcut("k")
+                .disabled(model.actionTarget == nil)
+            Button(model.mainSelectionIsPinned ? "Unpin" : "Pin") {
+                if let id = model.mainSelection { model.togglePin(id) }
+            }
+            .keyboardShortcut("p")
+            .disabled(model.mainSelection == nil)
+            Button("Delete") { model.requestDeleteSelected() }
+                .keyboardShortcut(.delete, modifiers: .command)
+                .disabled(model.mainSelection == nil)
             Button(model.vault.isUnlocked ? "Lock Sensitive Items" : "Unlock Sensitive Items") {
                 model.toggleLock()
             }

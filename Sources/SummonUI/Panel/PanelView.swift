@@ -54,6 +54,16 @@ public struct PanelView: View {
             RoundedRectangle(cornerRadius: Theme.Radius.panel, style: .continuous)
                 .strokeBorder(Theme.hairline, lineWidth: 1)
         )
+        .overlay {
+            // A scrim while ⌘K is open, so the menu reads as the thing in front and
+            // the eye is not asked to parse two lists at once.
+            if model.overlay != .none {
+                Rectangle()
+                    .fill(.black.opacity(0.22))
+                    .allowsHitTesting(false)
+                    .transition(.opacity)
+            }
+        }
         .overlay(alignment: .bottomTrailing) {
             if model.overlay != .none {
                 ActionMenu(model: model)

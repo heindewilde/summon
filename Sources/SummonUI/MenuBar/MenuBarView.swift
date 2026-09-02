@@ -48,7 +48,10 @@ public struct MenuBarView: View {
                 }
                 .padding(.vertical, Theme.Space.xs)
             }
-            .frame(maxHeight: 380)
+            // Sized to what it holds, capped so a long library still scrolls. Fixed
+            // at 380 it showed three items above a void.
+            .frame(maxHeight: 420)
+            .fixedSize(horizontal: false, vertical: true)
 
             Divider().overlay(Theme.hairline)
             footer
@@ -108,7 +111,7 @@ public struct MenuBarView: View {
         VStack(alignment: .leading, spacing: 1) {
             sectionHeader(title)
             ForEach(items) { item in
-                MenuBarRow(item: item, thumbnailURL: model.thumbnailURL(for: item.id)) {
+                MenuBarRow(item: item) {
                     model.focus.capture()
                     model.use(item.id, style: .paste)
                 }
@@ -169,38 +172,12 @@ public struct MenuBarView: View {
 
 struct MenuBarRow: View {
     let item: ItemSnapshot
-    let thumbnailURL: URL?
     let action: () -> Void
     @State private var hovering = false
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: Theme.Space.xs) {
-                ThumbnailView(itemID: item.id, kind: item.kind, isLocked: item.isLocked,
-                              thumbnailURL: thumbnailURL, size: 22)
-                VStack(alignment: .leading, spacing: 0) {
-                    Text(item.title)
-                        .font(.system(size: 12))
-                        .lineLimit(1)
-                    if !item.previewLine.isEmpty {
-                        Text(item.previewLine)
-                            .font(.system(size: 10))
-                            .foregroundStyle(Theme.tertiaryText)
-                            .lineLimit(1)
-                    }
-                }
-                Spacer(minLength: 0)
-                if item.isLocked {
-                    Image(systemName: "lock.fill")
-                        .font(.system(size: 9))
-                        .foregroundStyle(Theme.secondaryText)
-                }
-            }
-            .padding(.horizontal, Theme.Space.s)
-            .padding(.vertical, 4)
-            .background(hovering ? Theme.rowHover : .clear, in: .rect(cornerRadius: Theme.Radius.small))
-            .padding(.horizontal, Theme.Space.xxs)
-            .contentShape(.rect)
+            LibraryRow(item: item, isSelected: hovering)
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }

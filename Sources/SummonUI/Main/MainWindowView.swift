@@ -34,6 +34,14 @@ public struct MainWindowView: View {
         }
         .navigationSplitViewStyle(.balanced)
         .toolbar { toolbar }
+        .overlay {
+            if model.overlay != .none {
+                Rectangle().fill(.black.opacity(0.22)).allowsHitTesting(false)
+            }
+        }
+        .overlay(alignment: .bottomTrailing) {
+            if model.overlay != .none { ActionMenu(model: model) }
+        }
         .overlay(alignment: .bottom) {
             if let toast = model.toast {
                 ToastView(toast: toast)

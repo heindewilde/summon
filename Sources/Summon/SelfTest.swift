@@ -266,8 +266,31 @@ enum SelfTest {
                   model.overlay == .none)
         }
 
+        // MARK: The library window is reachable from the keyboard
         model.dismissPanel()
-        try? await Task.sleep(for: .milliseconds(200))
+        try? await Task.sleep(for: .milliseconds(100))
+        model.sidebarSelection = .all
+        model.useGridLayout = true
+        let visible = model.visibleItems
+        if visible.count > 3 {
+            model.mainSelection = visible[0].id
+            check("Arrow keys move the grid selection", {
+                model.moveMainSelection(by: 1)
+                return model.mainSelection == visible[1].id
+            }(), detail: "the grid used to be mouse-only")
+            check("Grid selection stops at the ends rather than wrapping", {
+                model.moveMainSelection(by: -50)
+                return model.mainSelection == visible[0].id
+            }())
+            check("⌘K acts on the library selection when the panel is closed", {
+                model.toggleActions()
+                let opened = model.overlay == .actions && model.actionTarget?.id == visible[0].id
+                model.closeOverlay()
+                return opened
+            }())
+        }
+        model.useGridLayout = false
+
         check("Panel hides on dismiss", !controller.isVisible)
 
         print("=== \(checks - failures)/\(checks) checks passed ===\n")

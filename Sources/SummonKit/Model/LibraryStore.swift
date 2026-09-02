@@ -1,0 +1,535 @@
+import Foundation
+import Observation
+import SwiftData
+import UniformTypeIdentifiers
+
+/// The library: SwiftData for metadata, `FileStore` for bytes, `Vault` for secrets.
+///
+/// Everything here runs on the main actor and hands `Sendable` snapshots to the
+/// search layer, which keeps SwiftData's main-actor models out of concurrent code
+/// entirely. Libraries here are hundreds to low thousands of items, so a single
+/// context is the right trade for a great deal of avoided complexity.
+@MainActor
+@Observable
+public final class LibraryStore {
+    public let paths: LibraryPaths
+    public let files: FileStore
+    public let vault: Vault
+
+    public private(set) var container: ModelContainer
+    public var context: ModelContext { container.mainContext }
+
+    /// Ranking input. Rebuilt whenever the library or the lock state changes.
+    public private(set) var snapshots: [ItemSnapshot] = []
+    public private(set) var lastError: String?
+
+    /// Bumped on every change so views depending on derived data recompute.
+    public private(set) var revision: Int = 0
+
+    public init(paths: LibraryPaths, vault: Vault) throws {
+        self.paths = paths
+        self.files = FileStore(paths: paths)
+        self.vault = vault
+        paths.createDirectories()
+
+        let schema = Schema([SummonItem.self, SummonFolder.self, SummonTag.self, AppAffinity.self])
+        let config = ModelConfiguration(schema: schema, url: paths.storeURL, cloudKitDatabase: .none)
+        self.container = try ModelContainer(for: schema, configurations: [config])
+        refresh()
+    }
+
+    // MARK: - Fetching
+
+    public func allItems() -> [SummonItem] {
+        (try? context.fetch(FetchDescriptor<SummonItem>(
+            sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]))) ?? []
+    }
+
+    public func item(id: UUID) -> SummonItem? {
+        allItems().first { $0.id == id }
+    }
+
+    public func allFolders() -> [SummonFolder] {
+        (try? context.fetch(FetchDescriptor<SummonFolder>())) ?? []
+    }
+
+    public func rootFolders() -> [SummonFolder] {
+        allFolders().filter { $0.parent == nil }.sorted {
+            $0.sortIndex == $1.sortIndex
+                ? $0.name.localizedStandardCompare($1.name) == .orderedAscending
+                : $0.sortIndex < $1.sortIndex
+        }
+    }
+
+    public func allTags() -> [SummonTag] {
+        ((try? context.fetch(FetchDescriptor<SummonTag>())) ?? [])
+            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+
+    public func tagsInUse() -> [SummonTag] {
+        allTags().filter { !($0.items ?? []).isEmpty }
+    }
+
+    // MARK: - Snapshots
+
+    public func refresh() {
+        let key = vault.currentKey
+        snapshots = allItems().map { snapshot(for: $0, key: key) }
+        revision &+= 1
+    }
+
+    public func snapshot(for item: SummonItem, key: VaultKey?) -> ItemSnapshot {
+        let sensitive = item.isEffectivelySensitive
+        let locked = sensitive && key == nil
+
+        var searchable = ""
+        var preview = ""
+
+        if locked {
+            // Title and tags stay visible; contents do not. This is the line that
+            // stops a locked item being found by searching what is inside it.
+            preview = "Locked — unlock to view"
+        } else {
+            let body = resolveBodyText(item, key: key) ?? ""
+            let extracted = resolveExtractedText(item, key: key) ?? ""
+            searchable = [body, extracted].filter { !$0.isEmpty }.joined(separator: "\n")
+            preview = previewLine(for: item, body: body)
+        }
+
+        var affinity: [String: Int] = [:]
+        for a in item.affinities ?? [] { affinity[a.bundleID] = a.count }
+
+        return ItemSnapshot(
+            id: item.id,
+            title: item.title,
+            kind: item.kind,
+            tagNames: item.tagNames,
+            folderPath: item.folder?.path ?? [],
+            summary: locked ? nil : item.summary,
+            searchableText: searchable,
+            previewLine: preview,
+            isPinned: item.isPinned,
+            isSensitive: sensitive,
+            isLocked: locked,
+            hasPlaceholders: item.kind.isTextual && SnippetTemplate.requiresInput(resolveBodyText(item, key: key) ?? ""),
+            useCount: item.useCount,
+            lastUsedAt: item.lastUsedAt,
+            createdAt: item.createdAt,
+            updatedAt: item.updatedAt,
+            byteSize: item.byteSize,
+            affinity: affinity
+        )
+    }
+
+    private func previewLine(for item: SummonItem, body: String) -> String {
+        if item.kind.isTextual {
+            let firstLine = body.split(separator: "\n", omittingEmptySubsequences: true).first.map(String.init) ?? ""
+            return String(firstLine.prefix(160))
+        }
+        let size = ByteCountFormatter.string(fromByteCount: Int64(item.byteSize), countStyle: .file)
+        let name = item.blobOriginalName.isEmpty ? item.blobExtension.uppercased() : item.blobOriginalName
+        return "\(name) · \(size)"
+    }
+
+    public func resolveBodyText(_ item: SummonItem, key: VaultKey?) -> String? {
+        if let sealed = item.sealedBody {
+            guard let key else { return nil }
+            if item.kind == .richText {
+                guard let data = try? key.open(sealed, itemID: item.id) else { return nil }
+                return LibraryStore.plainText(fromRTF: data)
+            }
+            return try? key.openText(sealed, itemID: item.id)
+        }
+        if item.kind == .richText, let rtf = item.bodyRTF {
+            return item.bodyText ?? LibraryStore.plainText(fromRTF: rtf)
+        }
+        return item.bodyText
+    }
+
+    public func resolveExtractedText(_ item: SummonItem, key: VaultKey?) -> String? {
+        if let sealed = item.sealedExtractedText {
+            guard let key else { return nil }
+            return try? key.openText(sealed, itemID: item.id)
+        }
+        return item.extractedText
+    }
+
+    public static func plainText(fromRTF data: Data) -> String { RTF.plainText(from: data) }
+
+    // MARK: - Creating
+
+    @discardableResult
+    public func createSnippet(
+        title: String,
+        body: String,
+        rtf: Data? = nil,
+        folder: SummonFolder? = nil,
+        tags: [String] = [],
+        sensitive: Bool = false,
+        pinned: Bool = false
+    ) -> SummonItem {
+        let item = SummonItem(title: title, kind: rtf == nil ? .text : .richText, folder: folder)
+        item.isPinned = pinned
+        item.isSensitive = sensitive
+        item.tags = tags.map { resolveTag(named: $0) }
+        context.insert(item)
+
+        applyBody(item, plain: body, rtf: rtf)
+        save()
+        refresh()
+        return item
+    }
+
+    /// Writes body content, sealing it when the item is sensitive and the vault is open.
+    private func applyBody(_ item: SummonItem, plain: String, rtf: Data?) {
+        let shouldSeal = item.isEffectivelySensitive
+        if shouldSeal, let key = vault.currentKey {
+            let payload = rtf ?? Data(plain.utf8)
+            item.sealedBody = try? key.seal(payload, itemID: item.id)
+            item.bodyText = nil
+            item.bodyRTF = nil
+        } else {
+            item.bodyText = plain
+            item.bodyRTF = rtf
+            item.sealedBody = nil
+        }
+        item.byteSize = (rtf ?? Data(plain.utf8)).count
+        item.contentHash = FileStore.hash(rtf ?? Data(plain.utf8))
+        item.updatedAt = Date()
+    }
+
+    public func updateSnippetBody(_ item: SummonItem, plain: String, rtf: Data? = nil) {
+        applyBody(item, plain: plain, rtf: rtf)
+        save()
+        refresh()
+    }
+
+    @discardableResult
+    public func importFile(
+        at url: URL,
+        title: String? = nil,
+        folder: SummonFolder? = nil,
+        tags: [String] = [],
+        sensitive: Bool = false
+    ) -> SummonItem? {
+        let kind = ItemKind.forFile(at: url)
+        let item = SummonItem(title: title ?? url.deletingPathExtension().lastPathComponent,
+                              kind: kind, folder: folder)
+        item.isSensitive = sensitive
+        item.tags = tags.map { resolveTag(named: $0) }
+        context.insert(item)
+
+        let key = item.isEffectivelySensitive ? vault.currentKey : nil
+        do {
+            let blob = try files.importFile(at: url, itemID: item.id, key: key)
+            item.apply(blob)
+        } catch {
+            context.delete(item)
+            lastError = error.localizedDescription
+            Log.store.error("Import failed: \(error.localizedDescription)")
+            return nil
+        }
+        save()
+        refresh()
+        return item
+    }
+
+    @discardableResult
+    public func importData(
+        _ data: Data,
+        title: String,
+        kind: ItemKind,
+        fileExtension: String,
+        originalName: String? = nil,
+        folder: SummonFolder? = nil,
+        tags: [String] = [],
+        sensitive: Bool = false
+    ) -> SummonItem? {
+        let item = SummonItem(title: title, kind: kind, folder: folder)
+        item.isSensitive = sensitive
+        item.tags = tags.map { resolveTag(named: $0) }
+        context.insert(item)
+
+        let key = item.isEffectivelySensitive ? vault.currentKey : nil
+        do {
+            let blob = try files.importData(data, itemID: item.id, fileExtension: fileExtension,
+                                            originalName: originalName, key: key)
+            item.apply(blob)
+        } catch {
+            context.delete(item)
+            lastError = error.localizedDescription
+            return nil
+        }
+        save()
+        refresh()
+        return item
+    }
+
+    // MARK: - Mutating
+
+    public func setPinned(_ item: SummonItem, _ pinned: Bool) {
+        item.isPinned = pinned
+        item.updatedAt = Date()
+        save(); refresh()
+    }
+
+    public func togglePinned(id: UUID) {
+        guard let item = item(id: id) else { return }
+        setPinned(item, !item.isPinned)
+    }
+
+    public func rename(_ item: SummonItem, to title: String) {
+        item.title = title
+        item.updatedAt = Date()
+        save(); refresh()
+    }
+
+    public func setNotes(_ item: SummonItem, _ notes: String) {
+        item.notes = notes
+        item.updatedAt = Date()
+        save(); refresh()
+    }
+
+    public func move(_ item: SummonItem, to folder: SummonFolder?) {
+        let wasSensitive = item.isEffectivelySensitive
+        item.folder = folder
+        item.updatedAt = Date()
+        // Moving into or out of a sensitive folder changes how the bytes must be stored.
+        reconcileSensitivity(item, wasSensitive: wasSensitive)
+        save(); refresh()
+    }
+
+    /// Marks an item sensitive (encrypting it) or not (decrypting it).
+    /// Throws when the vault is locked, because we cannot re-key what we cannot read.
+    public func setSensitive(_ item: SummonItem, _ sensitive: Bool) throws {
+        guard vault.isUnlocked else { throw VaultError.locked }
+        let wasSensitive = item.isEffectivelySensitive
+        item.isSensitive = sensitive
+        item.updatedAt = Date()
+        reconcileSensitivity(item, wasSensitive: wasSensitive)
+        save(); refresh()
+    }
+
+    public func setFolderSensitive(_ folder: SummonFolder, _ sensitive: Bool) throws {
+        guard vault.isUnlocked else { throw VaultError.locked }
+        let affected = folder.allItems()
+        let before = affected.map { $0.isEffectivelySensitive }
+        folder.isSensitive = sensitive
+        for (item, was) in zip(affected, before) {
+            reconcileSensitivity(item, wasSensitive: was)
+        }
+        save(); refresh()
+    }
+
+    /// Brings an item's stored bytes in line with whether it is now sensitive.
+    private func reconcileSensitivity(_ item: SummonItem, wasSensitive: Bool) {
+        let isNow = item.isEffectivelySensitive
+        guard isNow != wasSensitive, let key = vault.currentKey else { return }
+
+        if isNow {
+            if let plain = item.bodyText ?? item.bodyRTF.map({ String(decoding: $0, as: UTF8.self) }) {
+                let payload = item.bodyRTF ?? Data(plain.utf8)
+                item.sealedBody = try? key.seal(payload, itemID: item.id)
+                item.bodyText = nil
+                item.bodyRTF = nil
+            }
+            if let extracted = item.extractedText {
+                item.sealedExtractedText = try? key.seal(extracted, itemID: item.id)
+                item.extractedText = nil
+            }
+            if let blob = item.storedBlob, let sealed = try? files.seal(blob, itemID: item.id, key: key) {
+                item.apply(sealed)
+            }
+            files.deleteThumbnail(itemID: item.id)
+        } else {
+            if let sealed = item.sealedBody, let data = try? key.open(sealed, itemID: item.id) {
+                if item.kind == .richText {
+                    item.bodyRTF = data
+                    item.bodyText = LibraryStore.plainText(fromRTF: data)
+                } else {
+                    item.bodyText = String(decoding: data, as: UTF8.self)
+                }
+                item.sealedBody = nil
+            }
+            if let sealed = item.sealedExtractedText {
+                item.extractedText = try? key.openText(sealed, itemID: item.id)
+                item.sealedExtractedText = nil
+            }
+            if let blob = item.storedBlob, let plain = try? files.unseal(blob, itemID: item.id, key: key) {
+                item.apply(plain)
+            }
+        }
+    }
+
+    public func delete(_ item: SummonItem) {
+        if let blob = item.storedBlob { files.delete(blob) }
+        files.deleteThumbnail(itemID: item.id)
+        context.delete(item)
+        save(); refresh()
+    }
+
+    public func delete(ids: [UUID]) {
+        let set = Set(ids)
+        for item in allItems() where set.contains(item.id) {
+            if let blob = item.storedBlob { files.delete(blob) }
+            files.deleteThumbnail(itemID: item.id)
+            context.delete(item)
+        }
+        save(); refresh()
+    }
+
+    // MARK: - Usage tracking
+
+    /// Records that an item was used, optionally while a particular app was frontmost.
+    public func recordUse(id: UUID, inApp bundleID: String?) {
+        guard let item = item(id: id) else { return }
+        item.useCount += 1
+        item.lastUsedAt = Date()
+
+        if let bundleID, !bundleID.isEmpty, bundleID != "com.heindewilde.summon" {
+            if let existing = (item.affinities ?? []).first(where: { $0.bundleID == bundleID }) {
+                existing.count += 1
+                existing.lastUsed = Date()
+            } else {
+                let affinity = AppAffinity(bundleID: bundleID, item: item)
+                context.insert(affinity)
+            }
+        }
+        save(); refresh()
+    }
+
+    // MARK: - Folders and tags
+
+    @discardableResult
+    public func createFolder(
+        name: String,
+        parent: SummonFolder? = nil,
+        symbolName: String = "folder",
+        colorName: String = "violet",
+        sensitive: Bool = false
+    ) -> SummonFolder {
+        let siblings = parent.map { $0.children ?? [] } ?? rootFolders()
+        let folder = SummonFolder(name: name, symbolName: symbolName, colorName: colorName,
+                                  isSensitive: sensitive, parent: parent,
+                                  sortIndex: (siblings.map(\.sortIndex).max() ?? -1) + 1)
+        context.insert(folder)
+        save(); refresh()
+        return folder
+    }
+
+    public func renameFolder(_ folder: SummonFolder, to name: String) {
+        folder.name = name
+        save(); refresh()
+    }
+
+    /// Deletes a folder. Items inside are moved to the parent rather than destroyed —
+    /// losing a client's contract because you tidied a folder would be unforgivable.
+    public func deleteFolder(_ folder: SummonFolder, keepingItems: Bool = true) {
+        if keepingItems {
+            for item in folder.items ?? [] { item.folder = folder.parent }
+            for child in folder.children ?? [] { child.parent = folder.parent }
+        }
+        context.delete(folder)
+        save(); refresh()
+    }
+
+    public func moveFolder(_ folder: SummonFolder, under parent: SummonFolder?) {
+        // Refuse to make a folder its own ancestor.
+        var node = parent
+        var depth = 0
+        while let n = node, depth < 64 {
+            if n.id == folder.id { return }
+            node = n.parent
+            depth += 1
+        }
+        folder.parent = parent
+        save(); refresh()
+    }
+
+    @discardableResult
+    public func resolveTag(named raw: String) -> SummonTag {
+        let name = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if let existing = allTags().first(where: { $0.name == name }) { return existing }
+        let tag = SummonTag(name: name)
+        context.insert(tag)
+        return tag
+    }
+
+    public func setTags(_ item: SummonItem, names: [String]) {
+        let unique = Array(Set(names.map { $0.trimmingCharacters(in: .whitespaces).lowercased() }))
+            .filter { !$0.isEmpty }
+        item.tags = unique.map { resolveTag(named: $0) }
+        item.updatedAt = Date()
+        save(); refresh()
+    }
+
+    public func pruneUnusedTags() {
+        for tag in allTags() where (tag.items ?? []).isEmpty {
+            context.delete(tag)
+        }
+        save()
+    }
+
+    // MARK: - Payload resolution
+
+    /// Everything needed to put an item on the pasteboard. Nil when locked.
+    public func payload(for id: UUID, fieldValues: [String: String] = [:], clipboard: String = "") -> InsertPayload? {
+        guard let item = item(id: id) else { return nil }
+        let key = vault.currentKey
+        if item.isEffectivelySensitive && key == nil { return nil }
+
+        switch item.kind {
+        case .text, .richText:
+            guard let body = resolveBodyText(item, key: key) else { return nil }
+            let rendered = SnippetTemplate.parse(body).render(
+                values: fieldValues,
+                context: RenderContext(clipboard: clipboard)
+            )
+            var rtf: Data?
+            if item.kind == .richText {
+                if let sealed = item.sealedBody, let key {
+                    rtf = try? key.open(sealed, itemID: item.id)
+                } else {
+                    rtf = item.bodyRTF
+                }
+                // A rich snippet with placeholders is rendered as plain text, since
+                // splicing values into RTF runs would corrupt the formatting.
+                if SnippetTemplate.parse(body).hasPlaceholders { rtf = nil }
+            }
+            return InsertPayload(plainText: rendered.text, rtf: rtf,
+                                 cursorOffsetFromEnd: rendered.cursorOffsetFromEnd)
+
+        case .image:
+            guard let blob = item.storedBlob else { return nil }
+            let data = try? files.read(blob, itemID: item.id, key: key)
+            let url = try? files.materialize(blob, itemID: item.id, key: key)
+            return InsertPayload(fileURL: url, imageData: data)
+
+        case .document, .file:
+            guard let blob = item.storedBlob,
+                  let url = try? files.materialize(blob, itemID: item.id, key: key) else { return nil }
+            return InsertPayload(fileURL: url)
+        }
+    }
+
+    /// The template for an item that needs filling in before it can be inserted.
+    public func template(for id: UUID) -> SnippetTemplate? {
+        guard let item = item(id: id), item.kind.isTextual else { return nil }
+        guard let body = resolveBodyText(item, key: vault.currentKey) else { return nil }
+        let template = SnippetTemplate.parse(body)
+        return template.requiresInput ? template : nil
+    }
+
+    // MARK: - Persistence
+
+    public func save() {
+        do {
+            try context.save()
+        } catch {
+            lastError = error.localizedDescription
+            Log.store.error("Save failed: \(error.localizedDescription)")
+        }
+    }
+
+    public var isEmpty: Bool { snapshots.isEmpty }
+}

@@ -112,6 +112,43 @@ enum SelfTest {
         }
         scratch.releaseGlobally()
 
+        // MARK: Dragging carries content, not just a title
+        if let pdf = model.store.snapshots.first(where: { $0.kind == .document }) {
+            let provider = model.dragProvider(for: pdf.id)
+            let types = provider?.registeredTypeIdentifiers ?? []
+            check("A document row drags as a real file",
+                  types.contains { $0.contains("pdf") || $0.contains("data") },
+                  detail: types.first ?? "nothing registered")
+        }
+        if let snippet = model.store.snapshots.first(where: { $0.kind == .text }) {
+            let types = model.dragProvider(for: snippet.id)?.registeredTypeIdentifiers ?? []
+            check("A snippet row drags its text",
+                  types.contains { $0.contains("text") }, detail: types.first ?? "nothing registered")
+        }
+
+        // MARK: Rich snippets keep their formatting through an edit
+        if let rich = model.store.snapshots.first(where: { $0.kind == .richText }),
+           let item = model.store.item(id: rich.id) {
+            let before = model.store.resolveAttributed(item, key: model.vault.currentKey)
+            check("A rich snippet exists and carries formatting", before != nil)
+
+            if let before {
+                let edited = NSMutableAttributedString(attributedString: before)
+                edited.append(NSAttributedString(string: " ·"))
+                model.store.updateSnippet(item, attributed: edited)
+
+                let after = model.store.resolveAttributed(item, key: model.vault.currentKey)
+                let keptFont = after.flatMap {
+                    $0.length > 0 ? $0.attribute(.font, at: 0, effectiveRange: nil) as? NSFont : nil
+                }
+                check("Editing it does not discard the formatting",
+                      item.kind == .richText && item.bodyRTF != nil
+                          && keptFont?.fontDescriptor.symbolicTraits.contains(.bold) == true)
+            }
+        } else {
+            check("A rich snippet exists and carries formatting", false)
+        }
+
         // MARK: Vault, end to end
         let vaultPIN = "482913"
         if !model.vault.isConfigured {
@@ -136,6 +173,12 @@ enum SelfTest {
             let unlocked = model.store.snapshots.first { $0.id == victim.id }
             check("Unlocking restores the contents", unlocked?.searchableText.isEmpty == false)
             check("Insert works again once unlocked", model.store.payload(for: victim.id) != nil)
+
+            model.vault.lock()
+            model.store.refresh()
+            check("A locked item refuses to drag", model.dragProvider(for: victim.id) == nil)
+            try? model.vault.unlock(pin: vaultPIN)
+            model.store.refresh()
         }
 
         model.dismissPanel()

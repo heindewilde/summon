@@ -141,7 +141,7 @@ struct ItemRow: View {
         }
         .padding(.vertical, 3)
         .contextMenu { ItemContextMenu(model: model, item: item) }
-        .draggable(DraggedItem(id: item.id, title: item.title))
+        .onDrag { model.dragProvider(for: item.id) ?? NSItemProvider() }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityLabel)
     }
@@ -219,7 +219,7 @@ struct ItemCard: View {
                 .strokeBorder(isSelected ? Theme.accent.opacity(0.6) : Theme.hairline, lineWidth: 1)
         )
         .contextMenu { ItemContextMenu(model: model, item: item) }
-        .draggable(DraggedItem(id: item.id, title: item.title))
+        .onDrag { model.dragProvider(for: item.id) ?? NSItemProvider() }
     }
 }
 
@@ -242,17 +242,6 @@ struct ItemContextMenu: View {
         }
         Divider()
         Button("Delete", systemImage: "trash", role: .destructive) { model.deleteItem(item.id) }
-    }
-}
-
-/// Lets a row be dragged into another app. Files carry their real URL; snippets
-/// carry their text, which is what receiving apps actually want.
-struct DraggedItem: Codable, Transferable {
-    let id: UUID
-    let title: String
-
-    static var transferRepresentation: some TransferRepresentation {
-        ProxyRepresentation { (item: DraggedItem) in item.title }
     }
 }
 

@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Observation
 import SwiftData
@@ -198,10 +199,37 @@ public final class LibraryStore {
         item.updatedAt = Date()
     }
 
-    public func updateSnippetBody(_ item: SummonItem, plain: String, rtf: Data? = nil) {
-        applyBody(item, plain: plain, rtf: rtf)
+    /// Updates a plain-text snippet.
+    ///
+    /// Split from the rich variant on purpose: a single `rtf: Data? = nil` parameter
+    /// meant a caller editing a rich snippet silently dropped its formatting by
+    /// omitting an argument. Two explicit methods make that mistake unrepresentable.
+    public func updateSnippet(_ item: SummonItem, plain: String) {
+        applyBody(item, plain: plain, rtf: nil)
+        item.kind = .text
         save()
         refresh()
+    }
+
+    /// Updates a rich snippet, preserving its formatting.
+    public func updateSnippet(_ item: SummonItem, attributed: NSAttributedString) {
+        let rtf = RTF.data(from: attributed)
+        applyBody(item, plain: attributed.string, rtf: rtf)
+        item.kind = rtf == nil ? .text : .richText
+        save()
+        refresh()
+    }
+
+    /// The body as an attributed string, for the rich editor. Nil while locked.
+    public func resolveAttributed(_ item: SummonItem, key: VaultKey?) -> NSAttributedString? {
+        if let sealed = item.sealedBody {
+            guard let key, let data = try? key.open(sealed, itemID: item.id) else { return nil }
+            if item.kind == .richText, let attributed = RTF.attributed(from: data) { return attributed }
+            return NSAttributedString(string: String(decoding: data, as: UTF8.self))
+        }
+        if let rtf = item.bodyRTF, let attributed = RTF.attributed(from: rtf) { return attributed }
+        if let text = item.bodyText { return NSAttributedString(string: text) }
+        return nil
     }
 
     @discardableResult

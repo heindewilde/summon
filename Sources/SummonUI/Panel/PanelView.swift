@@ -165,7 +165,8 @@ public struct PanelView: View {
                                     index: index,
                                     thumbnailURL: model.thumbnailURL(for: result.id),
                                     onActivate: { model.selectedIndex = index; model.use(result.id) },
-                                    onTogglePin: { model.togglePin(result.id) }
+                                    onTogglePin: { model.togglePin(result.id) },
+                                    dragProvider: { model.dragProvider(for: result.id) }
                                 )
                                 .id(result.id)
                                 .opacity(settled ? 1 : 0)

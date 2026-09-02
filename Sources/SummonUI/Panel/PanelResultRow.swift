@@ -9,17 +9,20 @@ public struct PanelResultRow: View {
     public let thumbnailURL: URL?
     public let onActivate: () -> Void
     public let onTogglePin: () -> Void
+    public let dragProvider: () -> NSItemProvider?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     public init(result: SearchResult, isSelected: Bool, index: Int, thumbnailURL: URL?,
-                onActivate: @escaping () -> Void, onTogglePin: @escaping () -> Void) {
+                onActivate: @escaping () -> Void, onTogglePin: @escaping () -> Void,
+                dragProvider: @escaping () -> NSItemProvider? = { nil }) {
         self.result = result
         self.isSelected = isSelected
         self.index = index
         self.thumbnailURL = thumbnailURL
         self.onActivate = onActivate
         self.onTogglePin = onTogglePin
+        self.dragProvider = dragProvider
     }
 
     private var item: ItemSnapshot { result.item }
@@ -87,6 +90,7 @@ public struct PanelResultRow: View {
         }
         .contentShape(.rect)
         .onTapGesture(perform: onActivate)
+        .onDrag { dragProvider() ?? NSItemProvider() }
         .contextMenu {
             Button(item.isPinned ? "Unpin" : "Pin", systemImage: item.isPinned ? "pin.slash" : "pin",
                    action: onTogglePin)

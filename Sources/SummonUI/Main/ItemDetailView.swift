@@ -9,6 +9,7 @@ public struct ItemDetailView: View {
 
     @State private var title = ""
     @State private var body_ = ""
+    @State private var attributed = NSAttributedString(string: "")
     @State private var notes = ""
     @State private var tagText = ""
     @State private var loadedID: UUID?
@@ -108,6 +109,12 @@ public struct ItemDetailView: View {
                         .tracking(0.6)
                         .foregroundStyle(Theme.tertiaryText)
                     Spacer()
+                    if snapshot.kind == .richText {
+                        Label("Formatting preserved", systemImage: "textformat")
+                            .font(.system(size: 10))
+                            .foregroundStyle(Theme.secondaryText)
+                            .labelStyle(.titleAndIcon)
+                    }
                     if snapshot.hasPlaceholders {
                         Label("Has fill-in fields", systemImage: "square.dashed.inset.filled")
                             .font(.system(size: 10))
@@ -115,13 +122,20 @@ public struct ItemDetailView: View {
                             .labelStyle(.titleAndIcon)
                     }
                 }
-                TextEditor(text: $body_)
-                    .font(.system(size: 12.5))
-                    .scrollContentBackground(.hidden)
-                    .frame(minHeight: 180)
-                    .padding(Theme.Space.xs)
-                    .cardBackground(raised: true)
-                    .onChange(of: body_) { _, _ in scheduleCommit() }
+                Group {
+                    if snapshot.kind == .richText {
+                        SnippetEditor(attributed: $attributed)
+                            .onChange(of: attributed) { _, _ in scheduleCommit() }
+                    } else {
+                        TextEditor(text: $body_)
+                            .font(.system(size: 12.5))
+                            .scrollContentBackground(.hidden)
+                            .padding(Theme.Space.xs)
+                            .onChange(of: body_) { _, _ in scheduleCommit() }
+                    }
+                }
+                .frame(minHeight: 180)
+                .cardBackground(raised: true)
 
                 Text("Use {{name}} for a fill-in field, {{name:default}} for one with a default, and {{date}}, {{clipboard}} or {{cursor}} for the rest.")
                     .font(.system(size: 10.5))
@@ -261,6 +275,8 @@ public struct ItemDetailView: View {
         notes = item.notes
         tagText = item.tagNames.joined(separator: ", ")
         body_ = model.store.resolveBodyText(item, key: model.vault.currentKey) ?? ""
+        attributed = model.store.resolveAttributed(item, key: model.vault.currentKey)
+            ?? NSAttributedString(string: "")
     }
 
     private func scheduleCommit() {
@@ -278,10 +294,16 @@ public struct ItemDetailView: View {
         if item.title != title, !title.isEmpty { item.title = title; changed = true }
         if item.notes != notes { item.notes = notes; changed = true }
 
-        if item.kind.isTextual {
+        if item.kind == .richText {
+            let current = model.store.resolveAttributed(item, key: model.vault.currentKey)
+            if current != attributed, attributed.length > 0 {
+                model.store.updateSnippet(item, attributed: attributed)
+                changed = true
+            }
+        } else if item.kind.isTextual {
             let current = model.store.resolveBodyText(item, key: model.vault.currentKey) ?? ""
             if current != body_ {
-                model.store.updateSnippetBody(item, plain: body_)
+                model.store.updateSnippet(item, plain: body_)
                 changed = true
             }
         }
@@ -311,7 +333,16 @@ public struct ItemDetailView: View {
                                  tone: .warning, detail: model.intelligence.status.explanation))
                 return
             }
-            body_ = rewritten
+            if let item = model.store.item(id: itemID), item.kind == .richText {
+                // Keep it rich: swap the words, keep the run attributes of the start.
+                let updated = NSMutableAttributedString(attributedString: attributed)
+                let whole = NSRange(location: 0, length: updated.length)
+                let attrs = updated.length > 0 ? updated.attributes(at: 0, effectiveRange: nil) : [:]
+                updated.replaceCharacters(in: whole, with: NSAttributedString(string: rewritten, attributes: attrs))
+                attributed = updated
+            } else {
+                body_ = rewritten
+            }
             commit()
             model.show(Toast(text: "Rewritten — \(tone.rawValue.lowercased())",
                              symbol: "wand.and.sparkles", tone: .success,

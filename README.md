@@ -112,7 +112,8 @@ heuristics. Settings shows the real status rather than pretending.
   is one extra keystroke and nothing else.
 - **Ad-hoc signing changes the code hash on every build**, so macOS may drop the
   Accessibility grant after a rebuild. `dist/Summon.app` is a stable path to
-  minimise this; a Developer ID and notarisation removes it permanently.
+  minimise this; signing with a Developer ID and notarising removes it permanently
+  (not set up here — v1 is deliberately ad-hoc signed for local use).
 - **No sync, no iOS app yet.** Deliberate: the schema is ready, the code is not.
 
 ## Development notes

@@ -85,6 +85,23 @@ public enum StarterLibrary {
             folder: details, tags: ["banking", "invoice"], pinned: true
         )
 
+        // A formatted snippet, so the rich-text path is real from the first run.
+        let signature = NSMutableAttributedString()
+        signature.append(NSAttributedString(string: "Hein de Wilde\n", attributes: [
+            .font: NSFont.boldSystemFont(ofSize: 13),
+            .foregroundColor: NSColor.labelColor,
+        ]))
+        signature.append(NSAttributedString(string: "Summon Studio · Amsterdam\nhein@summon.studio", attributes: [
+            .font: NSFont.systemFont(ofSize: 13),
+            .foregroundColor: NSColor.secondaryLabelColor,
+        ]))
+        store.createSnippet(
+            title: "Email signature",
+            body: signature.string,
+            rtf: RTF.data(from: signature),
+            folder: details, tags: ["email"]
+        )
+
         store.createSnippet(
             title: "Company address",
             body: """

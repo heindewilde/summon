@@ -38,7 +38,7 @@ enum LiveCapture {
         case "detail":
             model.sidebarSelection = .all
             model.mainSelection = model.itemsForSidebar()
-                .first { $0.kind.isTextual && $0.hasPlaceholders }?.id
+                .first { $0.kind == .richText }?.id
                 ?? model.itemsForSidebar().first?.id
             window = present(MainWindowView(model: model), size: CGSize(width: 1120, height: 700))
 

@@ -258,6 +258,21 @@ public final class AppModel {
         }
     }
 
+    // MARK: - Dragging
+
+    /// The provider behind a dragged row. Files drag as files; snippets drag as their
+    /// rendered text, with formatting when they have it. Locked items refuse to drag,
+    /// which is the same rule the insert path follows.
+    public func dragProvider(for id: UUID) -> NSItemProvider? {
+        guard let snapshot = store.snapshots.first(where: { $0.id == id }), !snapshot.isLocked else {
+            return nil
+        }
+        guard let payload = store.payload(for: id, clipboard: inserter.currentClipboardText()) else {
+            return nil
+        }
+        return DragProvider.make(for: payload, title: snapshot.title)
+    }
+
     // MARK: - Vault
 
     public func tryBiometricUnlock() async {

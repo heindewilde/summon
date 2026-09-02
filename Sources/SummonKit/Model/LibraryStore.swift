@@ -27,6 +27,10 @@ public final class LibraryStore {
     /// Bumped on every change so views depending on derived data recompute.
     public private(set) var revision: Int = 0
 
+    /// Identity map, rebuilt with the snapshots. Not observed — it is a lookup
+    /// accelerator, never a source of view state.
+    @ObservationIgnored private var itemsByID: [UUID: SummonItem] = [:]
+
     public init(paths: LibraryPaths, vault: Vault) throws {
         self.paths = paths
         self.files = FileStore(paths: paths)
@@ -47,7 +51,13 @@ public final class LibraryStore {
     }
 
     public func item(id: UUID) -> SummonItem? {
-        allItems().first { $0.id == id }
+        // Was a full sorted fetch of the entire library per lookup, and it is called
+        // from payload(for:), template(for:), recordUse, deleteItem and the preview
+        // path. `isDeleted` guards a reference held across a save.
+        if let cached = itemsByID[id], !cached.isDeleted { return cached }
+        guard let found = allItems().first(where: { $0.id == id }) else { return nil }
+        itemsByID[found.id] = found
+        return found
     }
 
     public func allFolders() -> [SummonFolder] {
@@ -75,7 +85,9 @@ public final class LibraryStore {
 
     public func refresh() {
         let key = vault.currentKey
-        snapshots = allItems().map { snapshot(for: $0, key: key) }
+        let items = allItems()
+        itemsByID = Dictionary(items.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        snapshots = items.map { snapshot(for: $0, key: key) }
         revision &+= 1
     }
 
@@ -85,13 +97,16 @@ public final class LibraryStore {
 
         var searchable = ""
         var preview = ""
+        // Resolved once and reused below. Resolving again for `hasPlaceholders` meant
+        // a second decrypt of every sealed item on every refresh.
+        var body = ""
 
         if locked {
             // Title and tags stay visible; contents do not. This is the line that
             // stops a locked item being found by searching what is inside it.
             preview = "Locked — unlock to view"
         } else {
-            let body = resolveBodyText(item, key: key) ?? ""
+            body = resolveBodyText(item, key: key) ?? ""
             let extracted = resolveExtractedText(item, key: key) ?? ""
             searchable = [body, extracted].filter { !$0.isEmpty }.joined(separator: "\n")
             preview = previewLine(for: item, body: body)
@@ -112,7 +127,7 @@ public final class LibraryStore {
             isPinned: item.isPinned,
             isSensitive: sensitive,
             isLocked: locked,
-            hasPlaceholders: item.kind.isTextual && SnippetTemplate.requiresInput(resolveBodyText(item, key: key) ?? ""),
+            hasPlaceholders: item.kind.isTextual && SnippetTemplate.requiresInput(body),
             useCount: item.useCount,
             lastUsedAt: item.lastUsedAt,
             createdAt: item.createdAt,

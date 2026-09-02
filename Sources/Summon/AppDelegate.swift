@@ -52,6 +52,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !model.settings.hasCompletedOnboarding {
             model.showOnboardingHandler?()
         }
+
+        // Deferred so it cannot slow launch: the panel is built and laid out while the
+        // machine is idle rather than inline on the first ⌥Space.
+        Task { @MainActor [weak controller] in
+            try? await Task.sleep(for: .milliseconds(250))
+            controller?.prewarm()
+        }
     }
 
     func applyActivationPolicy() {

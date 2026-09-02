@@ -10,6 +10,8 @@ public struct PanelView: View {
     @Environment(\.isSnapshotting) private var isSnapshotting
     @State private var focusToken = 0
     @State private var appeared = false
+    /// Resolved off the render path. Never call previewData(for:) from `body`.
+    @State private var preview: AppModel.PreviewData?
 
     /// Entrance animation is state-driven, which a synchronous image render never
     /// advances — so treat the panel as already settled while snapshotting.
@@ -61,6 +63,12 @@ public struct PanelView: View {
         .onDrop(of: [.fileURL], isTargeted: nil) { providers in
             loadDroppedURLs(providers)
             return true
+        }
+        .task(id: model.selectedResult?.id) {
+            guard let id = model.selectedResult?.id else { preview = nil; return }
+            try? await Task.sleep(for: .milliseconds(20))
+            guard !Task.isCancelled else { return }
+            preview = model.previewData(for: id)
         }
     }
 
@@ -150,7 +158,7 @@ public struct PanelView: View {
             } else {
                 ScrollViewReader { proxy in
                     SnapshotSafeScrollView {
-                        VStack(alignment: .leading, spacing: 1) {
+                        SnapshotSafeLazyVStack(alignment: .leading, spacing: 1) {
                             if model.query.isEmpty, model.results.contains(where: { $0.item.isPinned }) {
                                 sectionHeader("Pinned")
                             }
@@ -163,7 +171,7 @@ public struct PanelView: View {
                                     result: result,
                                     isSelected: index == model.selectedIndex,
                                     index: index,
-                                    thumbnailURL: model.thumbnailURL(for: result.id),
+                                    thumbnailURL: model.thumbnailPath(for: result.id),
                                     onActivate: { model.selectedIndex = index; model.use(result.id) },
                                     onTogglePin: { model.togglePin(result.id) },
                                     dragProvider: { model.dragProvider(for: result.id) }
@@ -220,12 +228,11 @@ public struct PanelView: View {
     }
 
     private func previewPane(for result: SearchResult) -> some View {
-        let data = model.previewData(for: result.id)
-        return PanelPreview(
+        PanelPreview(
             snapshot: result.item,
-            bodyText: data.body,
-            fileURL: data.fileURL,
-            thumbnailURL: data.thumbnailURL
+            bodyText: preview?.body,
+            fileURL: preview?.fileURL,
+            thumbnailURL: preview?.thumbnailURL
         )
         .frame(maxWidth: .infinity)
         .id(result.id)
@@ -244,7 +251,7 @@ public struct PanelView: View {
                 }
                 KeyHint("⇧↩", "Paste plain")
                 Spacer()
-                if !Inserter.hasAccessibility && model.settings.autoPaste {
+                if !model.accessibility.isTrusted && model.settings.autoPaste {
                     Label("Copies until Accessibility is allowed", systemImage: "info.circle")
                         .font(.system(size: 10))
                         .foregroundStyle(Theme.spark)
@@ -276,7 +283,7 @@ public struct PanelView: View {
         guard let item = model.selectedResult?.item else { return "Insert" }
         if item.isLocked { return "Unlock" }
         if item.hasPlaceholders { return "Fill in" }
-        return Inserter.hasAccessibility && model.settings.autoPaste ? "Paste" : "Copy"
+        return model.accessibility.isTrusted && model.settings.autoPaste ? "Paste" : "Copy"
     }
 
     // MARK: - Actions

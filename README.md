@@ -23,12 +23,38 @@ Requires macOS 26 and Xcode 26 (Swift 6.1+). No external dependencies — the wh
 app builds from the system SDK.
 
 ```bash
-swift test                           # 113 tests over the logic layer
-SUMMON_DEMO=1 SUMMON_SELFTEST=1 ./dist/Summon.app/Contents/MacOS/Summon
+swift test                           # 126 tests over the logic layer
+swift test -c release                # the same, plus the performance budgets
+Scripts/selftest.sh                  # 28 runtime checks, on a fresh demo library
 SUMMON_DEMO=1 SUMMON_PASTETEST=1 open -n dist/Summon.app   # real auto-paste round trip
 SUMMON_DEMO=1 SUMMON_VERIFY=1   open -n dist/Summon.app   # hot key, Finder, Services, login item
-SUMMON_PERF=1   swift test -c release                     # search latency measurements
+SUMMON_PERF=1        swift test -c release                 # scaling measurements, no assertions
+SUMMON_BUILDPROBE=1  swift test -c release                 # what dominates an index build
 ```
+
+### Performance budgets
+
+Four numbers are asserted, and they only run in a **release** build — these are
+numeric loops, and a budget calibrated against an unoptimised build asserts nothing.
+The suite skips itself in debug with that reason attached.
+
+| Budget | Measured |
+|---|---|
+| keystroke → results, 2,000 items | 0.54 ms (budget 4 ms) |
+| empty query — runs on every panel open | 0.33 ms (budget 4 ms) |
+| index build, 2,000 items | 13.1 ms (budget 25 ms) |
+| typing rebuilds the index | never — asserted structurally |
+
+Budgets assert on the **fastest** of many runs, not the mean or the worst. Timing
+noise is one-sided — the scheduler only ever adds time — so the minimum is the honest
+estimator of what the code can do, and asserting the maximum produces a flaky suite
+whose usual fix is raising the budget until it means nothing. The median and worst are
+printed for drift.
+
+`Scripts/selftest.sh` resets the demo library first, because the self-test configures
+a vault and marks items sensitive; without the reset its *second* run reports failures
+that are really leftovers. That reset cannot happen inside the app — the SwiftData
+container is opened when the `App` struct initialises, before `applicationDidFinishLaunching`.
 
 The self-test covers hot key registration, panel window configuration, search,
 dragging, the vault lifecycle and rich-text round trips. The paste test is

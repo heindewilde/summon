@@ -46,6 +46,19 @@ public enum FuzzyMatcher {
 
         public init(_ text: String) {
             raw = text
+            // ASCII fast path. The general path below allocates a `[Character]` and
+            // then, per character, does Unicode property lookups and a *String
+            // allocation* inside `lowercased()`. Measured over a 2,000-item library
+            // that was 29.2ms of a 29.8ms index build — effectively all of it, while
+            // the body text everyone suspects cost 0.64ms. Titles, tags and folder
+            // names are overwhelmingly ASCII, where one byte is exactly one Character
+            // and the same tables fall out of pure integer work.
+            if let tables = FuzzyMatcher.asciiTables(text) {
+                lower = tables.lower
+                bonuses = tables.bonuses
+                isOversized = tables.oversized
+                return
+            }
             let chars = Array(text)
             if chars.count > maxCandidateLength {
                 lower = []
@@ -93,6 +106,47 @@ public enum FuzzyMatcher {
     /// Lowercased scalar per character, so indices stay aligned with the original
     /// string. `String.lowercased()` can change the character count for some scripts,
     /// which would misplace the highlight positions.
+    /// Builds both tables in one integer pass, or returns nil when `text` is not pure
+    /// ASCII so the Character-based path handles it. Producing identical output to
+    /// that path is asserted directly in `FuzzyMatcherTests`.
+    static func asciiTables(_ text: String) -> (lower: [UInt32], bonuses: [Double], oversized: Bool)? {
+        for byte in text.utf8 where byte >= 0x80 { return nil }
+        // Only now is the UTF-8 count also the Character count.
+        let count = text.utf8.count
+        guard count <= maxCandidateLength else { return ([], [], true) }
+
+        var lower = [UInt32](repeating: 0, count: count)
+        var bonuses = [Double](repeating: 0, count: count)
+        var previous: UInt8 = 0x2F   // "/", matching the general path's seed
+        var i = 0
+        for byte in text.utf8 {
+            let isUpper = byte >= 0x41 && byte <= 0x5A
+            lower[i] = UInt32(isUpper ? byte &+ 32 : byte)
+            bonuses[i] = asciiBonus(previous: previous, current: byte, isFirst: i == 0)
+            previous = byte
+            i &+= 1
+        }
+        return (lower, bonuses, false)
+    }
+
+    /// Mirrors `bonus(previous:current:isFirst:)` exactly, for ASCII inputs.
+    private static func asciiBonus(previous: UInt8, current: UInt8, isFirst: Bool) -> Double {
+        if isFirst { return matchWordStart }
+        switch previous {
+        case 0x20, 0x0A, 0x09: return matchWordStart        // space, newline, tab
+        case 0x2D, 0x5F, 0x2F: return matchSeparator        // - _ /
+        case 0x2E, 0x3A, 0x2C: return matchSeparator * 0.8  // . : ,
+        default: break
+        }
+        let previousLower = previous >= 0x61 && previous <= 0x7A
+        let currentUpper = current >= 0x41 && current <= 0x5A
+        if previousLower && currentUpper { return matchCapital }
+        let previousLetter = previousLower || (previous >= 0x41 && previous <= 0x5A)
+        let currentLetter = currentUpper || (current >= 0x61 && current <= 0x7A)
+        if !previousLetter && currentLetter { return matchSeparator * 0.7 }
+        return 0
+    }
+
     static func scalars(_ chars: [Character]) -> [UInt32] {
         chars.map { character in
             let lowered = character.isUppercase ? (character.lowercased().first ?? character) : character

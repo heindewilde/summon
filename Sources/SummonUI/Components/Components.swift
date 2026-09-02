@@ -222,9 +222,13 @@ public struct ThumbnailView: View {
         self.size = size
     }
 
+    /// Seeded synchronously from the cache, so an already-decoded thumbnail paints on
+    /// the first frame and never flickers through the glyph placeholder.
+    @State private var image: NSImage?
+
     public var body: some View {
         Group {
-            if !isLocked, let url = thumbnailURL, let image = NSImage(contentsOf: url) {
+            if !isLocked, let image {
                 Image(nsImage: image)
                     .resizable()
                     .aspectRatio(contentMode: .fill)
@@ -239,6 +243,11 @@ public struct ThumbnailView: View {
             }
         }
         .id(itemID)
+        .onAppear { if image == nil { image = ThumbnailCache.shared.cached(itemID) } }
+        .task(id: itemID) {
+            guard !isLocked, image == nil, let url = thumbnailURL else { return }
+            image = await ThumbnailCache.shared.image(for: itemID, url: url, pointSize: size)
+        }
     }
 }
 

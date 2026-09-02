@@ -41,6 +41,21 @@ final class PanelController: NSObject, NSWindowDelegate {
         if isVisible { hide() } else { model.summon() }
     }
 
+    /// Builds the window and its hosting view ahead of the first summon, and forces a
+    /// layout pass, so that cost is not paid inline on the first ⌥Space of a session.
+    ///
+    /// Deliberately *not* `orderFrontRegardless()` at `alphaValue = 0`: that touches
+    /// the window server and interacts badly with `.transient` in the collection
+    /// behaviour. This does not eliminate SwiftUI's first *display* pass — only a real
+    /// on-screen appearance does that — so cold and warm summons are reported
+    /// separately rather than pretending they are the same number.
+    func prewarm() {
+        guard panel == nil else { return }
+        let panel = makePanel()
+        self.panel = panel
+        panel.contentView?.layoutSubtreeIfNeeded()
+    }
+
     func show() {
         let panel = panel ?? makePanel()
         self.panel = panel

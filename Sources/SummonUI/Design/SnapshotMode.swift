@@ -40,3 +40,32 @@ public struct SnapshotSafeScrollView<Content: View>: View {
         }
     }
 }
+
+/// A `LazyVStack` in normal use; an eager `VStack` while snapshotting.
+///
+/// Lazy stacks only realise the rows the scroll view has asked for, which is the
+/// point — a 60-row result list should not build 60 rows to show 9. But
+/// `ImageRenderer` never scrolls, so a lazy stack renders empty. Behaviour in the
+/// shipped app is unchanged.
+public struct SnapshotSafeLazyVStack<Content: View>: View {
+    @Environment(\.isSnapshotting) private var isSnapshotting
+    private let alignment: HorizontalAlignment
+    private let spacing: CGFloat?
+    private let content: Content
+
+    public init(alignment: HorizontalAlignment = .center,
+                spacing: CGFloat? = nil,
+                @ViewBuilder content: () -> Content) {
+        self.alignment = alignment
+        self.spacing = spacing
+        self.content = content()
+    }
+
+    public var body: some View {
+        if isSnapshotting {
+            VStack(alignment: alignment, spacing: spacing) { content }
+        } else {
+            LazyVStack(alignment: alignment, spacing: spacing) { content }
+        }
+    }
+}

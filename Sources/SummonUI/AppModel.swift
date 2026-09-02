@@ -12,6 +12,21 @@ public enum SidebarSelection: Hashable, Sendable {
     case folder(UUID)
     case tag(String)
     case kind(ItemKind)
+
+    /// Identifies the filtered item set for the search cache, so typing within one
+    /// selection reuses its index and switching selection rebuilds.
+    var cacheToken: String {
+        switch self {
+        case .all: "all"
+        case .recents: "recents"
+        case .pinned: "pinned"
+        case .locked: "locked"
+        case .clipboard: "clipboard"
+        case .folder(let id): "folder:\(id)"
+        case .tag(let name): "tag:\(name)"
+        case .kind(let kind): "kind:\(kind.rawValue)"
+        }
+    }
 }
 
 public enum PanelMode: Equatable {
@@ -58,7 +73,7 @@ public final class AppModel {
 
     // MARK: - Panel state
 
-    public var query: String = "" { didSet { runSearch() } }
+    public var query: String = "" { didSet { if query != oldValue { runSearch() } } }
     public private(set) var results: [SearchResult] = []
     public var selectedIndex: Int = 0
     public var mode: PanelMode = .search
@@ -84,6 +99,14 @@ public final class AppModel {
     public var hidePanelHandler: (() -> Void)?
     public var showMainWindowHandler: (() -> Void)?
     public var showOnboardingHandler: (() -> Void)?
+
+    /// Owns the search index so it is built when the library changes, not per
+    /// keystroke. Not observed — it is a service, not view state.
+    @ObservationIgnored public let searchEngine = SearchEngine()
+
+    /// Cached TCC answer. Reading `Inserter.hasAccessibility` directly from a view
+    /// body meant a TCC round trip twice per render.
+    public let accessibility = AccessibilityStatus()
 
     private var toastTask: Task<Void, Never>?
     private var autoLockTimer: Timer?
@@ -118,8 +141,10 @@ public final class AppModel {
     // MARK: - Search
 
     public func runSearch() {
-        let index = SearchIndex(items: store.snapshots)
-        results = index.search(query, frontmostBundleID: focus.previousBundleID)
+        results = searchEngine.search(query,
+                                      snapshots: store.snapshots,
+                                      revision: store.revision,
+                                      frontmostBundleID: focus.previousBundleID)
         if selectedIndex >= results.count { selectedIndex = max(0, results.count - 1) }
     }
 
@@ -144,13 +169,16 @@ public final class AppModel {
         // Capture the frontmost app *before* the panel takes focus, so we know where
         // to put the content back and which app to bias the ranking toward.
         focus.capture()
+        accessibility.refresh()
         query = ""
         selectedIndex = 0
         mode = .search
         fieldValues = [:]
         pinEntry = ""
         pinError = nil
-        store.refresh()
+        // No store.refresh() here: every mutating method and both vault transitions
+        // already refresh, so the snapshots are current. Refreshing again cost a full
+        // fetch plus a decrypt of every sealed item before the window appeared.
         runSearch()
         isPanelVisible = true
         showPanelHandler?()
@@ -312,6 +340,9 @@ public final class AppModel {
     public func lockVault() {
         vault.lock()
         FileStore.clearScratch()
+        // A decoded thumbnail of a sensitive item must not outlive the unlock that
+        // produced it — clearing the scratch files is not enough on its own.
+        ThumbnailCache.shared.invalidateAll()
         store.refresh()
         runSearch()
         show(Toast(text: "Locked", symbol: "lock.fill", tone: .neutral))
@@ -546,6 +577,13 @@ public final class AppModel {
         return FileManager.default.fileExists(atPath: url.path) ? url : nil
     }
 
+    /// The path a thumbnail *would* live at, without touching the filesystem.
+    /// `ThumbnailCache` learns whether it exists by trying to decode it once, so rows
+    /// no longer stat the disk on every render.
+    public func thumbnailPath(for id: UUID) -> URL {
+        store.files.thumbnailURL(itemID: id)
+    }
+
     // MARK: - Derived collections for the main window
 
     public func itemsForSidebar() -> [ItemSnapshot] {
@@ -573,7 +611,10 @@ public final class AppModel {
         }
 
         if !mainSearch.isEmpty {
-            let ranked = SearchIndex(items: items).search(mainSearch)
+            let ranked = searchEngine.searchFiltered(mainSearch,
+                                                     snapshots: items,
+                                                     revision: store.revision,
+                                                     token: sidebarSelection.cacheToken)
             return ranked.map(\.item)
         }
         if case .recents = sidebarSelection { return items }

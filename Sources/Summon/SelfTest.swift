@@ -181,6 +181,68 @@ enum SelfTest {
             model.store.refresh()
         }
 
+        // MARK: The keyboard model, wired
+        //
+        // The panel drew ⌘1–⌘9 on every row for an entire release with no handler
+        // behind them. These assert the bindings actually reach behaviour, not just
+        // that PanelKeyMap resolves them — that is already unit-tested.
+        model.summon()
+        try? await Task.sleep(for: .milliseconds(200))
+        model.query = ""
+        model.selectedIndex = 0
+
+        check("⌘K opens the action menu", {
+            model.route(KeyChord(.character("k"), .command))
+            return model.overlay == .actions
+        }())
+        check("The action list is populated", !model.actionResults.isEmpty,
+              detail: "\(model.actionResults.count) actions")
+        check("⌘K again closes it", {
+            model.route(KeyChord(.character("k"), .command))
+            return model.overlay == .none
+        }())
+
+        check("⎋ closes the menu before it closes the panel", {
+            model.openActionMenu()
+            model.escape()
+            return model.overlay == .none && model.isPanelVisible
+        }())
+
+        if model.results.count > 2 {
+            let third = model.results[2].id
+            check("⌘3 activates the third result", {
+                model.route(KeyChord(.character("3"), .command))
+                return model.selectedIndex == 2
+            }(), detail: model.results[2].item.title)
+            _ = third
+        }
+
+        check("⌘↑ and ⌘↓ jump to the ends", {
+            model.route(KeyChord(.down, .command))
+            let atEnd = model.selectedIndex == model.results.count - 1
+            model.route(KeyChord(.up, .command))
+            return atEnd && model.selectedIndex == 0
+        }())
+
+        check("The panel declines ⌘C so the field keeps it",
+              !model.route(KeyChord(.character("c"), .command)))
+
+        if let foldered = model.results.first(where: { !$0.item.folderPath.isEmpty }) {
+            model.selectedIndex = model.results.firstIndex { $0.id == foldered.id } ?? 0
+            check("⇥ scopes the search to the item's folder", {
+                model.route(KeyChord(.tab))
+                return model.folderScope == foldered.item.folderPath.last
+            }(), detail: model.folderScope ?? "none")
+            check("Everything shown is from that folder",
+                  !model.results.isEmpty && model.results.allSatisfy {
+                      $0.item.folderPath.last == model.folderScope
+                  })
+            check("⌫ on an empty query leaves the folder", {
+                model.route(KeyChord(.delete))
+                return model.folderScope == nil
+            }())
+        }
+
         model.dismissPanel()
         try? await Task.sleep(for: .milliseconds(200))
         check("Panel hides on dismiss", !controller.isVisible)

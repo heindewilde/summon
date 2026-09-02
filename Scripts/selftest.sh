@@ -16,9 +16,11 @@ if [[ "${1:-}" != "--keep" ]]; then
   rm -rf "$DEMO"
 fi
 
-if [[ ! -x dist/Summon.app/Contents/MacOS/Summon ]]; then
-  echo "==> Building"
-  Scripts/build-app.sh >/dev/null
-fi
+# Always rebuild. Building only when the binary is missing means editing a source
+# file and re-running this silently tests the previous build — which cost me a
+# confusing "the code is right but the check never ran" hunt. build-app.sh is
+# incremental, so this is cheap.
+echo "==> Building"
+Scripts/build-app.sh >/dev/null
 
 SUMMON_DEMO=1 SUMMON_SELFTEST=1 ./dist/Summon.app/Contents/MacOS/Summon

@@ -13,21 +13,35 @@ final class SummonPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
 
-    /// Escape must close the panel even when a text field has focus.
+    /// Escape must close the panel even when a text field has focus. Routed through
+    /// `AppModel.escape()` so it pops exactly one level rather than dismissing
+    /// outright — the action menu and a folder scope are levels above the panel.
     override func cancelOperation(_ sender: Any?) {
         onCancel?()
     }
 
+    /// Modified chords are claimed here, before the responder chain and before the
+    /// main menu — which is what lets ⌘K mean Actions in the panel. Everything the
+    /// key map declines returns false, so ⌘C, ⌘V, ⌘A and ⌘Z keep working in the
+    /// search field.
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if keyRouter?.handleKeyEquivalent(event) == true { return true }
+        return super.performKeyEquivalent(with: event)
+    }
+
     var onCancel: (() -> Void)?
+    var keyRouter: PanelKeyRouter?
 }
 
 @MainActor
 final class PanelController: NSObject, NSWindowDelegate {
     private var panel: SummonPanel?
     private let model: AppModel
+    private let router: PanelKeyRouter
 
     init(model: AppModel) {
         self.model = model
+        self.router = PanelKeyRouter(model: model)
         super.init()
     }
 
@@ -70,6 +84,8 @@ final class PanelController: NSObject, NSWindowDelegate {
     func show() {
         let panel = panel ?? makePanel()
         self.panel = panel
+        panel.keyRouter = router
+        router.beginModifierTracking()
 
         position(panel)
         panel.orderFrontRegardless()
@@ -78,6 +94,7 @@ final class PanelController: NSObject, NSWindowDelegate {
     }
 
     func hide() {
+        router.endModifierTracking()
         panel?.orderOut(nil)
     }
 
@@ -103,7 +120,7 @@ final class PanelController: NSObject, NSWindowDelegate {
         panel.animationBehavior = .utilityWindow
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
         panel.delegate = self
-        panel.onCancel = { [weak self] in self?.model.dismissPanel() }
+        panel.onCancel = { [weak self] in self?.model.escape() }
 
         let host = NSHostingView(rootView: PanelView(model: model))
         host.frame = panel.contentLayoutRect

@@ -3,6 +3,39 @@ import Observation
 import SwiftUI
 import SummonKit
 
+/// What is layered over the results, if anything.
+public enum PanelOverlay: Equatable, Sendable {
+    case none
+    case actions
+    case prompt(PromptKind)
+    case folderPicker
+    case confirmDelete
+}
+
+public enum PromptKind: Equatable, Sendable {
+    case rename
+    case addTag
+
+    public var title: String {
+        switch self {
+        case .rename: "Rename"
+        case .addTag: "Add tag"
+        }
+    }
+
+    public var placeholder: String {
+        switch self {
+        case .rename: "New name"
+        case .addTag: "Tag name"
+        }
+    }
+}
+
+public struct FolderChoice: Identifiable, Equatable, Sendable {
+    public let id: UUID?
+    public let label: String
+}
+
 /// One row, with the position it occupies in the flattened result list.
 public struct DisplayRow: Identifiable, Equatable, Sendable {
     public let index: Int
@@ -101,6 +134,42 @@ public final class AppModel {
     public var pinEntry: String = ""
     public var pinError: String?
 
+    // MARK: - ⌘K overlay
+
+    public private(set) var overlay: PanelOverlay = .none
+    public var actionQuery: String = "" { didSet { if actionQuery != oldValue { filterActions() } } }
+    public private(set) var actionResults: [PanelActionID] = []
+    public var actionSelectedIndex: Int = 0
+    /// Text being entered for Rename or Add Tag.
+    public var promptText: String = ""
+    public private(set) var folderChoices: [FolderChoice] = []
+    public var folderChoiceIndex: Int = 0
+
+    /// Narrows the search to one folder. Kept separate from the query text because
+    /// `/Folder` splits on spaces, so a folder called "Client Replies" cannot be
+    /// expressed there at all.
+    public private(set) var folderScope: String?
+
+    /// Focus tokens. The search field and the overlay field each watch their own, so
+    /// opening or closing the overlay moves first responder without either of them
+    /// having to know about the other.
+    public private(set) var queryFocusToken = 0
+    public private(set) var overlayFocusToken = 0
+
+    /// Which surface owns the keyboard right now.
+    public var keyContext: PanelContext {
+        switch overlay {
+        case .none: break
+        case .actions: return .actionMenu
+        case .prompt, .folderPicker, .confirmDelete: return .actionMenu
+        }
+        switch mode {
+        case .search: return .results
+        case .fill: return .fill
+        case .unlock: return .unlock
+        }
+    }
+
     // MARK: - Main window state
 
     public var sidebarSelection: SidebarSelection = .all
@@ -126,6 +195,10 @@ public final class AppModel {
     /// Cached TCC answer. Reading `Inserter.hasAccessibility` directly from a view
     /// body meant a TCC round trip twice per render.
     public let accessibility = AccessibilityStatus()
+
+    /// Held modifiers, on their own observable object so that watching them redraws
+    /// the footer and nothing else. See `PanelModifierState`.
+    public let modifiers = PanelModifierState()
 
     private var toastTask: Task<Void, Never>?
     private var autoLockTimer: Timer?
@@ -159,8 +232,14 @@ public final class AppModel {
 
     // MARK: - Search
 
+    public var parsedQueryWithScope: Query {
+        var parsed = Query.parse(query)
+        if let folderScope { parsed.folder = folderScope }
+        return parsed
+    }
+
     public func runSearch() {
-        let ranked = searchEngine.sections(query,
+        let ranked = searchEngine.sections(parsedQueryWithScope,
                                            snapshots: store.snapshots,
                                            revision: store.revision,
                                            frontmostBundleID: focus.previousBundleID,
@@ -194,6 +273,219 @@ public final class AppModel {
 
     public func selectFirst() { selectedIndex = 0 }
     public func selectLast() { selectedIndex = max(0, results.count - 1) }
+
+    // MARK: - Keyboard
+
+    /// Resolves a chord and performs it. Returns false when the panel does not claim
+    /// the key, so it falls through to the text field.
+    @discardableResult
+    public func route(_ chord: KeyChord) -> Bool {
+        guard let command = PanelKeyMap.command(for: chord,
+                                                in: keyContext,
+                                                queryIsEmpty: parsedQueryWithScope.text.isEmpty,
+                                                selectionIsFolder: selectionHasFolder) else { return false }
+        perform(command)
+        return true
+    }
+
+    /// The field editor's path. Unmodified editing keys arrive as selectors.
+    @discardableResult
+    public func routeFieldSelector(_ selector: Selector, fieldIsEmpty: Bool) -> Bool {
+        guard let key = PanelKeyRouter.key(for: selector) else { return false }
+        let modifiers = KeyModifiers(NSApp.currentEvent?.modifierFlags ?? [])
+        guard let command = PanelKeyMap.command(for: KeyChord(key, modifiers),
+                                                in: keyContext,
+                                                queryIsEmpty: fieldIsEmpty,
+                                                selectionIsFolder: selectionHasFolder) else { return false }
+        perform(command)
+        return true
+    }
+
+    /// ⇥ needs somewhere to go: the selected item must sit in a folder, and we must
+    /// not already be scoped to one.
+    private var selectionHasFolder: Bool {
+        folderScope == nil && selectedResult?.item.folderPath.isEmpty == false
+    }
+
+    /// The one place a key press turns into behaviour, so the panel, the action menu
+    /// and the fill form cannot drift apart in what a key means.
+    public func perform(_ command: PanelCommand) {
+        switch command {
+        case .move(let delta):
+            if keyContext == .actionMenu { moveOverlaySelection(by: delta) } else { moveSelection(by: delta) }
+        case .selectFirst: selectFirst()
+        case .selectLast: selectLast()
+        case .activate(let style):
+            guard let result = selectedResult else { return }
+            use(result.id, style: style)
+        case .activateIndex(let index):
+            guard results.indices.contains(index) else { return }
+            selectedIndex = index
+            use(results[index].id)
+        case .toggleActionMenu:
+            if case .none = overlay { openActionMenu() } else { closeOverlay() }
+        case .runSelectedAction: runSelectedOverlayItem()
+        case .escape: escape()
+        case .drillIn: drillIn()
+        case .drillOut: drillOut()
+        case .nextField, .previousField: break   // handled by SwiftUI focus in fill mode
+        case .action(let action): run(action)
+        }
+    }
+
+    /// Pops exactly one level per press. Previously ⎋ was handled in two places that
+    /// both went straight to dismissPanel, so there was nowhere to add a level.
+    public func escape() {
+        if overlay != .none { closeOverlay(); return }
+        if mode != .search { mode = .search; queryFocusToken += 1; return }
+        if !query.isEmpty { query = ""; return }
+        if folderScope != nil { drillOut(); return }
+        dismissPanel()
+    }
+
+    // MARK: - Folder scope
+
+    public func drillIn() {
+        guard let folder = selectedResult?.item.folderPath.last else { return }
+        folderScope = folder
+        query = ""
+        selectedIndex = 0
+        runSearch()
+    }
+
+    public func drillOut() {
+        guard folderScope != nil else { return }
+        folderScope = nil
+        selectedIndex = 0
+        runSearch()
+    }
+
+    // MARK: - ⌘K overlay
+
+    public func openActionMenu() {
+        guard selectedResult != nil else { return }
+        overlay = .actions
+        actionQuery = ""
+        actionSelectedIndex = 0
+        filterActions()
+        overlayFocusToken += 1
+    }
+
+    public func closeOverlay() {
+        overlay = .none
+        actionQuery = ""
+        promptText = ""
+        queryFocusToken += 1
+    }
+
+    private func filterActions() {
+        guard let item = selectedResult?.item else { actionResults = []; return }
+        let all = PanelKeyMap.actions(isBlobBacked: item.kind.isBlobBacked, isLocked: item.isLocked)
+        let needle = actionQuery.lowercased()
+        actionResults = needle.isEmpty ? all : all.filter { $0.title.lowercased().contains(needle) }
+        actionSelectedIndex = min(actionSelectedIndex, max(0, actionResults.count - 1))
+    }
+
+    private func moveOverlaySelection(by delta: Int) {
+        switch overlay {
+        case .actions:
+            guard !actionResults.isEmpty else { return }
+            actionSelectedIndex = min(max(0, actionSelectedIndex + delta), actionResults.count - 1)
+        case .folderPicker:
+            guard !folderChoices.isEmpty else { return }
+            folderChoiceIndex = min(max(0, folderChoiceIndex + delta), folderChoices.count - 1)
+        default: break
+        }
+    }
+
+    private func runSelectedOverlayItem() {
+        switch overlay {
+        case .actions:
+            guard actionResults.indices.contains(actionSelectedIndex) else { return }
+            run(actionResults[actionSelectedIndex])
+        case .prompt(let kind):
+            commitPrompt(kind)
+        case .folderPicker:
+            guard folderChoices.indices.contains(folderChoiceIndex) else { return }
+            commitMove(to: folderChoices[folderChoiceIndex].id)
+        case .confirmDelete:
+            guard let id = selectedResult?.id else { return }
+            closeOverlay()
+            deleteItem(id)
+        case .none:
+            break
+        }
+    }
+
+    /// The label the panel's title bar shows above the overlay.
+    public var overlayTitle: String {
+        switch overlay {
+        case .none, .actions: "Actions"
+        case .prompt(let kind): kind.title
+        case .folderPicker: "Move to folder"
+        case .confirmDelete: "Delete"
+        }
+    }
+
+    public func run(_ action: PanelActionID) {
+        guard let result = selectedResult else { return }
+        let id = result.id
+        switch action {
+        case .paste: closeOverlay(); use(id, style: .paste)
+        case .pastePlain: closeOverlay(); use(id, style: .plainPaste)
+        case .copy: closeOverlay(); use(id, style: .copy)
+        case .open: closeOverlay(); use(id, style: .open)
+        case .reveal: closeOverlay(); revealInFinder(id)
+        case .togglePin: closeOverlay(); togglePin(id)
+        case .toggleSensitive:
+            closeOverlay()
+            setItemSensitive(id, !result.item.isSensitive)
+        case .delete:
+            overlay = .confirmDelete
+        case .rename:
+            promptText = result.item.title
+            overlay = .prompt(.rename)
+            overlayFocusToken += 1
+        case .addTag:
+            promptText = ""
+            overlay = .prompt(.addTag)
+            overlayFocusToken += 1
+        case .move:
+            folderChoices = [FolderChoice(id: nil, label: "No folder")]
+                + store.allFolders()
+                    .sorted { $0.path.joined() .localizedStandardCompare($1.path.joined()) == .orderedAscending }
+                    .map { FolderChoice(id: $0.id, label: $0.path.joined(separator: " › ")) }
+            folderChoiceIndex = 0
+            overlay = .folderPicker
+            overlayFocusToken += 1
+        }
+    }
+
+    private func commitPrompt(_ kind: PromptKind) {
+        let text = promptText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, let id = selectedResult?.id, let item = store.item(id: id) else {
+            closeOverlay(); return
+        }
+        switch kind {
+        case .rename: store.rename(item, to: text)
+        case .addTag:
+            // Normalised and de-duplicated by setTags, so adding a tag twice is a
+            // no-op rather than a duplicate chip.
+            store.setTags(item, names: item.tagNames + [text])
+        }
+        closeOverlay()
+        runSearch()
+    }
+
+    private func commitMove(to folderID: UUID?) {
+        guard let id = selectedResult?.id, let item = store.item(id: id) else { closeOverlay(); return }
+        let folder = folderID.flatMap { target in store.allFolders().first { $0.id == target } }
+        store.move(item, to: folder)
+        closeOverlay()
+        runSearch()
+        show(Toast(text: folder.map { "Moved to \($0.name)" } ?? "Removed from folder",
+                   symbol: "folder", tone: .neutral))
+    }
 
     // MARK: - Summoning
 

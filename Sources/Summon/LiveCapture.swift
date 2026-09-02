@@ -54,6 +54,7 @@ enum LiveCapture {
             if let row = environment["SUMMON_LIVE_SELECT"], let index = Int(row) {
                 model.selectedIndex = min(index, max(0, model.results.count - 1))
             }
+            if environment["SUMMON_LIVE_OVERLAY"] == "actions" { model.openActionMenu() }
             model.isPanelVisible = true
             controller.showForCapture()
             try? await Task.sleep(for: .milliseconds(600))

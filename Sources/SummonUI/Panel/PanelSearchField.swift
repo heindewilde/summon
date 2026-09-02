@@ -6,39 +6,18 @@ import SwiftUI
 /// Deliberately an `NSTextField` rather than a SwiftUI `TextField`: a single-line
 /// SwiftUI field swallows the arrow keys for caret movement, and arrow keys must
 /// drive the result list. Wrapping AppKit is what makes the keyboard model work.
+///
+/// It takes exactly one behaviour closure. The six it used to take were a second copy
+/// of the keyboard model living next to the real one — the way a footer hint and its
+/// binding drift apart. Everything now resolves through `PanelKeyMap`.
 struct PanelSearchFieldRepresentable: NSViewRepresentable {
     @Binding var text: String
     var placeholder: String
     var fontSize: CGFloat
-    var onMove: (Int) -> Void
-    var onSubmit: (NSEvent.ModifierFlags) -> Void
-    var onCancel: () -> Void
-    var onTab: () -> Void
-    var onDelete: () -> Void
+    /// Returns true when the panel claimed the key, false to let the field have it.
+    var route: (Selector, Bool) -> Bool
     /// Change this value to pull focus back into the field.
     var focusToken: Int
-
-    init(
-        text: Binding<String>,
-        placeholder: String = "Summon anything…",
-        fontSize: CGFloat = 18,
-        focusToken: Int = 0,
-        onMove: @escaping (Int) -> Void = { _ in },
-        onSubmit: @escaping (NSEvent.ModifierFlags) -> Void = { _ in },
-        onCancel: @escaping () -> Void = {},
-        onTab: @escaping () -> Void = {},
-        onDelete: @escaping () -> Void = {}
-    ) {
-        _text = text
-        self.placeholder = placeholder
-        self.fontSize = fontSize
-        self.focusToken = focusToken
-        self.onMove = onMove
-        self.onSubmit = onSubmit
-        self.onCancel = onCancel
-        self.onTab = onTab
-        self.onDelete = onDelete
-    }
 
     func makeNSView(context: Context) -> NSTextField {
         let field = NSTextField(string: text)
@@ -58,6 +37,8 @@ struct PanelSearchFieldRepresentable: NSViewRepresentable {
     }
 
     func updateNSView(_ field: NSTextField, context: Context) {
+        // Guarded: writing into a field that already holds this text would disturb an
+        // active field editor mid-edit.
         if field.stringValue != text { field.stringValue = text }
         field.placeholderString = placeholder
         field.font = .systemFont(ofSize: fontSize, weight: .regular)
@@ -89,38 +70,11 @@ struct PanelSearchFieldRepresentable: NSViewRepresentable {
         }
 
         func control(_ control: NSControl, textView: NSTextView,
-                            doCommandBy selector: Selector) -> Bool {
-            let modifiers = NSApp.currentEvent?.modifierFlags
-                .intersection(.deviceIndependentFlagsMask) ?? []
-
-            switch selector {
-            case #selector(NSResponder.moveUp(_:)):
-                parent.onMove(-1); return true
-            case #selector(NSResponder.moveDown(_:)):
-                parent.onMove(1); return true
-            case #selector(NSResponder.scrollPageUp(_:)), #selector(NSResponder.pageUp(_:)):
-                parent.onMove(-8); return true
-            case #selector(NSResponder.scrollPageDown(_:)), #selector(NSResponder.pageDown(_:)):
-                parent.onMove(8); return true
-            case #selector(NSResponder.insertNewline(_:)),
-                 #selector(NSResponder.insertLineBreak(_:)),
-                 #selector(NSResponder.insertNewlineIgnoringFieldEditor(_:)):
-                parent.onSubmit(modifiers); return true
-            case #selector(NSResponder.cancelOperation(_:)):
-                parent.onCancel(); return true
-            case #selector(NSResponder.insertTab(_:)), #selector(NSResponder.insertBacktab(_:)):
-                parent.onTab(); return true
-            case #selector(NSResponder.deleteBackward(_:)):
-                // Only intercept a delete on an already-empty field, so ⌫ still edits.
-                if control.stringValue.isEmpty { parent.onDelete(); return true }
-                return false
-            default:
-                return false
-            }
+                     doCommandBy selector: Selector) -> Bool {
+            parent.route(selector, textView.string.isEmpty)
         }
     }
 }
-
 
 /// Public wrapper: the AppKit field in normal use, a static rendering while
 /// snapshotting for design review.
@@ -129,11 +83,7 @@ public struct PanelSearchField: View {
     var placeholder: String
     var fontSize: CGFloat
     var focusToken: Int
-    var onMove: (Int) -> Void
-    var onSubmit: (NSEvent.ModifierFlags) -> Void
-    var onCancel: () -> Void
-    var onTab: () -> Void
-    var onDelete: () -> Void
+    var route: (Selector, Bool) -> Bool
 
     @Environment(\.isSnapshotting) private var isSnapshotting
 
@@ -142,21 +92,13 @@ public struct PanelSearchField: View {
         placeholder: String = "Summon anything…",
         fontSize: CGFloat = 18,
         focusToken: Int = 0,
-        onMove: @escaping (Int) -> Void = { _ in },
-        onSubmit: @escaping (NSEvent.ModifierFlags) -> Void = { _ in },
-        onCancel: @escaping () -> Void = {},
-        onTab: @escaping () -> Void = {},
-        onDelete: @escaping () -> Void = {}
+        route: @escaping (Selector, Bool) -> Bool = { _, _ in false }
     ) {
         _text = text
         self.placeholder = placeholder
         self.fontSize = fontSize
         self.focusToken = focusToken
-        self.onMove = onMove
-        self.onSubmit = onSubmit
-        self.onCancel = onCancel
-        self.onTab = onTab
-        self.onDelete = onDelete
+        self.route = route
     }
 
     public var body: some View {
@@ -174,8 +116,7 @@ public struct PanelSearchField: View {
         } else {
             PanelSearchFieldRepresentable(
                 text: $text, placeholder: placeholder, fontSize: fontSize,
-                focusToken: focusToken, onMove: onMove, onSubmit: onSubmit,
-                onCancel: onCancel, onTab: onTab, onDelete: onDelete
+                route: route, focusToken: focusToken
             )
         }
     }

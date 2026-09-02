@@ -9,10 +9,11 @@ public struct PanelView: View {
     @Bindable var model: AppModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.isSnapshotting) private var isSnapshotting
-    @State private var focusToken = 0
     @State private var appeared = false
     /// Resolved off the render path. Never call previewData(for:) from `body`.
     @State private var preview: AppModel.PreviewData?
+    /// Debounced. `needsPreview` flips per row; this only follows once you stop on one.
+    @State private var showPreview = false
 
     /// Entrance is state-driven, which a synchronous image render never advances — so
     /// treat the panel as already settled while snapshotting.
@@ -53,6 +54,13 @@ public struct PanelView: View {
             RoundedRectangle(cornerRadius: Theme.Radius.panel, style: .continuous)
                 .strokeBorder(Theme.hairline, lineWidth: 1)
         )
+        .overlay(alignment: .bottomTrailing) {
+            if model.overlay != .none {
+                ActionMenu(model: model)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(reduceMotion ? nil : Theme.sheet, value: model.overlay)
         .overlay(alignment: .bottom) {
             if let toast = model.toast {
                 ToastView(toast: toast)
@@ -62,18 +70,29 @@ public struct PanelView: View {
         }
         .animation(reduceMotion ? nil : Theme.panelIn, value: model.toast)
         .summonTransition(isVisible: settled, reduceMotion: reduceMotion)
-        .onAppear { appeared = true; focusToken += 1 }
+        .onAppear { appeared = true }
         .onDisappear { appeared = false }
-        .onChange(of: model.mode) { _, _ in focusToken += 1 }
-        .onDrop(of: [.fileURL], isTargeted: nil) { providers in
+                .onDrop(of: [.fileURL], isTargeted: nil) { providers in
             loadDroppedURLs(providers)
             return true
         }
         .task(id: model.selectedResult?.id) {
-            guard let id = model.selectedResult?.id else { preview = nil; return }
+            guard let id = model.selectedResult?.id else {
+                preview = nil
+                showPreview = false
+                return
+            }
+            // Collapsing is immediate; opening waits. Arrowing past an image should
+            // not flash the pane open for one frame, but a list that stays wide while
+            // you scroll past a PDF is never wrong — it just has not opened yet.
+            if !needsPreview { showPreview = false }
             try? await Task.sleep(for: .milliseconds(20))
             guard !Task.isCancelled else { return }
             preview = model.previewData(for: id)
+
+            try? await Task.sleep(for: .milliseconds(160))
+            guard !Task.isCancelled else { return }
+            showPreview = needsPreview
         }
     }
 
@@ -88,12 +107,10 @@ public struct PanelView: View {
             PanelSearchField(
                 text: $model.query,
                 placeholder: placeholder,
-                focusToken: focusToken,
-                onMove: { model.moveSelection(by: $0) },
-                onSubmit: handleSubmit,
-                onCancel: { model.dismissPanel() },
-                onTab: {},
-                onDelete: {}
+                focusToken: model.queryFocusToken,
+                route: { selector, isEmpty in
+                    model.routeFieldSelector(selector, fieldIsEmpty: isEmpty)
+                }
             )
             .frame(height: 24)
 
@@ -151,9 +168,9 @@ public struct PanelView: View {
     private var searchBody: some View {
         HStack(spacing: 0) {
             resultsList
-                .frame(maxWidth: needsPreview ? Self.width * Self.listFraction : .infinity)
+                .frame(maxWidth: showPreview ? Self.width * Self.listFraction : .infinity)
 
-            if needsPreview, let selected = model.selectedResult {
+            if showPreview, let selected = model.selectedResult {
                 Divider().overlay(Theme.hairline)
                 PanelPreview(
                     snapshot: selected.item,
@@ -165,7 +182,7 @@ public struct PanelView: View {
                 .id(selected.id)
             }
         }
-        .animation(reduceMotion ? nil : Theme.previewSplit, value: needsPreview)
+        .animation(reduceMotion ? nil : Theme.previewSplit, value: showPreview)
     }
 
     @ViewBuilder
@@ -243,9 +260,17 @@ public struct PanelView: View {
         HStack(spacing: Theme.Space.l) {
             switch model.mode {
             case .search:
-                Text("Summon")
-                    .font(Theme.Typography.meta)
-                    .foregroundStyle(Theme.tertiaryText)
+                if let scope = model.folderScope {
+                    Label(scope, systemImage: "folder")
+                        .font(Theme.Typography.meta)
+                        .foregroundStyle(Theme.secondaryText)
+                        .labelStyle(.titleAndIcon)
+                    KeyHint("⌫", "Back")
+                } else {
+                    Text("Summon")
+                        .font(Theme.Typography.meta)
+                        .foregroundStyle(Theme.tertiaryText)
+                }
                 Spacer()
                 if !model.accessibility.isTrusted && model.settings.autoPaste {
                     Label("Copies until Accessibility is allowed", systemImage: "info.circle")
@@ -253,8 +278,13 @@ public struct PanelView: View {
                         .foregroundStyle(Theme.warning)
                         .labelStyle(.titleAndIcon)
                 }
-                KeyHint("↩", pasteHintLabel)
-                KeyHint("⌘K", "Actions")
+                // Reads model.modifiers.held, so holding ⌘ redraws this strip and
+                // nothing else. See PanelModifierState.
+                PanelFooterHints(modifiers: model.modifiers,
+                                 defaultLabel: pasteHintLabel,
+                                 canOpen: model.selectedResult?.item.kind.isBlobBacked == true,
+                                 canDrillIn: model.selectedResult?.item.folderPath.isEmpty == false
+                                     && model.folderScope == nil)
 
             case .fill:
                 KeyHint("⇥", "Next field")
@@ -284,18 +314,6 @@ public struct PanelView: View {
 
     // MARK: - Actions
 
-    private func handleSubmit(_ modifiers: NSEvent.ModifierFlags) {
-        guard let result = model.selectedResult else { return }
-        if modifiers.contains(.command) {
-            model.use(result.id, style: .copy)
-        } else if modifiers.contains(.option) {
-            model.use(result.id, style: .open)
-        } else if modifiers.contains(.shift) {
-            model.use(result.id, style: .plainPaste)
-        } else {
-            model.use(result.id, style: .paste)
-        }
-    }
 
     private func loadDroppedURLs(_ providers: [NSItemProvider]) {
         Task {

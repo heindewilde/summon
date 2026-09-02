@@ -45,7 +45,7 @@ public final class SearchEngine {
     }
 
     /// The panel's path, grouped for display.
-    public func sections(_ query: String,
+    public func sections(_ query: Query,
                          snapshots: [ItemSnapshot],
                          revision: Int,
                          frontmostBundleID: String? = nil,
@@ -56,7 +56,7 @@ public final class SearchEngine {
             builtRevision = revision
             buildCount &+= 1
         }
-        return index.sections(query,
+        return index.sections(query: query,
                               frontmostBundleID: frontmostBundleID,
                               frontmostAppName: frontmostAppName,
                               limit: limit)

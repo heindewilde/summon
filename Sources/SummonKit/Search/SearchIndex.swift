@@ -136,7 +136,17 @@ public struct SearchIndex: Sendable {
                          frontmostAppName: String? = nil,
                          now: Date = Date(),
                          limit: Int = 60) -> [SearchSection] {
-        let query = Query.parse(raw)
+        sections(query: Query.parse(raw), frontmostBundleID: frontmostBundleID,
+                 frontmostAppName: frontmostAppName, now: now, limit: limit)
+    }
+
+    /// Takes an already-parsed query, so a caller can apply a scope the text syntax
+    /// cannot express — a folder whose name contains a space, for instance.
+    public func sections(query: Query,
+                         frontmostBundleID: String? = nil,
+                         frontmostAppName: String? = nil,
+                         now: Date = Date(),
+                         limit: Int = 60) -> [SearchSection] {
         let ranked = search(query: query, frontmostBundleID: frontmostBundleID, now: now, limit: limit)
 
         guard query.text.isEmpty else { return [SearchSection(title: nil, results: ranked)] }

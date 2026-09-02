@@ -94,6 +94,20 @@ enum LiveCapture {
         case "settings":
             window = present(SettingsView(model: model), size: CGSize(width: 560, height: 420))
 
+        case "drop":
+            // Freezes a drop indicator so its weight can actually be reviewed; a real
+            // drag cannot be held still for a screenshot.
+            model.sidebarSelection = .all
+            if let target = model.store.rootFolders().dropFirst().first {
+                let zone: FolderDropZone = switch environment2["SUMMON_LIVE_DROP"] ?? "before" {
+                    case "into": .into
+                    case "after": .after
+                    default: .before
+                }
+                model.folderDropTarget = FolderDropTarget(folderID: target.id, zone: zone)
+            }
+            window = present(MainWindowView(model: model), size: CGSize(width: 1120, height: 700))
+
         default:
             model.sidebarSelection = .folder(
                 model.store.allFolders().first { $0.name == "Client Replies" }?.id ?? UUID()

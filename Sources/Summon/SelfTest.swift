@@ -354,6 +354,31 @@ enum SelfTest {
         }
         model.sidebarSelection = .all
 
+        // MARK: What clicking around the library actually costs
+        func milliseconds(_ iterations: Int, _ body: () -> Void) -> Double {
+            let start = ContinuousClock.now
+            for _ in 0..<iterations { body() }
+            let each = (ContinuousClock.now - start) / iterations
+            return Double(each.components.attoseconds) / 1e15
+        }
+
+        if let document = model.store.snapshots.first(where: { $0.kind == .document }),
+           let snippet = model.store.snapshots.first(where: { $0.kind == .text }) {
+            info("previewData", String(format: "%.2f ms", milliseconds(5) {
+                _ = model.previewData(for: document.id)
+            }))
+            info("store.refresh", String(format: "%.2f ms", milliseconds(5) {
+                model.store.refresh()
+            }))
+            info("copy an item", String(format: "%.2f ms", milliseconds(5) {
+                model.use(snippet.id, style: .copy)
+            }))
+            info("select an item", String(format: "%.2f ms", milliseconds(5) {
+                model.mainSelection = snippet.id
+                _ = model.visibleItems
+            }))
+        }
+
         check("Panel hides on dismiss", !controller.isVisible)
 
         print("=== \(checks - failures)/\(checks) checks passed ===\n")

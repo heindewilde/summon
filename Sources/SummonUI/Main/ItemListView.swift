@@ -161,11 +161,15 @@ struct ItemRow: View {
             .contentShape(.rect)
             // Double-click copies. Registered before the single tap so the single
             // click still only selects.
-            .onTapGesture(count: 2) {
+            // The single tap is the primary gesture so selection is immediate. A
+            // plain `.onTapGesture(count: 2)` ahead of it makes SwiftUI hold every
+            // single click until the double-click interval expires — which is what
+            // made selecting feel laggy, not any work being done.
+            .onTapGesture { onSelect(item.id) }
+            .simultaneousGesture(TapGesture(count: 2).onEnded {
                 onSelect(item.id)
                 model.use(item.id, style: .copy)
-            }
-            .onTapGesture { onSelect(item.id) }
+            })
             .contextMenu { ItemContextMenu(model: model, item: item) }
             .onDrag { model.dragProvider(for: item.id) ?? NSItemProvider() }
     }

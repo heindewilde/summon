@@ -13,8 +13,9 @@ repeatedly, and optimises hard for the moment of retrieval.
 ## Build and run
 
 ```bash
-Scripts/build-app.sh          # release build → dist/Summon.app
-Scripts/run.sh                # debug build, then launch
+Scripts/create-signing-identity.sh   # once — see "Signing" below
+Scripts/build-app.sh                 # release build → dist/Summon.app
+Scripts/run.sh                       # debug build, then launch
 open dist/Summon.app
 ```
 
@@ -22,9 +23,18 @@ Requires macOS 26 and Xcode 26 (Swift 6.1+). No external dependencies — the wh
 app builds from the system SDK.
 
 ```bash
-swift test                    # 103 tests over the logic layer
-SUMMON_SELFTEST=1 SUMMON_DEMO=1 ./dist/Summon.app/Contents/MacOS/Summon
+swift test                           # 113 tests over the logic layer
+SUMMON_DEMO=1 SUMMON_SELFTEST=1 ./dist/Summon.app/Contents/MacOS/Summon
+SUMMON_DEMO=1 SUMMON_PASTETEST=1 open -n dist/Summon.app   # real auto-paste round trip
 ```
+
+The self-test covers hot key registration, panel window configuration, search,
+dragging, the vault lifecycle and rich-text round trips. The paste test is
+separate because it needs a real Accessibility grant: it opens a scratch document
+in TextEdit, summons a snippet into it, and reads the result back through the
+Accessibility API to confirm the text, the substituted fill-in values and the
+caret position. It refuses to run if anything but TextEdit is frontmost, so it
+can never synthesise a paste into your own documents.
 
 `SUMMON_DEMO=1` points the app at a throwaway library (`Summon-Demo`) so you can
 experiment without touching your real one.
@@ -110,11 +120,34 @@ heuristics. Settings shows the real status rather than pretending.
   `RegisterEventHotKey` and work immediately. Accessibility is used for exactly one
   thing: pressing ⌘V for you. Without it Summon copies and shows "press ⌘V", which
   is one extra keystroke and nothing else.
-- **Ad-hoc signing changes the code hash on every build**, so macOS may drop the
-  Accessibility grant after a rebuild. `dist/Summon.app` is a stable path to
-  minimise this; signing with a Developer ID and notarising removes it permanently
-  (not set up here — v1 is deliberately ad-hoc signed for local use).
+- **TCC attributes a permission to the responsible process.** Launch Summon with
+  `open` rather than exec'ing `Contents/MacOS/Summon` from a shell — a binary run
+  from a terminal inherits the terminal as its responsible process, and reports
+  Accessibility as denied even when the grant is in place.
 - **No sync, no iOS app yet.** Deliberate: the schema is ready, the code is not.
+
+## Signing
+
+`Scripts/create-signing-identity.sh` creates a self-signed code-signing certificate
+("Summon Local Dev") in your login keychain, and `build-app.sh` uses it when present.
+
+This is not ceremony. TCC grants such as Accessibility are bound to an app's code
+signature, and an ad-hoc signature is a hash of the binary — so every rebuild looks
+like a different app and silently loses the permission. With a certificate the
+designated requirement is stable:
+
+```
+identifier "com.heindewilde.summon" and certificate leaf = H"…"
+```
+
+so the grant is given once and survives every rebuild. The certificate is local
+only: no other Mac trusts it, and deleting it from Keychain Access reverts the build
+to ad-hoc signing with a warning.
+
+Keychain items are bound to the signature too, so changing identity makes a
+previously stored Touch ID key unreachable. The PIN still works — the vault master
+key is wrapped twice, independently — and re-enabling Touch ID in Settings rewraps
+it.
 
 ## Development notes
 

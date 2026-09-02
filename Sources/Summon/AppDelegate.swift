@@ -22,6 +22,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         applyActivationPolicy()
 
+        if PasteTest.isRequested {
+            Task { await PasteTest.run() }
+            return
+        }
+
         if let live = LiveCapture.mode {
             Task { await LiveCapture.run(mode: live, controller: controller) }
             return

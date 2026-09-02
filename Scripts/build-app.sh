@@ -98,11 +98,26 @@ ENT
 
 printf 'APPL????' > "$CONTENTS/PkgInfo"
 
-echo "==> Signing (ad-hoc)"
-codesign --force --deep --sign - \
-  --entitlements "$DIST/Summon.entitlements" \
-  --identifier "$BUNDLE_ID" \
-  "$APP"
+# A stable signing identity matters more than it sounds: TCC grants (Accessibility)
+# are bound to the code signature, and an ad-hoc signature is a hash of the binary,
+# so every rebuild looks like a new app and silently loses the permission. Signing
+# with a certificate keeps the grant across rebuilds.
+# Create one with Scripts/create-signing-identity.sh.
+SIGN_IDENTITY="${SUMMON_SIGN_IDENTITY:-Summon Local Dev}"
+if security find-identity -v -p codesigning 2>/dev/null | grep -q "\"$SIGN_IDENTITY\""; then
+  echo "==> Signing as '$SIGN_IDENTITY'"
+  codesign --force --deep --sign "$SIGN_IDENTITY" \
+    --entitlements "$DIST/Summon.entitlements" \
+    --identifier "$BUNDLE_ID" \
+    "$APP"
+else
+  echo "==> Signing (ad-hoc — Accessibility will need re-granting after each build)"
+  echo "    Run Scripts/create-signing-identity.sh once to avoid that."
+  codesign --force --deep --sign - \
+    --entitlements "$DIST/Summon.entitlements" \
+    --identifier "$BUNDLE_ID" \
+    "$APP"
+fi
 codesign --verify --verbose=1 "$APP" 2>&1 | sed 's/^/    /'
 
 # Nudge Launch Services so the new bundle is registered.

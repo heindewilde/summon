@@ -97,7 +97,6 @@ public struct LibraryRow: View {
             RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous)
                 .fill(isSelected ? Theme.selection : .clear)
         }
-        .contentShape(.rect)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityLabel)
         .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)

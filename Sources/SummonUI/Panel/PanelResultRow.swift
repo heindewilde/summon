@@ -35,6 +35,7 @@ public struct PanelResultRow: View {
                    isSelected: isSelected,
                    shortcutIndex: index,
                    trailingText: item.kind.displayName)
+            .contentShape(.rect)
             .onTapGesture(perform: onActivate)
             .onDrag { dragProvider() ?? NSItemProvider() }
             .contextMenu {

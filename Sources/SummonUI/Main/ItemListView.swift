@@ -7,6 +7,7 @@ import SummonKit
 public struct ItemListView: View {
     @Bindable var model: AppModel
     let items: [ItemSnapshot]
+    @State private var gridColumns = 1
 
     public init(model: AppModel, items: [ItemSnapshot]) {
         self.model = model
@@ -52,27 +53,30 @@ public struct ItemListView: View {
 
     private var grid: some View {
         ScrollView {
-            GeometryReader { geometry in
-                let columns = max(1, Int(geometry.size.width / (150 + Theme.Space.s)))
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: Theme.Space.s)],
-                          spacing: Theme.Space.s) {
-                    ForEach(items) { item in
-                        ItemCard(model: model, item: item, isSelected: model.mainSelection == item.id)
-                            .onTapGesture { model.mainSelection = item.id }
-                    }
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: Theme.Space.s)],
+                      spacing: Theme.Space.s) {
+                ForEach(items) { item in
+                    ItemCard(model: model, item: item, isSelected: model.mainSelection == item.id)
+                        .onTapGesture { model.mainSelection = item.id }
                 }
-                .padding(Theme.Space.m)
-                // The grid was mouse-only: ItemCard had a tap gesture and nothing
-                // else, so a whole view mode could not be reached from the keyboard.
-                // Up and down move a full row, which is what "down" means in a grid.
-                .focusable()
-                .focusEffectDisabled()
-                .onKeyPress(.upArrow) { model.moveMainSelection(by: -columns); return .handled }
-                .onKeyPress(.downArrow) { model.moveMainSelection(by: columns); return .handled }
-                .onKeyPress(.leftArrow) { model.moveMainSelection(by: -1); return .handled }
-                .onKeyPress(.rightArrow) { model.moveMainSelection(by: 1); return .handled }
             }
+            .padding(Theme.Space.m)
         }
+        // Measured on the scroll view, not with a GeometryReader wrapped around the
+        // grid: a GeometryReader inside a ScrollView is greedy in the scroll axis and
+        // leaves the content with no height to lay out in.
+        .onGeometryChange(for: Int.self) { proxy in
+            max(1, Int(proxy.size.width / (150 + Theme.Space.s)))
+        } action: { gridColumns = $0 }
+        // The grid was mouse-only: ItemCard had a tap gesture and nothing else, so a
+        // whole view mode could not be reached from the keyboard. Up and down move a
+        // full row, which is what "down" means in a grid.
+        .focusable()
+        .focusEffectDisabled()
+        .onKeyPress(.upArrow) { model.moveMainSelection(by: -gridColumns); return .handled }
+        .onKeyPress(.downArrow) { model.moveMainSelection(by: gridColumns); return .handled }
+        .onKeyPress(.leftArrow) { model.moveMainSelection(by: -1); return .handled }
+        .onKeyPress(.rightArrow) { model.moveMainSelection(by: 1); return .handled }
     }
 
     private var emptyState: some View {
@@ -121,6 +125,11 @@ struct ItemRow: View {
         // grown three heights and three type scales; now there is one component.
         LibraryRow(item: item, isSelected: model.mainSelection == item.id)
             .contextMenu { ItemContextMenu(model: model, item: item) }
+            // .onDrag swallows the click that a List uses to select, so items in the
+            // library were never clickable — and because clicking is how the list
+            // takes focus, arrow keys never worked there either. A simultaneous
+            // gesture sets the selection without taking the drag away.
+            .simultaneousGesture(TapGesture().onEnded { model.mainSelection = item.id })
             .onDrag { model.dragProvider(for: item.id) ?? NSItemProvider() }
     }
 }

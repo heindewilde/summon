@@ -37,6 +37,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        if UIProbe.isRequested {
+            Task { await UIProbe.run() }
+            return
+        }
+
         if SelfTest.isRequested {
             Task { await SelfTest.run(controller: controller) }
             return

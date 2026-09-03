@@ -47,8 +47,13 @@ public struct PanelResultRow: View {
 
 }
 
-/// The bare type glyph. No tinted tile behind it — in a monochrome list the symbol is
-/// the only coloured element, and a filled capsule would compete with the selection.
+/// The bare type glyph, i.e. `KindIcon(style: .bare)`.
+///
+/// Its old comment said there was no tile because "in a monochrome list the symbol is
+/// the only coloured element" — reasoning that assumed a neutral selection. The list is
+/// not monochrome any more, and the conclusion survives for a better reason: the glyph
+/// now sits *on* the accent when its row is chosen, so a second filled shape would put
+/// three layers of violet in one 20pt square.
 public struct KindGlyph: View {
     public let kind: ItemKind
     public var isLocked = false
@@ -61,10 +66,6 @@ public struct KindGlyph: View {
     }
 
     public var body: some View {
-        Image(systemName: isLocked ? "lock.fill" : kind.symbolName)
-            .font(.system(size: size, weight: .regular))
-            .foregroundStyle(isLocked ? Theme.tertiaryText : Theme.color(for: kind))
-            .frame(width: 20, height: 20)
-            .accessibilityHidden(true)
+        KindIcon(kind: kind, style: .bare, size: size, isLocked: isLocked)
     }
 }

@@ -3,6 +3,56 @@ import SwiftUI
 import SummonKit
 
 /// The colour-coded glyph that tells you at a glance what kind of thing a row is.
+///
+/// One component with two styles, because there were two — `KindBadge` drew a tinted
+/// tile and `KindGlyph` drew a bare symbol, for the same semantic job, on different
+/// surfaces, with nothing written down about which surface got which. The rule is:
+///
+/// - `.bare` in a content row, where the row already has a selection fill and a title
+///   carrying weight, and a second filled shape would compete with both;
+/// - `.tile` where the glyph *is* the content — a grid card, a 20pt tray row.
+///
+/// Kind colour is always the glyph and never the fill behind it. That is what lets it
+/// share violet with the accent: the accent is only ever behind or around.
+public struct KindIcon: View {
+    public enum Style: Sendable { case bare, tile }
+
+    public let kind: ItemKind
+    public var style: Style = .bare
+    public var size: CGFloat = 30
+    public var isLocked = false
+
+    public init(kind: ItemKind, style: Style = .bare, size: CGFloat = 30, isLocked: Bool = false) {
+        self.kind = kind
+        self.style = style
+        self.size = size
+        self.isLocked = isLocked
+    }
+
+    private var symbol: some View {
+        Image(systemName: isLocked ? "lock.fill" : kind.symbolName)
+            .font(.system(size: style == .tile ? size * 0.44 : size,
+                          weight: style == .tile ? .medium : .regular))
+            .foregroundStyle(isLocked ? Theme.tertiaryText : Theme.color(for: kind))
+    }
+
+    public var body: some View {
+        Group {
+            switch style {
+            case .tile:
+                RoundedRectangle(cornerRadius: size * 0.29, style: .continuous)
+                    .fill(Theme.color(for: kind).opacity(0.16))
+                    .overlay { symbol }
+                    .frame(width: size, height: size)
+            case .bare:
+                symbol.frame(width: Theme.Icon.slot, height: Theme.Icon.slot)
+            }
+        }
+        .accessibilityHidden(true)
+    }
+}
+
+/// The tile style, under the name four call sites already use.
 public struct KindBadge: View {
     public let kind: ItemKind
     public var size: CGFloat = 30
@@ -15,15 +65,7 @@ public struct KindBadge: View {
     }
 
     public var body: some View {
-        RoundedRectangle(cornerRadius: size * 0.29, style: .continuous)
-            .fill(Theme.color(for: kind).opacity(0.16))
-            .overlay {
-                Image(systemName: isLocked ? "lock.fill" : kind.symbolName)
-                    .font(.system(size: size * 0.44, weight: .medium))
-                    .foregroundStyle(Theme.color(for: kind))
-            }
-            .frame(width: size, height: size)
-            .accessibilityHidden(true)
+        KindIcon(kind: kind, style: .tile, size: size, isLocked: isLocked)
     }
 }
 
@@ -104,11 +146,13 @@ public struct TagChip: View {
 
     public var body: some View {
         Text("#\(name)")
-            .font(.system(size: 10.5, weight: .medium))
-            .foregroundStyle(isActive ? Color.white : Theme.secondaryText)
+            .font(Theme.Typography.micro.weight(.medium))
+            // Was `Color.white` on a `Theme.primaryText` fill — which is white on near
+            // black in light, and white on near white in dark. Accidentally right once.
+            .foregroundStyle(isActive ? Theme.onAccent : Theme.secondaryText)
             .padding(.horizontal, Theme.Space.xs)
             .padding(.vertical, 2)
-            .background(isActive ? Theme.primaryText : Theme.hairline, in: .capsule)
+            .background(isActive ? Theme.accent : Theme.hairline, in: .capsule)
     }
 }
 
@@ -278,7 +322,9 @@ public struct LockPill: View {
         .foregroundStyle(Theme.secondaryText)
         .padding(.horizontal, 5)
         .padding(.vertical, 2)
-        .background(Theme.selection, in: .capsule)
+        // `Theme.selection` until the accent landed, at which point a locked item
+        // started wearing the colour that means "this is the row you are on".
+        .background(Theme.surface, in: .capsule)
     }
 }
 

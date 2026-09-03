@@ -1,0 +1,244 @@
+import SwiftUI
+
+// The vocabulary the surfaces are built from.
+//
+// Each thing here existed already, several times over, written out by hand at every
+// call site. The card shape was reimplemented ten times against one shared modifier
+// used once; the "selected or hovering" fill nine times; the uppercased section header
+// five times, one of which had already drifted off its own token. Duplication that
+// wide is not a tidiness problem — it is why a change to the design system did not
+// arrive everywhere, and why two surfaces could disagree about what selection looks
+// like without anyone noticing.
+
+// MARK: - Row state
+
+/// What a row is currently saying about itself.
+///
+/// An enum rather than a pair of booleans, because the states are not independent and
+/// the boolean version let a caller pass hover in as selection — which `MenuBarRow`
+/// did, invisibly, right up until selection started meaning something.
+public enum RowState: Sendable {
+    case idle
+    /// The pointer is here. Neutral: hover follows the mouse, and an accent that
+    /// chases the cursor across a list strobes.
+    case hover
+    /// Chosen, and the keyboard acts on it.
+    case selected
+    /// Chosen, but the keyboard is in another pane. The macOS convention, and in a
+    /// three-pane window the only way to say which column the arrow keys belong to.
+    case selectedInactive
+    /// Where you are in the navigation, which is not the same as what has focus.
+    case navActive
+    /// A drop lands inside this row.
+    case dropTarget
+
+    var fill: Color {
+        switch self {
+        case .idle, .dropTarget: .clear
+        case .hover: Theme.rowHover
+        case .selected: Theme.selection
+        case .selectedInactive: Theme.selectionInactive
+        case .navActive: Theme.navActive
+        }
+    }
+}
+
+public extension View {
+    /// The background every selectable row shares.
+    func rowSurface(_ state: RowState, radius: CGFloat = Theme.Radius.small) -> some View {
+        background {
+            RoundedRectangle(cornerRadius: radius, style: .continuous)
+                .fill(state.fill)
+        }
+        .overlay {
+            // A ring, not a fill: a drop target drawn with the selection fill says
+            // "this row is selected" instead — one pixel, two meanings.
+            if state == .dropTarget {
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .strokeBorder(Theme.dropTarget, lineWidth: 1.5)
+            }
+        }
+        .overlay(alignment: .leading) {
+            // "Where you are" needs to differ from "what the keys act on" by more than
+            // four per cent of alpha. Side by side in the gallery the two fills were
+            // indistinguishable, which is a distinction not worth a token — so this one
+            // is structural. A rail reads instantly and survives at any tint.
+            if state == .navActive {
+                Capsule()
+                    .fill(Theme.accent)
+                    .frame(width: 2.5, height: 16)
+                    .padding(.leading, 2)
+            }
+        }
+        .animation(Theme.hover, value: state)
+    }
+
+    /// A shadow from the elevation scale.
+    func elevation(_ shadow: Theme.Shadow) -> some View {
+        self.shadow(color: shadow.color, radius: shadow.radius, y: shadow.y)
+    }
+}
+
+// MARK: - Rule
+
+/// A hairline. `Divider()` paints the system separator, which is a different grey from
+/// this app's hairline — so most of the codebase wrote `Divider().overlay(Theme.hairline)`
+/// and thirteen places forgot, leaving two rule colours in one window.
+public struct Rule: View {
+    public var axis: Axis = .horizontal
+    public init(_ axis: Axis = .horizontal) { self.axis = axis }
+
+    public var body: some View {
+        Rectangle()
+            .fill(Theme.hairline)
+            .frame(width: axis == .vertical ? 1 : nil,
+                   height: axis == .horizontal ? 1 : nil)
+    }
+}
+
+// MARK: - Section header
+
+/// The uppercased label above a group of rows.
+public struct SectionHeader: View {
+    public let title: String
+    public init(_ title: String) { self.title = title }
+
+    public var body: some View {
+        Text(title.uppercased())
+            .font(Theme.Typography.section)
+            .foregroundStyle(Theme.tertiaryText)
+            .tracking(0.5)
+            .accessibilityAddTraits(.isHeader)
+    }
+}
+
+// MARK: - Status
+
+/// "This is done" / "this needs you" / "this will destroy something", as one shape.
+public struct StatusBadge: View {
+    public enum Tone: Sendable { case success, warning, danger, accent }
+
+    public let tone: Tone
+    public let label: String
+    public init(_ label: String, tone: Tone = .success) {
+        self.label = label
+        self.tone = tone
+    }
+
+    private var colour: Color {
+        switch tone {
+        case .success: Theme.success
+        case .warning: Theme.warning
+        case .danger: Theme.danger
+        case .accent: Theme.accent
+        }
+    }
+
+    private var symbol: String {
+        switch tone {
+        case .success, .accent: "checkmark.circle.fill"
+        case .warning: "exclamationmark.triangle.fill"
+        case .danger: "xmark.octagon.fill"
+        }
+    }
+
+    public var body: some View {
+        Label(label, systemImage: symbol)
+            .font(Theme.Typography.caption)
+            .foregroundStyle(colour)
+    }
+}
+
+// MARK: - Key cap
+
+/// One key, drawn as a key. Extracted from `KeyHint` so the menu bar's header — which
+/// had hand-copied the same rounded rect and radius — can stop keeping its own.
+public struct KeyCap: View {
+    public let keys: String
+    public init(_ keys: String) { self.keys = keys }
+
+    public var body: some View {
+        Text(keys)
+            .font(Theme.Typography.micro.weight(.semibold))
+            .foregroundStyle(Theme.secondaryText)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 1.5)
+            .background(Theme.hairline, in: .rect(cornerRadius: Theme.Radius.small - 1))
+    }
+}
+
+// MARK: - Buttons
+
+/// The app's buttons. `.bordered` and `.borderedProminent` are AppKit's capsules with
+/// AppKit's hover chrome, and they sat inside custom panel surfaces looking borrowed.
+public struct SummonButtonStyle: ButtonStyle {
+    public enum Kind: Sendable { case primary, quiet, destructive }
+
+    @Environment(\.isEnabled) private var isEnabled
+    public var kind: Kind
+    public init(_ kind: Kind = .quiet) { self.kind = kind }
+
+    public func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(Theme.Typography.title.weight(.medium))
+            .foregroundStyle(foreground)
+            .padding(.horizontal, kind == .primary ? Theme.Space.l : Theme.Space.m)
+            .padding(.vertical, Theme.Space.s)
+            .background {
+                RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous)
+                    .fill(background)
+                    .overlay {
+                        if kind != .primary {
+                            RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous)
+                                .strokeBorder(Theme.hairline, lineWidth: 1)
+                        }
+                    }
+            }
+            .opacity(configuration.isPressed ? 0.75 : (isEnabled ? 1 : 0.5))
+            .animation(Theme.hover, value: configuration.isPressed)
+    }
+
+    private var foreground: Color {
+        switch kind {
+        // The accent inverts between appearances, so what reads on it inverts too.
+        case .primary: Theme.onAccent
+        case .quiet: Theme.primaryText
+        case .destructive: Theme.danger
+        }
+    }
+
+    private var background: Color {
+        switch kind {
+        case .primary: Theme.accent
+        case .quiet, .destructive: Theme.surface
+        }
+    }
+}
+
+public extension ButtonStyle where Self == SummonButtonStyle {
+    static var summonPrimary: SummonButtonStyle { SummonButtonStyle(.primary) }
+    static var summonQuiet: SummonButtonStyle { SummonButtonStyle(.quiet) }
+    static var summonDestructive: SummonButtonStyle { SummonButtonStyle(.destructive) }
+}
+
+// MARK: - Fields
+
+public extension View {
+    /// A text field's well. A `ViewModifier` rather than a `TextFieldStyle` because the
+    /// protocol's only real entry point is underscored; the call site pairs this with
+    /// `.textFieldStyle(.plain)`, exactly as the three hand-rolled wells already did.
+    func summonField(focused: Bool = false, radius: CGFloat = Theme.Radius.small) -> some View {
+        padding(.horizontal, Theme.Space.s)
+            .padding(.vertical, 5)
+            .background {
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .fill(Theme.surface)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: radius, style: .continuous)
+                            .strokeBorder(focused ? Theme.focusRing : Theme.hairline,
+                                          lineWidth: focused ? 2 : 1)
+                    }
+            }
+            .animation(Theme.hover, value: focused)
+    }
+}

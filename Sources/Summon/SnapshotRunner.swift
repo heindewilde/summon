@@ -82,6 +82,12 @@ enum SnapshotRunner {
             render(SettingsView(model: model), name: "settings", scheme: scheme,
                    size: CGSize(width: 560, height: 420))
 
+            // The design system with nothing on top of it. The token and component
+            // stages change the vocabulary without adopting it, so this is the only
+            // frame in which their work is visible at all.
+            render(ComponentGallery(), name: "gallery", scheme: scheme,
+                   size: CGSize(width: 760, height: 660))
+
             await renderLockSurfaces(model: model, scheme: scheme)
         }
 

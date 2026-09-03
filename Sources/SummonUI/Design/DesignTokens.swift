@@ -30,12 +30,17 @@ public enum Theme {
 
     // MARK: - Surfaces
 
+    // The ground carries the identity, and for a long time it did not: the accent said
+    // "you are here" while the surface under it stayed the same neutral grey a stock
+    // utility ships with. These are violet-cast and deeper, so the app is *made of*
+    // something rather than merely marked with it.
+
     /// The panel and window ground, layered over the vibrancy material.
-    public static let chrome = Color(nsColor: .dyn(light: .srgb(0.97, 0.97, 0.97, 0.72),
-                                                  dark: .srgb(0.11, 0.11, 0.12, 0.72)))
+    public static let chrome = Color(nsColor: .dyn(light: .srgb(0.965, 0.960, 0.995, 0.86),
+                                                  dark: .srgb(0.043, 0.040, 0.063, 0.92)))
     /// Sheets and popovers that sit above the chrome — the ⌘K action panel.
-    public static let raised = Color(nsColor: .dyn(light: .srgb(1, 1, 1, 0.98),
-                                                   dark: .srgb(0.145, 0.145, 0.157, 0.98)))
+    public static let raised = Color(nsColor: .dyn(light: .srgb(1, 0.995, 1, 0.96),
+                                                   dark: .srgb(0.098, 0.090, 0.137, 0.94)))
     // MARK: - State
     //
     // The four states are deliberately different in kind, not just in strength, so
@@ -51,8 +56,16 @@ public enum Theme {
                                                      dark: .srgb(0.055, 0.055, 0.071)))
 
     /// The selected row: keys act on this. A tint, never solid.
-    public static let selection = Color(nsColor: .dyn(light: .srgb(0.36, 0.25, 0.78, 0.14),
-                                                      dark: .srgb(0.64, 0.55, 1.00, 0.18)))
+    ///
+    /// Stronger than it needed to be on a neutral ground: once the ground is itself
+    /// violet-cast, a 14% violet fill on it is nearly the same colour, and selection
+    /// stops reading. It is paired with `selectionEdge` for the same reason.
+    public static let selection = Color(nsColor: .dyn(light: .srgb(0.36, 0.25, 0.78, 0.20),
+                                                      dark: .srgb(0.68, 0.60, 1.00, 0.24)))
+    /// The lit top edge of a selected row — the tell that a pane of glass is sitting
+    /// on the surface rather than the surface having changed colour.
+    public static let selectionEdge = Color(nsColor: .dyn(light: .srgb(0.36, 0.25, 0.78, 0.30),
+                                                          dark: .srgb(0.86, 0.82, 1.00, 0.30)))
     /// Still selected, but the keyboard is in another pane. The old neutral selection,
     /// kept — this is the macOS convention, and in a three-pane window it is the only
     /// way to say which column the arrow keys belong to.
@@ -68,16 +81,26 @@ public enum Theme {
     /// Keystrokes land in this control. One per screen, ever.
     public static let focusRing = Color(nsColor: .dyn(light: .srgb(0.36, 0.25, 0.78, 0.75),
                                                       dark: .srgb(0.64, 0.55, 1.00, 0.75)))
+    /// The bloom: the icon's light, spread across a whole surface rather than pooled
+    /// behind one object. This is the single biggest reason the onboarding looks like
+    /// the icon and the rest of the app did not — the accent said where you were, but
+    /// the ground it said it on was the same neutral grey any utility ships with.
+    public static let bloom = Color(nsColor: .dyn(light: .srgb(0.42, 0.30, 0.92, 0.11),
+                                                  dark: .srgb(0.46, 0.34, 0.96, 0.20)))
+
     /// A drop lands here. Its own token because a drop target drawn with `selection`
     /// says "this folder is selected" instead — the same pixel, two meanings.
     public static let dropTarget = accent
-    public static let hairline = Color(nsColor: .dyn(light: .srgb(0, 0, 0, 0.08),
-                                                     dark: .srgb(1, 1, 1, 0.08)))
-    /// A field or well inset into the chrome.
-    public static let surface = Color(nsColor: .dyn(light: .srgb(0, 0, 0, 0.04),
-                                                    dark: .srgb(1, 1, 1, 0.05)))
-    public static let surfaceRaised = Color(nsColor: .dyn(light: .srgb(1, 1, 1, 0.95),
-                                                          dark: .srgb(1, 1, 1, 0.08)))
+    /// The lit edge of a pane of glass, which is why it is brighter than a hairline
+    /// usually is: on a translucent surface an 8% rule disappears into the blur.
+    public static let hairline = Color(nsColor: .dyn(light: .srgb(0.30, 0.24, 0.55, 0.14),
+                                                     dark: .srgb(1, 0.99, 1, 0.13)))
+    /// A field or well inset into the chrome. Violet-cast rather than neutral, so a
+    /// well reads as part of the same material as everything around it.
+    public static let surface = Color(nsColor: .dyn(light: .srgb(0.36, 0.25, 0.78, 0.055),
+                                                    dark: .srgb(0.72, 0.66, 1.00, 0.075)))
+    public static let surfaceRaised = Color(nsColor: .dyn(light: .srgb(1, 1, 1, 0.72),
+                                                          dark: .srgb(0.78, 0.74, 1.00, 0.11)))
 
     // MARK: - Text
 

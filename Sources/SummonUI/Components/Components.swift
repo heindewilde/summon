@@ -334,10 +334,13 @@ public struct PanelBackground: View {
     public var body: some View {
         ZStack {
             VisualEffectBackground(material: .hudWindow, blending: .behindWindow)
-            // A flat, near-neutral ground over the vibrancy. The gradient that used to
-            // sit here was pure decoration: it said nothing about the content and made
-            // the top of the list a different colour from the bottom.
             Theme.chrome
+            // The bloom. A gradient used to sit here and was removed for saying nothing
+            // — it was a decorative wash that made the top of the list a different
+            // colour from the bottom. This one is not that: it is the light the mark is
+            // drawn in, and it is the reason the panel belongs to the same app as the
+            // icon rather than merely pointing at it with an accent.
+            Bloom()
         }
     }
 }

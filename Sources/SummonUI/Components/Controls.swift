@@ -51,6 +51,15 @@ public extension View {
                 .fill(state.fill)
         }
         .overlay {
+            // Glass has an edge. Without it a translucent fill on a translucent ground
+            // is just a slightly different colour, which is not what "selected" should
+            // look like when everything around it is already tinted.
+            if state == .selected || state == .navActive {
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .strokeBorder(Theme.selectionEdge, lineWidth: 1)
+            }
+        }
+        .overlay {
             // A ring, not a fill: a drop target drawn with the selection fill says
             // "this row is selected" instead — one pixel, two meanings.
             if state == .dropTarget {
@@ -76,6 +85,41 @@ public extension View {
     /// A shadow from the elevation scale.
     func elevation(_ shadow: Theme.Shadow) -> some View {
         self.shadow(color: shadow.color, radius: shadow.radius, y: shadow.y)
+    }
+}
+
+// MARK: - Bloom
+
+/// The icon's light, as a property of the ground.
+///
+/// Two pools rather than one even wash: a surface lit from a single soft source reads
+/// as a material with depth, and an evenly tinted one reads as a coloured rectangle.
+/// Sized off the surface's own diagonal so the falloff is what shows, never the edge
+/// of the gradient.
+public struct Bloom: View {
+    public var intensity: Double
+    public init(intensity: Double = 1) { self.intensity = intensity }
+
+    public var body: some View {
+        GeometryReader { geo in
+            let d = max(geo.size.width, geo.size.height)
+            ZStack {
+                RadialGradient(colors: [Theme.bloom.opacity(intensity), .clear],
+                               center: .init(x: 0.12, y: 0.02),
+                               startRadius: 0, endRadius: d * 0.95)
+                RadialGradient(colors: [Theme.bloom.opacity(intensity * 0.55), .clear],
+                               center: .init(x: 0.92, y: 1.04),
+                               startRadius: 0, endRadius: d * 0.8)
+            }
+        }
+        .allowsHitTesting(false)
+    }
+}
+
+public extension View {
+    /// Lays the bloom over a surface's own ground, under its content.
+    func bloomed(_ intensity: Double = 1) -> some View {
+        background(Bloom(intensity: intensity))
     }
 }
 

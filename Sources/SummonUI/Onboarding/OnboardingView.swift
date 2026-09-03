@@ -2,8 +2,8 @@ import AppKit
 import SwiftUI
 import SummonKit
 
-/// First run. Four short steps: what this is, the shortcut, a chance to actually
-/// press it, and something to press it on.
+/// First run. Three short steps: what this is, the shortcut, and the two optional
+/// things worth offering before someone starts.
 ///
 /// This is the one surface that breaks the monochrome rule in `DesignTokens`, and it
 /// does so deliberately. That rule is about working chrome — a tinted selection bar
@@ -13,10 +13,11 @@ import SummonKit
 /// bloom behind the mark. It is also always dark, whatever the system is set to, for
 /// the same reason the icon is — that is the ground the mark was drawn on.
 ///
-/// What is *not* here matters as much. Encryption setup used to live on step three as
-/// a segmented picker, two secure fields, a Set button and a checkbox — a settings
-/// form in the middle of a welcome, asking someone to protect a library that is still
-/// empty. It is one line in Settings now.
+/// What is *not* here matters as much. Encryption setup used to live mid-flow as a
+/// segmented picker, two secure fields, a Set button and a checkbox — a settings form
+/// in the middle of a welcome, asking someone to protect a library that is still
+/// empty. It is one line in Settings now. There is no Skip either: at three steps,
+/// two of which ask nothing, there is nothing left worth skipping past.
 public struct OnboardingView: View {
     @Bindable var model: AppModel
     @Environment(\.dismiss) private var dismiss
@@ -24,12 +25,10 @@ public struct OnboardingView: View {
     @State private var step: Int
     @State private var seeding = false
     @State private var seeded = false
-    /// Set when the panel first appears, so step three can acknowledge the press.
-    @State private var hasSummoned = false
     /// Drives the mark stroking itself on, once, when the window opens.
     @State private var markProgress: CGFloat = 0
 
-    private let lastStep = 3
+    private let lastStep = 2
 
     /// `initialStep` jumps straight to a card, for the same reason `LockSheet` takes an
     /// initial kind: a still frame cannot click Continue three times.
@@ -52,57 +51,73 @@ public struct OnboardingView: View {
     public var body: some View {
         HStack(spacing: 0) {
             rail
-            Rectangle()
-                .fill(Ink.hairline)
-                .frame(width: 1)
             column
         }
         .frame(width: 760, height: 420)
-        .background(Ink.page)
+        // As a background rather than a sibling in a ZStack: the bloom is deliberately
+        // larger than the window, and as a sibling its frame drove the stack's height,
+        // laying the steps out 700pt tall and pushing the footer past the clip.
+        .background(atmosphere)
+        .clipped()
         // Always dark: the palette below is fixed, and this makes the system controls
         // inside it — the hot key recorders, the progress spinner — agree.
         .preferredColorScheme(.dark)
         .onAppear {
             withAnimation(.easeOut(duration: 1.1)) { markProgress = 1 }
         }
-        .onChange(of: model.isPanelVisible) { _, visible in
-            if visible { hasSummoned = true }
+    }
+
+    // MARK: - Ground
+
+    /// One continuous ground for the whole window. The mark's glow lives here rather
+    /// than inside the rail, so it carries across the middle instead of stopping dead
+    /// at a divider — the light comes from an object on the page, and light does not
+    /// respect a column edge.
+    private var atmosphere: some View {
+        ZStack {
+            Ink.page
+
+            // A soft lift under the mark's side, faded out rather than ruled off. The
+            // rail is a place, not a border.
+            LinearGradient(colors: [Ink.rail, Ink.rail.opacity(0)],
+                           startPoint: .leading, endPoint: .trailing)
+                .frame(width: 540)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            // The bloom from the icon, centred on the mark and deliberately wider than
+            // the rail it sits in.
+            RadialGradient(colors: [Ink.violetDeep.opacity(0.50),
+                                    Ink.violetDeep.opacity(0.15),
+                                    .clear],
+                           center: .center, startRadius: 0, endRadius: 350)
+                .frame(width: 700, height: 700)
+                .offset(x: -Self.railWidth / 2 - 112, y: -26)
         }
     }
 
     // MARK: - Rail
 
     /// The identity, held on screen for the whole flow rather than shown once on step
-    /// one and then abandoned.
+    /// one and then abandoned. No ground of its own — that is in `atmosphere`.
+    private static let railWidth: CGFloat = 268
+
     private var rail: some View {
-        ZStack {
-            Ink.rail
+        VStack(spacing: Theme.Space.m) {
+            SummonMarkShape(progress: markProgress)
+                .fill(
+                    LinearGradient(colors: [Ink.violetBright, Ink.violet, Ink.violetDeep],
+                                   startPoint: .topLeading, endPoint: .bottomTrailing)
+                )
+                .frame(width: 104, height: 104)
+                .shadow(color: Ink.violet.opacity(0.55), radius: 22)
 
-            // The bloom from the icon. Sized well past the mark so its falloff is what
-            // shows, not its edge.
-            RadialGradient(colors: [Ink.violetDeep.opacity(0.45), .clear],
-                           center: .center, startRadius: 0, endRadius: 190)
-                .frame(width: 380, height: 380)
-                .offset(y: -26)
-
-            VStack(spacing: Theme.Space.m) {
-                SummonMarkShape(progress: markProgress)
-                    .fill(
-                        LinearGradient(colors: [Ink.violetBright, Ink.violet, Ink.violetDeep],
-                                       startPoint: .topLeading, endPoint: .bottomTrailing)
-                    )
-                    .frame(width: 104, height: 104)
-                    .shadow(color: Ink.violet.opacity(0.55), radius: 22)
-
-                Text("Summon")
-                    .font(.system(size: Size.wordmark, weight: .semibold))
-                    .foregroundStyle(Ink.primary)
-                    .opacity(markProgress)
-            }
-            .offset(y: -18)
+            Text("Summon")
+                .font(.system(size: Size.wordmark, weight: .semibold))
+                .foregroundStyle(Ink.primary)
+                .opacity(markProgress)
         }
-        .frame(width: 268)
-        .clipped()
+        .frame(width: Self.railWidth)
+        .offset(y: -18)
     }
 
     // MARK: - Column
@@ -127,8 +142,7 @@ public struct OnboardingView: View {
         switch step {
         case 0: welcome
         case 1: shortcuts
-        case 2: tryIt
-        default: library
+        default: finishing
         }
     }
 
@@ -142,9 +156,9 @@ public struct OnboardingView: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             VStack(alignment: .leading, spacing: Theme.Space.s) {
-                bullet("text.alignleft", "Replies and boilerplate, with fill-in fields.")
-                bullet("photo.on.rectangle", "Images, PDFs and documents.")
-                bullet("bolt.fill", "One shortcut, from anywhere.")
+                bullet("text.alignleft", "Save what you retype — a standard reply, your VAT number, an address.")
+                bullet("paperclip", "And the files you dig out every week: the portfolio PDF, the headshot.")
+                bullet("bolt.fill", "One keystroke drops any of them into the app you’re already in.")
             }
         }
     }
@@ -171,31 +185,18 @@ public struct OnboardingView: View {
         }
     }
 
-    /// The one screen that shows rather than tells. The shortcut is already registered
-    /// by the time this window opens — `AppDelegate` does it at launch, long before
-    /// onboarding — so the panel really does open over this window when they press it.
-    private var tryIt: some View {
+    /// The last screen: the one permission worth offering, and the one shortcut into a
+    /// library that is otherwise empty. Both are offers, so both are cards of the same
+    /// shape — Allow/Allowed and Add/Added read as the same kind of choice.
+    private var finishing: some View {
         VStack(alignment: .leading, spacing: Theme.Space.m) {
-            stepTitle("Try it", "The panel opens over whatever you’re doing.")
-
-            // The only screen with a single thing to do, so that thing is the biggest
-            // thing on it rather than a chip in the corner.
-            VStack(alignment: .leading, spacing: Theme.Space.s) {
-                keycap
-                if hasSummoned {
-                    Label("That’s the whole idea.", systemImage: "checkmark.circle.fill")
-                        .font(.system(size: Size.body))
-                        .foregroundStyle(Ink.violet)
-                } else {
-                    Text("Press it now — this window will wait.")
-                        .font(.system(size: Size.body))
-                        .foregroundStyle(Ink.secondary)
-                }
-            }
-            .padding(.vertical, Theme.Space.s)
+            stepTitle("Before you start", "Both optional — Summon works without either.")
 
             card {
-                HStack(alignment: .top, spacing: Theme.Space.s) {
+                // Centred rather than top-aligned: the status sits opposite a two-line
+                // block, and aligning it to the top left it riding above the title it
+                // belongs to.
+                HStack(alignment: .center, spacing: Theme.Space.s) {
                     Image(systemName: "hand.tap")
                         .foregroundStyle(Ink.primary)
                         .frame(width: 20)
@@ -218,48 +219,37 @@ public struct OnboardingView: View {
                     }
                 }
             }
-        }
-    }
 
-    private var library: some View {
-        VStack(alignment: .leading, spacing: Theme.Space.m) {
-            stepTitle("Start with a few examples?",
-                      "Snippets, a document and an image. Delete them whenever.")
-
-            HStack(spacing: Theme.Space.s) {
-                Button(seeded ? "Examples added" : "Add examples") { seedLibrary() }
-                    .buttonStyle(QuietButton())
-                    .disabled(seeding || seeded)
-                if seeding { ProgressView().controlSize(.small) }
-                Spacer()
+            card {
+                HStack(alignment: .center, spacing: Theme.Space.s) {
+                    Image(systemName: "tray.full")
+                        .foregroundStyle(Ink.primary)
+                        .frame(width: 20)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Start with a few examples")
+                            .font(.system(size: Size.body, weight: .medium))
+                            .foregroundStyle(Ink.primary)
+                        Text("Snippets, a document and an image. Delete anytime.")
+                            .font(.system(size: Size.detail))
+                            .foregroundStyle(Ink.secondary)
+                    }
+                    Spacer()
+                    if seeded {
+                        Label("Added", systemImage: "checkmark.circle.fill")
+                            .font(.system(size: Size.detail))
+                            .foregroundStyle(Ink.violet)
+                    } else if seeding {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Button("Add") { seedLibrary() }
+                            .buttonStyle(QuietButton())
+                    }
+                }
             }
-
-            VStack(alignment: .leading, spacing: Theme.Space.xs) {
-                bullet("square.dashed.inset.filled", "Write {{first_name}} and Summon asks for it as you insert.")
-                bullet("number", "Filter as you type: #tag, /folder, img:, pdf:, txt:")
-                bullet("pin", "Pinned items come first, before you type anything.")
-            }
-            .padding(.top, Theme.Space.xs)
         }
     }
 
     // MARK: - Chrome
-
-    private var keycap: some View {
-        Text(model.settings.summonHotKey.displayString)
-            .font(.system(size: 34, weight: .medium))
-            .foregroundStyle(Ink.primary)
-            .padding(.horizontal, Theme.Space.xl)
-            .padding(.vertical, Theme.Space.m)
-            .background(
-                RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous)
-                    .fill(Ink.card)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous)
-                            .strokeBorder(Ink.hairline, lineWidth: 1)
-                    )
-            )
-    }
 
     private func stepTitle(_ title: String, _ subtitle: String) -> some View {
         VStack(alignment: .leading, spacing: Theme.Space.xxs) {
@@ -273,11 +263,16 @@ public struct OnboardingView: View {
         }
     }
 
+    /// Aligned on the first text baseline, not the top of the row. A symbol's drawn
+    /// box is taller than the letters beside it, so top-aligning the two leaves the
+    /// glyph visibly riding above the line it belongs to — and worse once the text
+    /// wraps. Giving the image the body font makes it a participant in that baseline.
     private func bullet(_ symbol: String, _ text: String) -> some View {
-        HStack(alignment: .top, spacing: Theme.Space.s) {
+        HStack(alignment: .firstTextBaseline, spacing: Theme.Space.s) {
             Image(systemName: symbol)
+                .font(.system(size: Size.body))
                 .foregroundStyle(Ink.violet)
-                .frame(width: 18)
+                .frame(width: 18, alignment: .leading)
             Text(text)
                 .font(.system(size: Size.body))
                 .foregroundStyle(Ink.secondary)
@@ -326,16 +321,6 @@ public struct OnboardingView: View {
             }
 
             Spacer()
-
-            // An escape hatch. There was none: the flow could only be finished by
-            // walking every step, and step three now asks for a keypress that another
-            // app may already have taken.
-            if step < lastStep {
-                Button("Skip") { finish() }
-                    .buttonStyle(.plain)
-                    .font(.system(size: Size.detail))
-                    .foregroundStyle(Ink.faint)
-            }
 
             if step > 0 {
                 Button("Back") { step -= 1 }

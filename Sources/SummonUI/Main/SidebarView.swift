@@ -17,7 +17,10 @@ public struct SidebarView: View {
 
     public init(model: AppModel) { self.model = model }
 
-    static let rowHeight: CGFloat = 26
+    /// The sidebar's denser row. Reads the token rather than defining a third row
+    /// height beside `Theme.rowHeight` and the action menu's — the folder drop delegate
+    /// turns a pointer position into a zone using this.
+    static let rowHeight: CGFloat = Theme.rowCompact
 
     public var body: some View {
         // Read once per body rather than once per row: each of these used to walk
@@ -72,8 +75,8 @@ public struct SidebarView: View {
         } label: {
             HStack(spacing: Theme.Space.s) {
                 Image(systemName: "plus")
-                    .font(.system(size: 11))
-                    .frame(width: 16)
+                    .font(Theme.Icon.small)
+                    .frame(width: Theme.Icon.slotCompact)
                 Text("New Folder")
                 Spacer(minLength: 0)
             }
@@ -98,10 +101,7 @@ public struct SidebarView: View {
     // MARK: - Plain rows
 
     private func header(_ title: String) -> some View {
-        Text(title.uppercased())
-            .font(Theme.Typography.section)
-            .foregroundStyle(Theme.tertiaryText)
-            .tracking(0.5)
+        SectionHeader(title)
             .padding(.horizontal, Theme.Space.xs)
             .padding(.top, Theme.Space.m)
             .padding(.bottom, Theme.Space.xxs)
@@ -112,9 +112,9 @@ public struct SidebarView: View {
         let isSelected = model.sidebarSelection == selection
         return HStack(spacing: Theme.Space.s) {
             Image(systemName: symbol)
-                .font(.system(size: 12))
+                .font(Theme.Icon.regular)
                 .foregroundStyle(tint)
-                .frame(width: 16)
+                .frame(width: Theme.Icon.slotCompact)
             Text(title)
                 .font(Theme.Typography.body)
                 .foregroundStyle(Theme.primaryText)
@@ -129,10 +129,10 @@ public struct SidebarView: View {
         }
         .padding(.horizontal, Theme.Space.xs)
         .frame(height: Self.rowHeight)
-        .background {
-            RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous)
-                .fill(isSelected ? Theme.selection : .clear)
-        }
+        // Navigation, not selection. The sidebar says which section you are *in*; the
+        // item list says which item the keys act on. Painting both with `.selected`
+        // left the window showing two chosen things and no way to tell them apart.
+        .rowSurface(isSelected ? .navActive : .idle)
         .contentShape(.rect)
         .onTapGesture { model.sidebarSelection = selection }
         .accessibilityElement(children: .combine)
@@ -159,9 +159,9 @@ struct TagRow: View {
     var body: some View {
         HStack(spacing: Theme.Space.s) {
             Image(systemName: "number")
-                .font(.system(size: 12))
+                .font(Theme.Icon.regular)
                 .foregroundStyle(Theme.tertiaryText)
-                .frame(width: 16)
+                .frame(width: Theme.Icon.slotCompact)
 
             if isRenaming {
                 TextField("Name", text: $renameText)
@@ -192,10 +192,7 @@ struct TagRow: View {
         }
         .padding(.horizontal, Theme.Space.xs)
         .frame(height: SidebarView.rowHeight)
-        .background {
-            RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous)
-                .fill(isSelected ? Theme.selection : .clear)
-        }
+        .rowSurface(isSelected ? .navActive : .idle)
         .contentShape(.rect)
         .onTapGesture { model.sidebarSelection = .tag(tag.name) }
         .contextMenu {
@@ -247,7 +244,7 @@ struct FolderRow: View {
         HStack(spacing: Theme.Space.xs) {
             Button { model.toggleFolderCollapsed(entry.id) } label: {
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 9, weight: .semibold))
+                    .font(Theme.Icon.micro.weight(.semibold))
                     .foregroundStyle(Theme.tertiaryText)
                     .rotationEffect(.degrees(entry.isCollapsed ? 0 : 90))
                     .frame(width: 12, height: 12)
@@ -261,9 +258,9 @@ struct FolderRow: View {
 
             Button { pickingIcon = true } label: {
                 Image(systemName: entry.symbolName)
-                    .font(.system(size: 12))
+                    .font(Theme.Icon.regular)
                     .foregroundStyle(Theme.folderColor(entry.colorName))
-                    .frame(width: 16)
+                    .frame(width: Theme.Icon.slotCompact)
                     .contentShape(.rect)
             }
             .buttonStyle(.plain)
@@ -295,7 +292,7 @@ struct FolderRow: View {
 
             if entry.isSensitive {
                 Image(systemName: "lock.fill")
-                    .font(.system(size: 9))
+                    .font(Theme.Icon.micro)
                     .foregroundStyle(Theme.tertiaryText)
                     .accessibilityHidden(true)
             }
@@ -309,19 +306,10 @@ struct FolderRow: View {
         .padding(.leading, CGFloat(entry.depth) * 14 + Theme.Space.xs)
         .padding(.trailing, Theme.Space.xs)
         .frame(height: SidebarView.rowHeight)
-        .background {
-            RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous)
-                .fill(isSelected ? Theme.selection : .clear)
-        }
-        // A ring means the drop goes *inside* this folder. It used to be drawn with
-        // `Theme.selection`, the same fill as selection itself — one pixel meaning two
+        // A ring means the drop goes *inside* this folder; a fill means you are in it.
+        // The ring used to be drawn with `Theme.selection` — one pixel meaning two
         // things, which only got away with it while that fill said nothing.
-        .overlay {
-            if dropZone == .into {
-                RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous)
-                    .strokeBorder(Theme.dropTarget, lineWidth: 1.5)
-            }
-        }
+        .rowSurface(dropZone == .into ? .dropTarget : (isSelected ? .navActive : .idle))
         // A line means the drop goes *beside* it.
         .overlay(alignment: .top) { if dropZone == .before { DropLine() } }
         .overlay(alignment: .bottom) { if dropZone == .after { DropLine() } }

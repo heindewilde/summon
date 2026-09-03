@@ -80,7 +80,7 @@ enum SnapshotRunner {
                    size: CGSize(width: 760, height: 420))
 
             render(SettingsView(model: model), name: "settings", scheme: scheme,
-                   size: CGSize(width: 560, height: 420))
+                   size: CGSize(width: 560, height: 460))
 
             // The design system with nothing on top of it. The token and component
             // stages change the vocabulary without adopting it, so this is the only

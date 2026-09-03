@@ -17,21 +17,21 @@ public struct SettingsView: View {
     }
 
     public var body: some View {
-        TabView(selection: $tab) {
-            GeneralSettings(model: model)
-                .tabItem { Label("General", systemImage: "gearshape") }
-                .tag(Tab.general)
-            LibrarySettings(model: model)
-                .tabItem { Label("Library", systemImage: "square.grid.2x2") }
-                .tag(Tab.library)
-            PrivacySettings(model: model)
-                .tabItem { Label("Privacy", systemImage: "lock.shield") }
-                .tag(Tab.privacy)
-            IntelligenceSettings(model: model)
-                .tabItem { Label("Intelligence", systemImage: "sparkles") }
-                .tag(Tab.intelligence)
+        VStack(spacing: 0) {
+            SettingsTabRail(selection: $tab, tabs: [
+                (.general, "General", "gearshape"),
+                (.library, "Library", "square.grid.2x2"),
+                (.privacy, "Privacy", "lock.shield"),
+                (.intelligence, "Intelligence", "sparkles"),
+            ])
+            switch tab {
+            case .general: GeneralSettings(model: model)
+            case .library: LibrarySettings(model: model)
+            case .privacy: PrivacySettings(model: model)
+            case .intelligence: IntelligenceSettings(model: model)
+            }
         }
-        .frame(width: 560, height: 420)
+        .frame(width: 560, height: 460)
     }
 }
 
@@ -40,15 +40,15 @@ struct GeneralSettings: View {
     @State private var launchAtLogin = false
 
     var body: some View {
-        Form {
-            Section("Shortcuts") {
-                LabeledContent("Summon panel") {
+        SettingsPage {
+            SettingsSection("Shortcuts") {
+                SettingsRow("Summon panel") {
                     HotKeyRecorder(combo: Binding(
                         get: { model.settings.summonHotKey },
                         set: { model.settings.summonHotKey = $0 }
                     )) { _ in model.reregisterHotKeys() }
                 }
-                LabeledContent("Save selection") {
+                SettingsRow("Save selection") {
                     HotKeyRecorder(combo: Binding(
                         get: { model.settings.quickSaveHotKey },
                         set: { model.settings.quickSaveHotKey = $0 }
@@ -60,7 +60,7 @@ struct GeneralSettings: View {
                 ))
             }
 
-            Section("Inserting") {
+            SettingsSection("Inserting") {
                 Toggle("Paste straight into the app I was in", isOn: Binding(
                     get: { model.settings.autoPaste },
                     set: { model.settings.autoPaste = $0 }
@@ -68,7 +68,7 @@ struct GeneralSettings: View {
                 accessibilityStatus
             }
 
-            Section("Appearance") {
+            SettingsSection("Appearance") {
                 Picker("Theme", selection: Binding(
                     get: { model.settings.appearance },
                     set: { model.settings.appearance = $0 }
@@ -90,7 +90,6 @@ struct GeneralSettings: View {
                     .onChange(of: launchAtLogin) { _, new in model.settings.launchAtLogin = new }
             }
         }
-        .formStyle(.grouped)
         .onAppear { launchAtLogin = model.settings.launchAtLogin }
     }
 
@@ -119,8 +118,8 @@ struct LibrarySettings: View {
     @State private var totalBytes = 0
 
     var body: some View {
-        Form {
-            Section("Clipboard history") {
+        SettingsPage {
+            SettingsSection("Clipboard history") {
                 Toggle("Keep a history of what I copy", isOn: Binding(
                     get: { model.settings.clipboardHistoryEnabled },
                     set: { model.settings.clipboardHistoryEnabled = $0; model.applySettings() }
@@ -145,12 +144,12 @@ struct LibrarySettings: View {
                     .controlSize(.small)
             }
 
-            Section("Storage") {
-                LabeledContent("Items", value: "\(model.store.snapshots.count)")
-                LabeledContent("On disk",
+            SettingsSection("Storage") {
+                SettingsRow("Items", value: "\(model.store.snapshots.count)")
+                SettingsRow("On disk",
                                value: ByteCountFormatter.string(fromByteCount: Int64(totalBytes),
                                                                 countStyle: .file))
-                LabeledContent("Location") {
+                SettingsRow("Location") {
                     Button(model.paths.root.path(percentEncoded: false)) {
                         NSWorkspace.shared.activateFileViewerSelecting([model.paths.root])
                     }
@@ -163,7 +162,6 @@ struct LibrarySettings: View {
                     .foregroundStyle(Theme.secondaryText)
             }
         }
-        .formStyle(.grouped)
         .task { totalBytes = model.store.files.totalBytes() }
     }
 }
@@ -173,14 +171,14 @@ struct PrivacySettings: View {
     @State private var sheet: LockSheet.Purpose?
 
     var body: some View {
-        Form {
+        SettingsPage {
             if model.vault.isConfigured {
                 configured
             } else {
                 notConfigured
             }
 
-            Section("How it works") {
+            SettingsSection("How it works") {
                 Text("""
                 Sensitive contents are encrypted with AES-GCM under a key derived from your \
                 PIN, and the key exists in memory only while unlocked. Titles and tags stay \
@@ -192,7 +190,6 @@ struct PrivacySettings: View {
                 .foregroundStyle(Theme.secondaryText)
             }
         }
-        .formStyle(.grouped)
         .sheet(item: $sheet) { purpose in
             LockSheet(model: model, purpose: purpose) { sheet = nil }
         }
@@ -202,8 +199,8 @@ struct PrivacySettings: View {
 
     @ViewBuilder
     private var configured: some View {
-        Section("Lock") {
-            LabeledContent("Status") {
+        SettingsSection("Lock") {
+            SettingsRow("Status") {
                 HStack(spacing: Theme.Space.s) {
                     Label(model.vault.isUnlocked ? "Unlocked" : "Locked",
                           systemImage: model.vault.isUnlocked ? "lock.open.fill" : "lock.fill")
@@ -257,9 +254,9 @@ struct PrivacySettings: View {
             }
         }
 
-        Section(model.vault.secretKind.displayName) {
+        SettingsSection(model.vault.secretKind.displayName) {
             // What it actually protects, so the section is not an abstraction.
-            LabeledContent("Protecting", value: protectedSummary)
+            SettingsRow("Protecting", value: protectedSummary)
 
             if model.vault.secretKind == .pin {
                 // Said plainly rather than left implied. Four digits is 10,000
@@ -292,8 +289,8 @@ struct PrivacySettings: View {
 
     @ViewBuilder
     private var notConfigured: some View {
-        Section("Sensitive items") {
-            LabeledContent("Lock") {
+        SettingsSection("Sensitive items") {
+            SettingsRow("Lock") {
                 Button("Set a PIN or passphrase…") { sheet = .create }
             }
             Text("Nothing is encrypted until you set one. Marking an item or a folder sensitive will ask for it.")
@@ -326,8 +323,8 @@ struct IntelligenceSettings: View {
     @Bindable var model: AppModel
 
     var body: some View {
-        Form {
-            Section("On-device intelligence") {
+        SettingsPage {
+            SettingsSection("On-device intelligence") {
                 Toggle("Use Apple’s on-device model", isOn: Binding(
                     get: { model.settings.intelligenceEnabled },
                     set: {
@@ -337,7 +334,7 @@ struct IntelligenceSettings: View {
                     }
                 ))
 
-                LabeledContent("Status") {
+                SettingsRow("Status") {
                     Label(statusText, systemImage: statusSymbol)
                         .foregroundStyle(statusColor)
                         .font(.system(size: 11.5))
@@ -348,7 +345,7 @@ struct IntelligenceSettings: View {
                     .foregroundStyle(Theme.secondaryText)
             }
 
-            Section("What it does") {
+            SettingsSection("What it does") {
                 VStack(alignment: .leading, spacing: Theme.Space.xs) {
                     row("text.badge.checkmark", "Suggests a title, tags and a one-line summary when you save something.")
                     row("wand.and.sparkles", "Rewrites a snippet in a different register, from the item editor.")
@@ -357,7 +354,7 @@ struct IntelligenceSettings: View {
                 .font(.system(size: 11.5))
             }
 
-            Section("Always true") {
+            SettingsSection("Always true") {
                 Text("""
                 Everything runs on this Mac. Content marked sensitive is never handed to the \
                 model, even locally. When the model is unavailable, Summon falls back to \
@@ -367,7 +364,6 @@ struct IntelligenceSettings: View {
                 .foregroundStyle(Theme.secondaryText)
             }
         }
-        .formStyle(.grouped)
     }
 
     private func row(_ symbol: String, _ text: String) -> some View {

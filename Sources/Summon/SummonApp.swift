@@ -62,7 +62,7 @@ struct MenuBarLabel: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        Image(systemName: "sparkles")
+        Image(nsImage: SummonMark.menuBar)
             .accessibilityLabel("Summon")
             .onAppear {
                 model.showMainWindowHandler = {

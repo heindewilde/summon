@@ -63,19 +63,37 @@ public struct ActionMenu: View {
 
     private var actionList: some View {
         VStack(spacing: 0) {
-            SnapshotSafeScrollView {
-                SnapshotSafeLazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(Array(model.actionResults.enumerated()), id: \.element) { index, action in
-                        actionRow(action, isSelected: index == model.actionSelectedIndex)
+            // The list scrolls, so arrowing past the last visible row has to bring it
+            // into view. Without this the selection carried on down behind the edge of
+            // the menu and you were driving something you could not see.
+            ScrollViewReader { proxy in
+                SnapshotSafeScrollView {
+                    SnapshotSafeLazyVStack(alignment: .leading, spacing: 0) {
+                        ForEach(Array(model.actionResults.enumerated()), id: \.element) { index, action in
+                            actionRow(action, isSelected: index == model.actionSelectedIndex)
+                                .id(action)
+                        }
                     }
+                    .padding(Theme.Space.xs)
                 }
-                .padding(Theme.Space.xs)
+                .frame(maxHeight: 312)
+                .onChange(of: model.actionSelectedIndex) { _, index in
+                    scroll(proxy, to: index)
+                }
+                // Also on the way in, so a menu that opens with something already
+                // selected — after filtering, or reopened where you left it — starts
+                // where you can see it.
+                .onAppear { scroll(proxy, to: model.actionSelectedIndex) }
             }
-            .frame(maxHeight: 312)
 
             Divider().overlay(Theme.hairline)
             searchField(placeholder: "Search actions…", text: $model.actionQuery)
         }
+    }
+
+    private func scroll(_ proxy: ScrollViewProxy, to index: Int) {
+        guard model.actionResults.indices.contains(index) else { return }
+        proxy.scrollTo(model.actionResults[index], anchor: .center)
     }
 
     private func actionRow(_ action: PanelActionID, isSelected: Bool) -> some View {
@@ -135,6 +153,7 @@ public struct ActionMenu: View {
 
     private var folderList: some View {
         VStack(spacing: 0) {
+          ScrollViewReader { proxy in
             SnapshotSafeScrollView {
                 SnapshotSafeLazyVStack(alignment: .leading, spacing: 0) {
                     ForEach(Array(model.folderChoices.enumerated()), id: \.element.id) { index, choice in
@@ -157,6 +176,7 @@ public struct ActionMenu: View {
                                 .fill(index == model.folderChoiceIndex ? Theme.selection : .clear)
                         }
                         .contentShape(.rect)
+                        .id(choice.id)
                         .onTapGesture {
                             model.folderChoiceIndex = index
                             model.perform(.runSelectedAction)
@@ -166,6 +186,16 @@ public struct ActionMenu: View {
                 .padding(Theme.Space.xs)
             }
             .frame(maxHeight: 264)
+            // A long folder tree is exactly where this list runs off its own edge.
+            .onChange(of: model.folderChoiceIndex) { _, index in
+                guard model.folderChoices.indices.contains(index) else { return }
+                proxy.scrollTo(model.folderChoices[index].id, anchor: .center)
+            }
+            .onAppear {
+                guard model.folderChoices.indices.contains(model.folderChoiceIndex) else { return }
+                proxy.scrollTo(model.folderChoices[model.folderChoiceIndex].id, anchor: .center)
+            }
+          }
         }
     }
 

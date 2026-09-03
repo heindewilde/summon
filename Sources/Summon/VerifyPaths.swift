@@ -204,7 +204,7 @@ enum VerifyPaths {
             return
         }
         if !model.vault.isConfigured {
-            try? model.vault.setUpPIN("482913")
+            try? model.vault.setUpPIN("4829")
         }
         guard model.vault.isUnlocked else {
             check("Vault is unlocked so the key can be stored", false)

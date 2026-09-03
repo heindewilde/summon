@@ -10,6 +10,16 @@ public struct ItemSnapshot: Sendable, Identifiable, Hashable {
     public var kind: ItemKind
     public var tagNames: [String]
     public var folderPath: [String]
+
+    /// The folder the item is filed in directly, if any.
+    ///
+    /// The path alone could not answer "is this item *in* this folder", which is what
+    /// the sidebar needs now that selecting a parent no longer sweeps up its subtree.
+    public var folderID: UUID?
+
+    /// Position within that folder's hand-chosen order.
+    public var sortIndex: Int
+
     public var summary: String?
 
     /// Body plus extracted/OCR text. Empty while the item is locked — which is what
@@ -39,6 +49,8 @@ public struct ItemSnapshot: Sendable, Identifiable, Hashable {
         kind: ItemKind = .text,
         tagNames: [String] = [],
         folderPath: [String] = [],
+        folderID: UUID? = nil,
+        sortIndex: Int = 0,
         summary: String? = nil,
         searchableText: String = "",
         previewLine: String = "",
@@ -58,6 +70,8 @@ public struct ItemSnapshot: Sendable, Identifiable, Hashable {
         self.kind = kind
         self.tagNames = tagNames
         self.folderPath = folderPath
+        self.folderID = folderID
+        self.sortIndex = sortIndex
         self.summary = summary
         self.searchableText = searchableText
         self.previewLine = previewLine

@@ -7,8 +7,6 @@ public struct UnlockPane: View {
     @Bindable var model: AppModel
     let pendingItemID: UUID?
 
-    @FocusState private var pinFocused: Bool
-
     public init(model: AppModel, pendingItemID: UUID?) {
         self.model = model
         self.pendingItemID = pendingItemID
@@ -37,16 +35,10 @@ public struct UnlockPane: View {
                     .frame(maxWidth: 380)
             }
 
-            SecureField("PIN", text: $model.pinEntry)
-                .textFieldStyle(.plain)
-                .font(.system(size: 18, weight: .medium, design: .monospaced))
-                .multilineTextAlignment(.center)
-                .frame(width: 180)
-                .padding(.vertical, Theme.Space.s)
-                .cardBackground(radius: Theme.Radius.medium, raised: true)
-                .focused($pinFocused)
-                .onSubmit { model.submitPIN() }
-                .accessibilityLabel("PIN")
+            // The same four boxes as everywhere else, resolving on the fourth digit.
+            PINField(digits: $model.pinEntry,
+                     isError: model.pinError != nil,
+                     onComplete: { model.submitPIN() })
 
             if let error = model.pinError {
                 Label(error, systemImage: "exclamationmark.triangle.fill")
@@ -56,11 +48,6 @@ public struct UnlockPane: View {
             }
 
             HStack(spacing: Theme.Space.xs) {
-                Button("Unlock") { model.submitPIN() }
-                    .buttonStyle(.borderedProminent)
-                    .tint(Theme.primaryText)
-                    .disabled(model.pinEntry.count < 4)
-
                 if model.vault.biometricsEnabled {
                     Button {
                         Task { await model.tryBiometricUnlock() }
@@ -79,7 +66,6 @@ public struct UnlockPane: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(Theme.Space.l)
-        .onAppear { pinFocused = true }
     }
 
     private var headline: String {

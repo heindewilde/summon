@@ -43,6 +43,8 @@ public enum PromptKind: Equatable, Sendable {
 public struct FolderChoice: Identifiable, Equatable, Sendable {
     public let id: UUID?
     public let label: String
+    /// The folder's own icon, so a picker row looks like its row in the sidebar.
+    public var symbolName: String = "folder"
 }
 
 /// One row, with the position it occupies in the flattened result list.
@@ -169,7 +171,70 @@ public final class AppModel {
     /// would do. One value for the whole sidebar: with a `@State` per row, a row that
     /// never received `dropExited` — exactly what happens when the drop lands on a
     /// different row — kept its indicator on screen afterwards.
-    public var folderDropTarget: FolderDropTarget?
+    public private(set) var folderDropTarget: FolderDropTarget?
+
+    /// The same, for the item list's insertion line.
+    public private(set) var itemDropTarget: ItemDropTarget?
+
+    /// When a drop delegate last said anything. Not observed: it exists to notice
+    /// silence, and waking every row to say "still dragging" is exactly the cost this
+    /// is here to avoid.
+    @ObservationIgnored private var dropHeartbeat = Date()
+    @ObservationIgnored private var dropWatchdog: Task<Void, Never>?
+
+    /// The one way the drop indicators change.
+    ///
+    /// Two things go through here that used to be missing. It refuses to write an
+    /// unchanged value — `dropUpdated` fires continuously while you drag, and each
+    /// write rebuilt the entire sidebar, which is what made dragging feel heavy. And
+    /// it keeps the watchdog below alive, which is what finally clears an indicator
+    /// after a drag that ends somewhere no delegate hears about.
+    public func setFolderDropTarget(_ target: FolderDropTarget?) {
+        dropHeartbeat = Date()
+        if folderDropTarget != target { folderDropTarget = target }
+        if target != nil { startDropWatchdog() }
+    }
+
+    /// Set by the drag harness to watch a drop go through, stage by stage. Nil in
+    /// normal use; the delegates call it and otherwise know nothing about it.
+    @ObservationIgnored public var dropTrace: ((String) -> Void)?
+
+    /// Holds an indicator on screen without the watchdog underneath it.
+    ///
+    /// Only for the screenshot harness, which freezes a drop indicator so its weight
+    /// can be reviewed — a real drag cannot be held still for a camera, and the
+    /// watchdog would quite correctly wipe a frozen one as stale.
+    public func pinDropTargetForCapture(_ target: FolderDropTarget?) {
+        folderDropTarget = target
+    }
+
+    public func setItemDropTarget(_ target: ItemDropTarget?) {
+        dropHeartbeat = Date()
+        if itemDropTarget != target { itemDropTarget = target }
+        if target != nil { startDropWatchdog() }
+    }
+
+    /// Clears a stranded indicator.
+    ///
+    /// AppKit keeps sending dragging updates while a session is live, even with the
+    /// pointer held still, so a stretch of silence means the drag is over and nobody
+    /// told us — it was cancelled, or it landed on a view with a handler of its own.
+    /// That is the grey line that used to stay on screen until the next drag.
+    private func startDropWatchdog() {
+        guard dropWatchdog == nil else { return }
+        dropWatchdog = Task { @MainActor [weak self] in
+            defer { self?.dropWatchdog = nil }
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(120))
+                guard let live = self else { return }
+                guard live.folderDropTarget != nil || live.itemDropTarget != nil else { return }
+                guard Date().timeIntervalSince(live.dropHeartbeat) > 0.4 else { continue }
+                live.folderDropTarget = nil
+                live.itemDropTarget = nil
+                return
+            }
+        }
+    }
 
     /// Focus tokens. The search field and the overlay field each watch their own, so
     /// opening or closing the overlay moves first responder without either of them
@@ -197,6 +262,19 @@ public final class AppModel {
     public var mainSelection: UUID?
     public var mainSearch: String = ""
     public var useGridLayout: Bool = false
+
+    /// Folder rows the sidebar is showing collapsed. Lives here rather than in the
+    /// view so the flattened row list can be cached against it.
+    public var collapsedFolders: Set<UUID> = []
+
+    @ObservationIgnored
+    var folderRowCache: (revision: Int, collapsed: Set<UUID>, rows: [SidebarFolderRow])?
+    @ObservationIgnored
+    var sidebarCountCache: (revision: Int, counts: SidebarCounts)?
+    @ObservationIgnored
+    var folderPickerCache: (revision: Int, choices: [FolderChoice])?
+    @ObservationIgnored
+    var tagNameCache: (revision: Int, names: [String], counts: [String: Int])?
 
     // MARK: - Chrome
 
@@ -558,7 +636,8 @@ public final class AppModel {
             folderChoices = [FolderChoice(id: nil, label: "No folder")]
                 + store.allFolders()
                     .sorted { $0.path.joined() .localizedStandardCompare($1.path.joined()) == .orderedAscending }
-                    .map { FolderChoice(id: $0.id, label: $0.path.joined(separator: " › ")) }
+                    .map { FolderChoice(id: $0.id, label: $0.path.joined(separator: " › "),
+                                symbolName: $0.symbolName) }
             folderChoiceIndex = 0
             overlay = .folderPicker
             overlayFocusToken += 1
@@ -583,7 +662,7 @@ public final class AppModel {
 
     private func commitMove(to folderID: UUID?) {
         guard let id = selectedResult?.id, let item = store.item(id: id) else { closeOverlay(); return }
-        let folder = folderID.flatMap { target in store.allFolders().first { $0.id == target } }
+        let folder = folderID.flatMap { store.folder(id: $0) }
         store.move(item, to: folder)
         closeOverlay()
         runSearch()
@@ -755,7 +834,19 @@ public final class AppModel {
         guard let payload = store.payload(for: id, clipboard: inserter.currentClipboardText()) else {
             return nil
         }
-        return DragProvider.make(for: payload, title: snapshot.title)
+        return DragProvider.make(for: payload, title: snapshot.title, itemID: id)
+    }
+
+    /// A drag that carries the row's identity but none of its contents.
+    ///
+    /// For a locked item, and for anything whose payload cannot be built. Refusing to
+    /// drag at all was right while a drag could only ever leave the app — but filing
+    /// something into a folder reveals nothing about it, and being unable to tidy a
+    /// locked item without first unlocking it was a rule with no reason behind it.
+    public func identityOnlyDragProvider(for id: UUID) -> NSItemProvider {
+        let provider = NSItemProvider()
+        provider.registerSummonID(id, as: SummonDragType.item)
+        return provider
     }
 
     // MARK: - Vault
@@ -781,6 +872,7 @@ public final class AppModel {
             store.refresh()
             runSearch()
             show(Toast(text: "Unlocked", symbol: "lock.open", tone: .success))
+            resumeAfterUnlock()
             return true
         } catch {
             pinError = (error as? VaultError)?.errorDescription ?? error.localizedDescription
@@ -809,6 +901,15 @@ public final class AppModel {
         } else {
             mode = .search
         }
+        resumeAfterUnlock()
+    }
+
+    /// Runs whatever was waiting on a key — the same continuation the PIN sheet uses,
+    /// so unlocking an existing vault finishes the interrupted action too.
+    private func resumeAfterUnlock() {
+        let resume = afterUnlockAction
+        afterUnlockAction = nil
+        resume?()
     }
 
     public func lockVault() {
@@ -875,7 +976,13 @@ public final class AppModel {
     /// If there is no PIN yet, this is the moment to offer setting one.
     public func setItemSensitive(_ id: UUID, _ sensitive: Bool) {
         guard let item = store.item(id: id) else { return }
-        guard requireUnlockedVault() else { return }
+        // Handed the action to retry, so setting a PIN finishes what you asked for
+        // rather than leaving you to go and ask again.
+        let label = item.title.isEmpty ? "this item" : "\u{201C}\(item.title)\u{201D}"
+        guard requireUnlockedVault(
+            reason: sensitive ? "to encrypt \(label)." : "to decrypt \(label).",
+            thenRetry: { [weak self] in self?.setItemSensitive(id, sensitive) }
+        ) else { return }
         do {
             try store.setSensitive(item, sensitive)
             runSearch()
@@ -888,7 +995,15 @@ public final class AppModel {
     }
 
     public func setFolderSensitive(_ folder: SummonFolder, _ sensitive: Bool) {
-        guard requireUnlockedVault() else { return }
+        let folderID = folder.id
+        let name = "\u{201C}\(folder.name)\u{201D}"
+        guard requireUnlockedVault(
+            reason: sensitive ? "to encrypt the folder \(name)." : "to decrypt the folder \(name).",
+            thenRetry: { [weak self] in
+                guard let self, let again = store.folder(id: folderID) else { return }
+                setFolderSensitive(again, sensitive)
+            }
+        ) else { return }
         do {
             try store.setFolderSensitive(folder, sensitive)
             runSearch()
@@ -902,19 +1017,173 @@ public final class AppModel {
 
     /// Returns true when the vault is ready to encrypt. Otherwise it steers the user
     /// to the thing they need to do next rather than failing silently.
-    public func requireUnlockedVault() -> Bool {
+    ///
+    /// `thenRetry` is run once the vault is open, so the action that triggered all
+    /// this actually happens. Without it, marking an item sensitive with no PIN set
+    /// asked for a PIN, got one, and then did nothing — the request had been recorded
+    /// in a flag that nothing read.
+    /// - Parameter reason: finishes the sentence "Enter your PIN…", so the prompt
+    ///   names the thing that was asked for. It used to summon the whole panel over
+    ///   the library to announce that everything was about to be unlocked, when all
+    ///   anyone had done was flick one switch.
+    @discardableResult
+    public func requireUnlockedVault(reason: String,
+                                     thenRetry retry: (() -> Void)? = nil) -> Bool {
         if vault.isUnlocked { return true }
+        afterUnlockAction = retry
+
         if !vault.isConfigured {
-            needsPINSetup = true
+            // No key exists yet, so there is nothing to unlock — the question is what
+            // the PIN should be.
+            presentPINSheet(.create)
             return false
         }
-        mode = .unlock(pendingItemID: nil)
-        if !isPanelVisible { summonForUnlock() }
+
+        // Asked where you already are. The panel has its own unlock pane and is the
+        // right place when you are in it; anywhere else, the window asks.
+        if isPanelVisible {
+            mode = .unlock(pendingItemID: nil)
+        } else {
+            presentPINSheet(.unlock(reason: reason))
+        }
         return false
     }
 
-    /// Set when an action needs a PIN that does not exist yet; Settings picks this up.
-    public var needsPINSetup = false
+    /// Which PIN question the library window is asking, if any.
+    public private(set) var pinSheet: PINSheet.Purpose?
+
+    /// What to run once there is a key. Not observed: it is a continuation, not state
+    /// anything on screen depends on.
+    @ObservationIgnored private var afterUnlockAction: (() -> Void)?
+
+    public func beginPINSetup(thenRetry retry: (() -> Void)? = nil) {
+        afterUnlockAction = retry
+        presentPINSheet(.create)
+    }
+
+    /// Brings the library forward and asks there. The panel is a transient surface
+    /// that closes the moment you look away, which is the wrong place to be typing a
+    /// PIN — and a panel arriving unbidden over the window you are working in is
+    /// startling regardless of what it wants.
+    private func presentPINSheet(_ purpose: PINSheet.Purpose) {
+        dismissPanel()
+        showMainWindowHandler?()
+        pinSheet = purpose
+    }
+
+    /// Closes the sheet without discarding a pending action — the action has either
+    /// already run or is about to.
+    public func finishPINSheet() {
+        pinSheet = nil
+    }
+
+    /// Opens the turn-off flow on the library window. Settings drives its own copy;
+    /// this exists so the screenshot harness can hold the sheet open for review.
+    public func beginTurnOffPINForCapture() {
+        pinSheet = .turnOff
+    }
+
+    public func cancelPINSheet() {
+        pinSheet = nil
+        afterUnlockAction = nil
+    }
+
+    /// A plain-English count of what the PIN is protecting, for the confirmation that
+    /// turning it off will decrypt all of it.
+    public var encryptedContentSummary: String {
+        let items = store.snapshots.count(where: \.isSensitive)
+        guard items > 0 else {
+            return "Nothing is encrypted right now, so nothing on disk changes."
+        }
+        return items == 1
+            ? "The 1 encrypted item will be decrypted back to plain text on disk."
+            : "All \(items) encrypted items will be decrypted back to plain text on disk."
+    }
+
+    /// Checks a PIN without changing the lock state, for the "current PIN" step.
+    ///
+    /// Deliberately routed through the vault's own attempt counter: this is a guess
+    /// at the PIN like any other, and a verification path that skipped the cooldown
+    /// would be a way around it.
+    public func verifyPIN(_ pin: String) -> Bool {
+        let wasLocked = !vault.isUnlocked
+        do {
+            try vault.unlock(pin: pin)
+            if wasLocked { vault.lock() }
+            pinError = nil
+            return true
+        } catch {
+            pinError = (error as? VaultError)?.errorDescription ?? error.localizedDescription
+            return false
+        }
+    }
+
+    /// Re-keys the vault. Content stays encrypted throughout — the master key is
+    /// unwrapped with the old PIN and re-wrapped with the new one, so nothing is
+    /// decrypted and rewritten.
+    public func changePIN(current: String, new: String, onError: (String) -> Void) {
+        do {
+            try vault.changePIN(current: current, new: new)
+        } catch {
+            onError((error as? VaultError)?.errorDescription ?? error.localizedDescription)
+            return
+        }
+        store.refresh()
+        show(Toast(text: "PIN changed", symbol: "lock.rotation", tone: .success))
+    }
+
+    /// Turns protection off: everything sensitive is decrypted back to plaintext
+    /// first, because a key file removed with content still sealed would leave that
+    /// content unreadable forever.
+    ///
+    /// Returns the number of items it decrypted, or nil if it could not proceed.
+    @discardableResult
+    public func removePINProtection() -> Int? {
+        guard vault.isUnlocked else {
+            show(Toast(text: "Unlock first", symbol: "lock", tone: .warning))
+            return nil
+        }
+        do {
+            let count = try store.clearAllSensitivity()
+            try vault.removePIN()
+            store.refresh()
+            runSearch()
+            show(Toast(text: count == 0 ? "PIN removed" : "PIN removed — \(count) items decrypted",
+                       symbol: "lock.open", tone: .success))
+            return count
+        } catch {
+            show(Toast(text: "Couldn’t remove the PIN", symbol: "exclamationmark.triangle",
+                       tone: .danger, detail: error.localizedDescription))
+            return nil
+        }
+    }
+
+    public func lockVaultNow() {
+        vault.lock()
+        store.refresh()
+        runSearch()
+        show(Toast(text: "Locked", symbol: "lock.fill", tone: .neutral))
+    }
+
+
+    /// Sets the PIN and resumes whatever was interrupted. Reports back rather than
+    /// throwing, so the sheet can show the reason next to the field.
+    public func completePINSetup(pin: String, onError: (String) -> Void) {
+        do {
+            try vault.setUpPIN(pin)
+        } catch {
+            onError((error as? VaultError)?.errorDescription ?? error.localizedDescription)
+            return
+        }
+        pinSheet = nil
+        store.refresh()
+        runSearch()
+        show(Toast(text: "PIN set", symbol: "lock.fill", tone: .success,
+                   detail: "Sensitive items are encrypted with it."))
+        let resume = afterUnlockAction
+        afterUnlockAction = nil
+        resume?()
+    }
 
     public func summonForUnlock() {
         focus.capture()
@@ -982,6 +1251,143 @@ public final class AppModel {
         }
     }
 
+    /// Every tag in the library, for completion in the tag field, with how many items
+    /// carry each — which is what separates a tag you use constantly from a typo you
+    /// made once.
+    public var knownTagNames: [String] { knownTags.names }
+    public var knownTagCounts: [String: Int] { knownTags.counts }
+
+    private var knownTags: (names: [String], counts: [String: Int]) {
+        if let cache = tagNameCache, cache.revision == store.revision {
+            return (cache.names, cache.counts)
+        }
+        let tags = store.allTags()
+        let names = tags.map(\.name).sorted()
+        let counts = Dictionary(tags.map { ($0.name, ($0.items ?? []).count) },
+                                uniquingKeysWith: { first, _ in first })
+        tagNameCache = (store.revision, names, counts)
+        return (names, counts)
+    }
+
+    /// The folder tree as flat "Clients › Acme" labels, for a menu picker.
+    ///
+    /// Sorted by path so the tree still reads as a tree in a flat list, and cached
+    /// with the library so a picker in a view body is not a fetch per render.
+    public var folderChoicesForPicker: [FolderChoice] {
+        if let cache = folderPickerCache, cache.revision == store.revision { return cache.choices }
+        let choices = store.allFolders()
+            .sorted {
+                $0.path.joined(separator: "\u{1F}")
+                    .localizedStandardCompare($1.path.joined(separator: "\u{1F}")) == .orderedAscending
+            }
+            .map { FolderChoice(id: $0.id, label: $0.path.joined(separator: " › "),
+                                symbolName: $0.symbolName) }
+        folderPickerCache = (store.revision, choices)
+        return choices
+    }
+
+    /// Seeds the tag field with a half-typed tag so the screenshot harness can catch
+    /// its suggestion menu open. Nil in normal use.
+    public var tagDraftForCapture: String?
+
+    // MARK: - Tag actions
+
+    /// Renames a tag everywhere it is used. A name that already exists merges into it
+    /// rather than leaving two identical-looking rows in the sidebar.
+    public func renameTag(_ tag: SummonTag, to name: String) {
+        let before = tag.name
+        guard store.renameTag(tag, to: name) else { return }
+        // The selection follows the rename, or the sidebar would be showing a filter
+        // for a name that no longer exists.
+        if sidebarSelection == .tag(before) {
+            sidebarSelection = .tag(name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())
+        }
+        runSearch()
+    }
+
+    public func deleteTag(_ tag: SummonTag) {
+        let name = tag.name
+        let affected = (tag.items ?? []).count
+        store.deleteTag(tag)
+        if sidebarSelection == .tag(name) { sidebarSelection = .all }
+        runSearch()
+        show(Toast(text: "Removed #\(name)", symbol: "tag.slash", tone: .neutral,
+                   detail: affected == 1 ? "From 1 item" : "From \(affected) items"))
+    }
+
+    // MARK: - Filing actions
+
+    /// Moves an item into a folder, or out of every folder when `folder` is nil.
+    ///
+    /// This is what a drag onto a folder row has always looked like it would do and
+    /// never did: the row's drag vended its contents, so the sidebar saw a stray file
+    /// or a piece of text and either re-imported it as a duplicate or ignored it.
+    public func fileItem(_ id: UUID, into folder: SummonFolder?) {
+        guard let item = store.item(id: id) else { return }
+        guard item.folder?.id != folder?.id else { return }
+
+        // Moving into a sensitive folder has to re-encrypt the bytes, which cannot be
+        // done while the vault is shut.
+        let becomesSensitive = folder?.isEffectivelySensitive ?? false
+        if (becomesSensitive || item.isEffectivelySensitive) && !vault.isUnlocked && vault.isConfigured {
+            show(Toast(text: "Unlock to move this", symbol: "lock", tone: .warning))
+            return
+        }
+
+        let title = item.title.isEmpty ? "Item" : item.title
+        store.move(item, to: folder)
+        runSearch()
+        show(Toast(text: folder.map { "Moved “\(title)” to \($0.name)" } ?? "Moved “\(title)” out of its folder",
+                   symbol: folder?.symbolName ?? "tray", tone: .success))
+    }
+
+    public func fileItem(_ id: UUID, intoFolderID folderID: UUID?) {
+        fileItem(id, into: folderID.flatMap { store.folder(id: $0) })
+    }
+
+    /// Drops an item into place beside another one, within the folder they share.
+    public func reorderItem(_ id: UUID, relativeTo siblingID: UUID, placeAfter: Bool) {
+        guard id != siblingID,
+              let item = store.item(id: id),
+              let sibling = store.item(id: siblingID)
+        else { return }
+        store.reorderItem(item, relativeTo: sibling, placeAfter: placeAfter)
+        runSearch()
+    }
+
+    /// Text dropped in from another app, as a snippet in `folder`.
+    public func acceptDroppedText(_ text: String, into folder: SummonFolder?) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        let item = store.createSnippet(title: Heuristics.title(forText: trimmed),
+                                       body: trimmed, folder: folder)
+        runSearch()
+        show(Toast(text: "Added \u{201C}\(item.title)\u{201D}",
+                   symbol: "text.quote", tone: .success))
+    }
+
+    /// Anything dragged in from outside Summon, filed into `folder`.
+    ///
+    /// Text used to be accepted by a folder row and then silently discarded — the
+    /// drop reported success and nothing appeared. Dropping a paragraph on a folder
+    /// now makes a snippet in it, which is what dropping a file already did.
+    public func acceptForeignDrop(_ info: DropInfo, into folder: SummonFolder?) {
+        if info.hasItemsConforming(to: [.fileURL]) {
+            let providers = info.itemProviders(for: [.fileURL])
+            Task { @MainActor in
+                let urls = await FolderDropDelegate.urls(from: providers)
+                guard !urls.isEmpty else { return }
+                importDroppedFiles(urls, into: folder)
+            }
+            return
+        }
+        let providers = info.itemProviders(for: [.text])
+        Task { @MainActor in
+            guard let text = await FolderDropDelegate.text(from: providers) else { return }
+            acceptDroppedText(text, into: folder)
+        }
+    }
+
     // MARK: - Creation actions
 
 
@@ -989,13 +1395,14 @@ public final class AppModel {
     /// whose title is being typed in the detail pane. Nothing is modal: the thing
     /// exists as soon as you ask for it, and you edit it in place.
     public var renamingFolderID: UUID?
+    public var renamingTagID: UUID?
     public var focusNewItemTitle = false
 
     public func beginNewSnippet() {
         showMainWindowHandler?()
         let folder: SummonFolder? = {
             guard case .folder(let id) = sidebarSelection else { return nil }
-            return store.allFolders().first { $0.id == id }
+            return store.folder(id: id)
         }()
         // Created empty and selected, rather than assembled behind a Cancel button.
         // An untitled snippet with no body is removed again when you leave it.
@@ -1021,7 +1428,7 @@ public final class AppModel {
     /// Where a new item would go, for the menu to say so out loud.
     public var newItemDestination: String {
         guard case .folder(let id) = sidebarSelection,
-              let folder = store.allFolders().first(where: { $0.id == id })
+              let folder = store.folder(id: id)
         else { return "All Items" }
         return folder.name
     }
@@ -1043,7 +1450,7 @@ public final class AppModel {
         showMainWindowHandler?()
         let parent: SummonFolder? = {
             guard case .folder(let id) = sidebarSelection else { return nil }
-            return store.allFolders().first { $0.id == id }
+            return store.folder(id: id)
         }()
         let folder = store.createFolder(name: "New Folder", parent: parent)
         sidebarSelection = .folder(folder.id)
@@ -1140,9 +1547,10 @@ public final class AppModel {
         case .clipboard:
             return []
         case .folder(let id):
-            guard let folder = store.allFolders().first(where: { $0.id == id }) else { return [] }
-            let ids = Set(folder.allItems().map(\.id))
-            items = items.filter { ids.contains($0.id) }
+            // This folder's own items, not its whole subtree. A parent used to absorb
+            // everything nested under it, so an item you had deliberately filed two
+            // levels down turned up in three different places.
+            items = items.filter { $0.folderID == id }
         case .tag(let name):
             items = items.filter { $0.tagNames.contains(name) }
         case .kind(let kind):
@@ -1157,6 +1565,14 @@ public final class AppModel {
             return ranked.map(\.item)
         }
         if case .recents = sidebarSelection { return items }
+        // A folder is the one place with a hand-made order to respect. Elsewhere —
+        // and while searching — the view has an ordering rule of its own.
+        if case .folder = sidebarSelection {
+            return items.sorted {
+                $0.sortIndex == $1.sortIndex ? $0.updatedAt > $1.updatedAt
+                                             : $0.sortIndex < $1.sortIndex
+            }
+        }
         return items.sorted { $0.updatedAt > $1.updatedAt }
     }
 
@@ -1167,7 +1583,7 @@ public final class AppModel {
         case .pinned: "Pinned"
         case .locked: "Sensitive"
         case .clipboard: "Clipboard"
-        case .folder(let id): store.allFolders().first { $0.id == id }?.name ?? "Folder"
+        case .folder(let id): store.folder(id: id)?.name ?? "Folder"
         case .tag(let name): "#\(name)"
         case .kind(let kind): kind.pluralName
         }

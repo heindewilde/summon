@@ -11,12 +11,10 @@ public struct ItemDetailView: View {
     @State private var body_ = ""
     @State private var attributed = NSAttributedString(string: "")
     @State private var notes = ""
-    @State private var tagText = ""
+    @State private var tags: [String] = []
     @State private var loadedID: UUID?
     @State private var rewriting = false
-    @State private var showingDetails = false
     @State private var pin = ""
-    @FocusState private var pinFocused: Bool
     @FocusState private var titleFocused: Bool
     @State private var filePreview: AppModel.PreviewData?
 
@@ -29,6 +27,13 @@ public struct ItemDetailView: View {
         model.store.snapshots.first { $0.id == itemID }
     }
 
+    /// What has to change before the pane reloads: the item, or whether it can be
+    /// read at all.
+    private struct LoadKey: Equatable {
+        let itemID: UUID
+        let isLocked: Bool
+    }
+
     public var body: some View {
         VStack(spacing: 0) {
             titleBar
@@ -38,15 +43,21 @@ public struct ItemDetailView: View {
                 lockedNotice
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                content
+                // A floor under the editor: the form below sizes to its content and
+                // will not compress, so in a short window it would otherwise take the
+                // space the thing you came to read was using.
+                content.frame(minHeight: 140)
             }
 
             Divider().overlay(Theme.hairline)
-            metadataFooter
+            properties
         }
-        .task(id: itemID) {
+        // Keyed on the lock state as well as the item. Unlocking does not change which
+        // item is selected, so this never re-ran: the body stayed at whatever the
+        // locked snapshot had — nothing — and an image's preview stayed nil. Clicking
+        // away and back re-selected the item, which is why that appeared to fix it.
+        .task(id: LoadKey(itemID: itemID, isLocked: snapshot?.isLocked ?? false)) {
             load()
-            showingDetails = false
             filePreview = nil
             if let snapshot, !snapshot.kind.isTextual, !snapshot.isLocked {
                 filePreview = model.previewData(for: itemID)
@@ -102,11 +113,9 @@ public struct ItemDetailView: View {
                     Button("Open", systemImage: "arrow.up.forward.app") { model.use(itemID, style: .open) }
                     Button("Reveal in Finder", systemImage: "folder") { model.revealInFinder(itemID) }
                 }
-                Divider()
-                Toggle("Sensitive", isOn: Binding(
-                    get: { snapshot?.isSensitive ?? false },
-                    set: { model.setItemSensitive(itemID, $0) }
-                ))
+                // No Sensitive toggle here: it is a row in the properties below, and
+                // a second switch for the same thing two inches away is a question
+                // about which one is authoritative.
                 Divider()
                 Button("Delete", systemImage: "trash", role: .destructive) {
                     model.mainSelection = itemID
@@ -157,7 +166,8 @@ public struct ItemDetailView: View {
             }
         } else if let snapshot {
             PanelPreview(snapshot: snapshot, bodyText: filePreview?.body,
-                         fileURL: filePreview?.fileURL, thumbnailURL: filePreview?.thumbnailURL)
+                         fileURL: filePreview?.fileURL, thumbnailURL: filePreview?.thumbnailURL,
+                         showsTags: false)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
@@ -215,27 +225,21 @@ public struct ItemDetailView: View {
                 .font(Theme.Typography.title)
                 .foregroundStyle(Theme.primaryText)
 
-            SecureField("PIN", text: $pin)
-                // Plain, with our own well: the bordered style draws the system's
-                // blue focus ring, which is the loudest thing in a monochrome app —
-                // and AutoFill offers to fill a "Passwords…" suggestion over the top
-                // of a field that wants a local PIN, not a website login.
-                .textFieldStyle(.plain)
-                .textContentType(nil)
-                .multilineTextAlignment(.center)
-                .focused($pinFocused)
-                .onSubmit(submitPIN)
-                .onChange(of: pin) { _, _ in model.pinError = nil }
-                .padding(.horizontal, Theme.Space.s)
-                .frame(width: 148, height: 28)
-                .background(Theme.surface, in: .rect(cornerRadius: Theme.Radius.small))
-                .overlay(
-                    RoundedRectangle(cornerRadius: Theme.Radius.small)
-                        .strokeBorder(model.pinError == nil ? Theme.hairline : Theme.danger,
-                                      lineWidth: 1)
-                )
+            // The same four boxes the sheet uses, resolving on the fourth digit. A
+            // single text field needing a return was one more thing to know, and a
+            // different thing from every other PIN prompt in the app.
+            //
+            // Hidden while a sheet is already asking: two PIN prompts on screen at
+            // once, one of them inert behind the other, is not a question anyone can
+            // answer confidently.
+            if model.pinSheet == nil {
+                PINField(digits: $pin, isError: model.pinError != nil, onComplete: submitPIN)
+                    .onChange(of: pin) { _, _ in model.pinError = nil }
+            }
 
-            if let error = model.pinError {
+            if model.pinSheet != nil {
+                EmptyView()
+            } else if let error = model.pinError {
                 Text(error)
                     .font(Theme.Typography.meta)
                     .foregroundStyle(Theme.danger)
@@ -250,7 +254,6 @@ public struct ItemDetailView: View {
             }
         }
         .onAppear {
-            pinFocused = true
             if model.vault.biometricsEnabled { Task { await model.tryBiometricUnlock() } }
         }
     }
@@ -262,93 +265,132 @@ public struct ItemDetailView: View {
         }
     }
 
-    // MARK: - Metadata footer
+    // MARK: - Properties
     //
-    // One quiet line, because none of this is why you opened the item. It expands
-    // into real fields when you actually want to change something.
+    // A real `Form`, so the label column, the row separators and the control sizing
+    // are Apple's rather than three numbers chosen by eye. It replaces a collapsing
+    // summary bar that wrapped onto three lines in a narrow pane and repeated what
+    // the preview above it was already showing.
 
-    private var metadataFooter: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Button {
-                withAnimation(Theme.panelIn) { showingDetails.toggle() }
-            } label: {
-                HStack(spacing: Theme.Space.m) {
-                    if !showingDetails {
-                        Label(snapshot?.folderPath.isEmpty == false
-                              ? snapshot!.folderLabel : "No folder", systemImage: "folder")
-                            .labelStyle(.titleAndIcon)
-                    } else {
-                        Text("Details")
-                    }
-
-                    // Only while collapsed: expanded, the Tags field below shows the
-                    // same thing, and the item's tags were listed twice at once.
-                    if !showingDetails, let tags = snapshot?.tagNames, !tags.isEmpty {
-                        Text(tags.prefix(3).map { "#\($0)" }.joined(separator: " "))
-                        if tags.count > 3 { Text("+\(tags.count - 3)") }
-                    }
-
-                    Spacer(minLength: Theme.Space.s)
-
-                    if let size = snapshot?.byteSize, size > 0 {
-                        Text(ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file))
-                    }
-                    if let uses = snapshot?.useCount, uses > 0 { Text("Used \(uses)×") }
-                    Image(systemName: snapshot?.isSensitive == true ? "lock.fill" : "lock.open")
-                    Image(systemName: showingDetails ? "chevron.down" : "chevron.up")
-                        .font(.system(size: 9))
-                }
-                .font(Theme.Typography.meta)
-                .foregroundStyle(Theme.tertiaryText)
-                .padding(.horizontal, Theme.Space.l)
-                .frame(height: 34)
-                .contentShape(.rect)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(showingDetails ? "Hide details" : "Show details")
-
-            if showingDetails { detailFields }
-        }
-    }
-
-    private var detailFields: some View {
-        VStack(alignment: .leading, spacing: Theme.Space.s) {
-            field("Folder") {
+    private var properties: some View {
+        // A `Grid`, not a `Form`. A form row aligns its label to the *first text
+        // baseline* of its content, and the tag well has no text baseline to find —
+        // so "Tags" sat level with the bottom of its own field while every other
+        // label sat level with the middle of its. A grid centres each row and gives
+        // one shared label column, which is what the eye was looking for.
+        Grid(alignment: .leading,
+             horizontalSpacing: Theme.Space.m,
+             verticalSpacing: 10) {
+            GridRow {
+                label("Folder")
                 Picker("", selection: folderBinding) {
-                    Text("No folder").tag(UUID?.none)
-                    ForEach(model.store.allFolders(), id: \.id) { folder in
-                        Text(folder.path.joined(separator: " › ")).tag(UUID?.some(folder.id))
+                    Label("No folder", systemImage: "tray").tag(UUID?.none)
+                    ForEach(model.folderChoicesForPicker, id: \.id) { choice in
+                        Label(choice.label, systemImage: choice.symbolName).tag(choice.id)
                     }
                 }
                 .labelsHidden()
                 .pickerStyle(.menu)
-                .fixedSize()
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            field("Tags") {
-                TextField("Separated by commas", text: $tagText)
-                    .textFieldStyle(.roundedBorder)
-                    .onSubmit(commitTags)
+
+            // Lifted above the rows below it, so the suggestion menu draws over Notes
+            // and Sensitive instead of being painted on by them.
+            GridRow {
+                label("Tags")
+                TagField(tags: $tags,
+                         suggestions: model.knownTagNames,
+                         counts: model.knownTagCounts,
+                         initialDraft: model.tagDraftForCapture,
+                         onChange: commitTags)
+                    // Rebuilt per item, so a half-typed tag never carries across a
+                    // change of selection.
+                    .id(itemID)
             }
-            field("Notes") {
-                TextField("Anything worth remembering", text: $notes, axis: .vertical)
+            .zIndex(1)
+
+            GridRow {
+                label("Notes")
+                TextField("", text: $notes,
+                          prompt: Text("Anything worth remembering"), axis: .vertical)
                     .textFieldStyle(.roundedBorder)
                     .lineLimit(1...3)
+                    .multilineTextAlignment(.leading)
                     .onSubmit(commit)
+            }
+
+            GridRow {
+                label("Sensitive")
+                HStack(spacing: Theme.Space.s) {
+                    Toggle("", isOn: Binding(
+                        get: { snapshot?.isSensitive ?? false },
+                        set: { model.setItemSensitive(itemID, $0) }
+                    ))
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    // The system accent was the only saturated colour in the pane, on
+                    // the one control that is not trying to be noticed.
+                    .tint(Theme.primaryText)
+                    .disabled(inheritsSensitivity)
+
+                    // The switch says on or off; the padlock says what "on" means, in
+                    // the glyph the sidebar and the panel already use for it.
+                    if snapshot?.isSensitive == true {
+                        Image(systemName: "lock.fill")
+                            .font(.system(size: 10))
+                            .foregroundStyle(Theme.tertiaryText)
+                            .transition(.opacity)
+                            .accessibilityLabel("Encrypted")
+                    }
+                    Spacer(minLength: 0)
+                }
+                .animation(Theme.panelIn, value: snapshot?.isSensitive)
+                .help(inheritsSensitivity
+                      ? "Its folder is sensitive, so everything inside it is encrypted."
+                      : "Encrypt this item’s contents behind your PIN.")
+            }
+
+            // Only where it means something. A snippet's byte count is noise; a file's
+            // size is the one fact about it you might actually want.
+            if snapshot?.kind.isBlobBacked == true, let size = snapshot?.byteSize, size > 0 {
+                GridRow {
+                    label("Size")
+                    Text(ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file))
+                        .foregroundStyle(Theme.secondaryText)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
         }
         .font(Theme.Typography.body)
         .padding(.horizontal, Theme.Space.l)
-        .padding(.bottom, Theme.Space.m)
+        .padding(.top, Theme.Space.m)
+        // More room under the last row than above the first: it is the window's edge
+        // down there, not another section, and 12pt against a hard edge reads as the
+        // block having been cut off.
+        .padding(.bottom, Theme.Space.l)
     }
 
-    private func field<Content: View>(_ label: String, @ViewBuilder content: () -> Content) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: Theme.Space.m) {
-            Text(label)
-                .font(Theme.Typography.meta)
-                .foregroundStyle(Theme.tertiaryText)
-                .frame(width: 52, alignment: .leading)
-            content()
-        }
+    /// One label column, right-aligned against the fields.
+    ///
+    /// Every row is given the same minimum height so the block has one rhythm: the
+    /// bezelled fields set their own height and the bare ones — the switch, the size —
+    /// used to collapse to the height of their text, which is what made the bottom
+    /// two rows look crammed against the rest.
+    private func label(_ text: String) -> some View {
+        Text(text)
+            .foregroundStyle(Theme.secondaryText)
+            .gridColumnAlignment(.trailing)
+            .frame(minHeight: Self.rowHeight)
+    }
+
+    private static let rowHeight: CGFloat = 24
+
+    /// True when the item is sensitive only because its folder is: the switch would
+    /// promise something it cannot deliver, since the folder decides.
+    private var inheritsSensitivity: Bool {
+        guard let item = model.store.item(id: itemID) else { return false }
+        return !item.isSensitive && item.isEffectivelySensitive
     }
 
     private var folderBinding: Binding<UUID?> {
@@ -356,9 +398,7 @@ public struct ItemDetailView: View {
             get: { model.store.item(id: itemID)?.folder?.id },
             set: { newID in
                 guard let item = model.store.item(id: itemID) else { return }
-                let folder = newID.flatMap { id in model.store.allFolders().first { $0.id == id } }
-                model.store.move(item, to: folder)
-                model.runSearch()
+                model.fileItem(item.id, intoFolderID: newID)
             }
         )
     }
@@ -370,7 +410,7 @@ public struct ItemDetailView: View {
         loadedID = itemID
         title = item.title
         notes = item.notes
-        tagText = item.tagNames.joined(separator: ", ")
+        tags = item.tagNames
         body_ = model.store.resolveBodyText(item, key: model.vault.currentKey) ?? ""
         attributed = model.store.resolveAttributed(item, key: model.vault.currentKey)
             ?? NSAttributedString(string: "")
@@ -412,11 +452,12 @@ public struct ItemDetailView: View {
         }
     }
 
-    private func commitTags() {
-        guard let item = model.store.item(id: itemID) else { return }
-        let names = tagText.split(separator: ",").map {
-            $0.trimmingCharacters(in: .whitespaces)
-        }.filter { !$0.isEmpty }
+    private func commitTags(_ names: [String]) {
+        // `loadedID` is the item these tags were actually loaded from; without it a
+        // late commit from the previous selection lands on the current one.
+        guard loadedID == itemID,
+              let item = model.store.item(id: itemID),
+              item.tagNames != names.sorted() else { return }
         model.store.setTags(item, names: names)
         model.runSearch()
     }

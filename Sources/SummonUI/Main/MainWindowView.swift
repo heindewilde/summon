@@ -38,6 +38,10 @@ public struct MainWindowView: View {
             }
         }
         .animation(Theme.panelIn, value: model.toast)
+        .sheet(item: Binding(get: { model.pinSheet },
+                             set: { if $0 == nil { model.cancelPINSheet() } })) { purpose in
+            PINSheet(model: model, purpose: purpose) { model.finishPINSheet() }
+        }
         .alert("Delete “\(model.pendingDeleteTitle)”?",
                isPresented: Binding(get: { model.pendingDeleteID != nil },
                                     set: { if !$0 { model.pendingDeleteID = nil } })) {
@@ -60,7 +64,7 @@ public struct MainWindowView: View {
         EmptyStateView(
             symbol: "sparkles",
             title: "Select something",
-            message: "Choose an item to edit it here. To actually use one, press \(model.settings.summonHotKey.displayString) from wherever you’re working — that’s the fast path."
+            message: "Choose an item to edit it here. To actually use one, press \(model.settings.summonHotKey.displayString) from wherever you’re working."
         )
     }
 

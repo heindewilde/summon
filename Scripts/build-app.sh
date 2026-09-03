@@ -64,6 +64,26 @@ cat > "$CONTENTS/Info.plist" <<PLIST
     <key>NSAppleEventsUsageDescription</key>
     <string>Summon reads the current Finder selection so you can save files with a single keystroke.</string>
 
+    <!-- Declared so a drag inside Summon can carry which row it came from alongside
+         the row's contents. Without an identity on the drag, dropping an item onto a
+         folder looked to the sidebar like a stray file or a piece of text: it was
+         re-imported as a duplicate, or ignored. -->
+    <key>UTExportedTypeDeclarations</key>
+    <array>
+        <dict>
+            <key>UTTypeIdentifier</key><string>com.heindewilde.summon.item</string>
+            <key>UTTypeDescription</key><string>Summon Item Reference</string>
+            <key>UTTypeConformsTo</key><array><string>public.data</string></array>
+            <key>UTTypeTagSpecification</key><dict/>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key><string>com.heindewilde.summon.folder</string>
+            <key>UTTypeDescription</key><string>Summon Folder Reference</string>
+            <key>UTTypeConformsTo</key><array><string>public.data</string></array>
+            <key>UTTypeTagSpecification</key><dict/>
+        </dict>
+    </array>
+
     <key>NSServices</key>
     <array>
         <dict>

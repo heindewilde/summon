@@ -91,4 +91,19 @@ struct FolderIconTests {
     private var Theme_folderColorNames: [String] {
         ["violet", "blue", "teal", "green", "amber", "red", "graphite"]
     }
+
+    @Test("No folder icon is a glyph that only exists filled")
+    func everyIconIsAnOutline() {
+        // The set is all outlines, and `airplane` was quietly solid — SF Symbols has
+        // no outline version of it, so it read as the odd one out at every size. This
+        // is a deny-list rather than a rule because there is no property to test: ink
+        // coverage does not separate a filled plane from an outlined gift box, and
+        // plenty of legitimate outline symbols (`calendar`, `paperclip`) have no
+        // `.fill` counterpart either.
+        let solidOnly: Set<String> = ["airplane", "airplane.departure", "airplane.arrival",
+                                      "mustache", "peacesign"]
+        let used = Set(FolderIcon.all.map(\.name))
+        #expect(used.intersection(solidOnly).isEmpty,
+                "\(used.intersection(solidOnly)) render solid in an otherwise outlined set")
+    }
 }

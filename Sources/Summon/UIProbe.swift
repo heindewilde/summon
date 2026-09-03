@@ -18,6 +18,34 @@ enum UIProbe {
         ProcessInfo.processInfo.environment["SUMMON_UIPROBE_INPUT"] == "1"
     }
 
+    /// Whether a synthetic click at `point` would actually reach us.
+    ///
+    /// Opting in was not guard enough. A synthetic drag posted while another app
+    /// happened to be in front went to *that* app and reordered a list inside it —
+    /// the events go to whoever owns the pixels, and the probe had no idea it was
+    /// pointing at somebody else's window. It checks first now, and refuses.
+    static func summonOwnsPoint(_ point: CGPoint) -> Bool {
+        guard NSApp.isActive else { return false }
+        let info = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements],
+                                              kCGNullWindowID) as? [[String: Any]] ?? []
+        // Front to back: the first window whose frame contains the point is the one
+        // that will receive the click.
+        // Matched on pid, not on the owner's name: a second copy of Summon running
+        // against the real library is still "Summon", and clicking into somebody's
+        // actual data would be the same mistake with a friendlier name on it.
+        let me = ProcessInfo.processInfo.processIdentifier
+        for entry in info {
+            guard (entry[kCGWindowLayer as String] as? Int) == 0,
+                  let bounds = entry[kCGWindowBounds as String] as? [String: CGFloat],
+                  let pid = entry[kCGWindowOwnerPID as String] as? Int32
+            else { continue }
+            let rect = CGRect(x: bounds["X"] ?? 0, y: bounds["Y"] ?? 0,
+                              width: bounds["Width"] ?? 0, height: bounds["Height"] ?? 0)
+            if rect.contains(point) { return pid == me }
+        }
+        return false
+    }
+
     private static func attribute(_ element: AXUIElement, _ name: String) -> CFTypeRef? {
         var value: CFTypeRef?
         return AXUIElementCopyAttributeValue(element, name as CFString, &value) == .success ? value : nil
@@ -144,6 +172,10 @@ enum UIProbe {
             guard title(element).contains("Client Replies"),
                   let box = frame(of: element), box.width > 100, box.width < 320 else { continue }
             let point = CGPoint(x: box.midX, y: box.midY)
+            guard summonOwnsPoint(point) else {
+                line("····  skipped clicking the sidebar: another app owns that point")
+                break
+            }
             for type in [CGEventType.leftMouseDown, .leftMouseUp] {
                 CGEvent(mouseEventSource: nil, mouseType: type,
                         mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
@@ -177,6 +209,10 @@ enum UIProbe {
                 return flipped.contains(point)
             }
             line("clicking a row at \(Int(point.x)), \(Int(point.y)) — \(Int(size.width))×\(Int(size.height)), on a screen: \(onScreen)")
+            guard summonOwnsPoint(point) else {
+                line("····  skipped clicking a row: another app owns that point")
+                break
+            }
             for type in [CGEventType.leftMouseDown, .leftMouseUp] {
                 CGEvent(mouseEventSource: nil, mouseType: type,
                         mouseCursorPosition: point, mouseButton: .left)?
@@ -194,6 +230,86 @@ enum UIProbe {
                  : "FAIL  clicking a row changed nothing (selection is still \(String(describing: before)))")
         } else {
             line("FAIL  found no item row with a clickable frame")
+        }
+
+        // MARK: A real drag, from an item row onto a folder row
+        //
+        // The one thing no unit test can answer. Dropping an item on a folder used to
+        // do nothing at all, and nothing about the code said so — the drop reported
+        // success, the indicator stayed on screen, and the item stayed where it was.
+        // This posts genuine mouse events and then asks the model what happened.
+        if mayPostInput {
+            // Come forward first, and check afterwards that we actually did. Posted
+            // events land wherever the pixels belong, so being in front is a
+            // precondition, not a nicety.
+            NSRunningApplication.current.activate(options: [.activateAllWindows])
+            NSApp.windows.first { $0.isVisible && !($0 is SummonPanel) }?.makeKeyAndOrderFront(nil)
+            try? await Task.sleep(for: .seconds(1))
+
+            model.sidebarSelection = .all
+            model.store.refresh()
+
+            let folders = model.sidebarFolderRows
+            let draggable = model.visibleItems.first { !$0.isLocked }
+            let destination = folders.first { $0.id != draggable?.folderID }
+
+            if let draggable, let destination {
+                var itemPoint: CGPoint?
+                var folderPoint: CGPoint?
+                for (_, element) in found {
+                    let label = title(element)
+                    guard let box = frame(of: element) else { continue }
+                    // The sidebar is the narrow column; the item list is the wide one.
+                    if label.contains(destination.name), box.width < 320, folderPoint == nil {
+                        folderPoint = CGPoint(x: box.midX, y: box.midY)
+                    }
+                    if !draggable.title.isEmpty, label.contains(draggable.title),
+                       box.width > 250, itemPoint == nil {
+                        itemPoint = CGPoint(x: box.midX, y: box.midY)
+                    }
+                }
+
+                if let from = itemPoint, let to = folderPoint,
+                   summonOwnsPoint(from), summonOwnsPoint(to) {
+                    line("dragging “\(draggable.title)” onto “\(destination.name)”")
+                    CGEvent(mouseEventSource: nil, mouseType: .leftMouseDown,
+                            mouseCursorPosition: from, mouseButton: .left)?.post(tap: .cghidEventTap)
+                    // Stepped, not teleported: AppKit only starts a drag session once
+                    // the pointer has moved past a threshold, and a single jump to the
+                    // destination reads as a click.
+                    for step in 1...20 {
+                        let t = CGFloat(step) / 20
+                        let point = CGPoint(x: from.x + (to.x - from.x) * t,
+                                            y: from.y + (to.y - from.y) * t)
+                        CGEvent(mouseEventSource: nil, mouseType: .leftMouseDragged,
+                                mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
+                        try? await Task.sleep(for: .milliseconds(25))
+                    }
+                    let indicatorDuringDrag = model.folderDropTarget
+                    CGEvent(mouseEventSource: nil, mouseType: .leftMouseUp,
+                            mouseCursorPosition: to, mouseButton: .left)?.post(tap: .cghidEventTap)
+                    try? await Task.sleep(for: .seconds(1))
+
+                    line(indicatorDuringDrag?.folderID == destination.id
+                         ? "PASS  the folder under the pointer shows a drop indicator"
+                         : "FAIL  no drop indicator appeared over the folder")
+
+                    let landed = model.store.item(id: draggable.id)?.folder?.id
+                    line(landed == destination.id
+                         ? "PASS  dropping an item on a folder files it there"
+                         : "FAIL  the item did not move (it is in \(landed.map(String.init(describing:)) ?? "no folder"))")
+
+                    // The stuck grey line: the indicator has to be gone once the drag
+                    // is over, however the drag ended.
+                    line(model.folderDropTarget == nil
+                         ? "PASS  the drop indicator clears when the drag ends"
+                         : "FAIL  the drop indicator is still on screen after the drop")
+                } else {
+                    line("····  skipped the drag: no reachable row and folder that Summon owns")
+                }
+            } else {
+                line("····  nothing draggable to test with")
+            }
         }
 
         // Does summoning drag the library window forward with it?

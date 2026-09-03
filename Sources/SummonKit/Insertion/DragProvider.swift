@@ -9,12 +9,17 @@ import UniformTypeIdentifiers
 /// item's title, which is all a naive `ProxyRepresentation` on the row model gives.
 public enum DragProvider {
 
-    public static func make(for payload: InsertPayload, title: String) -> NSItemProvider? {
+    /// - Parameter itemID: stamped onto the provider so a drop back into Summon can
+    ///   tell *which* row it is holding. Without it a drag onto a folder looked like
+    ///   an anonymous file or a piece of text, and filing it was guesswork.
+    public static func make(for payload: InsertPayload, title: String,
+                            itemID: UUID? = nil) -> NSItemProvider? {
         // A file drags as a file. Mail attaches it, Finder copies it, upload fields
         // accept it — none of which work if all we vend is a string.
         if let url = payload.fileURL, FileManager.default.fileExists(atPath: url.path) {
             let provider = NSItemProvider(contentsOf: url)
             provider?.suggestedName = url.lastPathComponent
+            if let itemID { provider?.registerSummonID(itemID, as: SummonDragType.item) }
             return provider
         }
 
@@ -34,6 +39,8 @@ public enum DragProvider {
             registeredSomething = true
         }
 
-        return registeredSomething ? provider : nil
+        guard registeredSomething else { return nil }
+        if let itemID { provider.registerSummonID(itemID, as: SummonDragType.item) }
+        return provider
     }
 }

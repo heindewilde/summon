@@ -30,14 +30,22 @@ public struct ItemListView: View {
                 list
             }
         }
-        .onDrop(of: [.fileURL], isTargeted: nil) { providers in
-            Task {
-                let urls = await FolderDropDelegate.urls(from: providers)
-                guard !urls.isEmpty else { return }
-                model.importDroppedFiles(urls, into: currentFolder)
-            }
-            return true
-        }
+        // Whatever the list receives from outside lands in the folder being shown,
+        // which is where a new item would go anyway. The delegate refuses Summon's
+        // own drags: a row dragged over the empty space below the list still carries
+        // its contents, and a content-based handler would duplicate it.
+        .onDrop(of: [.fileURL, .text, SummonDragType.item, SummonDragType.folder],
+                delegate: LibraryDropDelegate(model: model, folder: { currentFolder }))
+    }
+
+    /// Whether rows can be dragged into a hand-made order right now.
+    ///
+    /// A folder is the only view with an order of its own to write to, and only while
+    /// nothing is typed — under a search the list is in rank order, so a row dropped
+    /// into place would spring straight back.
+    private var canReorder: Bool {
+        if case .folder = model.sidebarSelection { return model.mainSearch.isEmpty }
+        return false
     }
 
     /// Selecting always hands the keyboard to the list, so the mouse and the arrow
@@ -49,7 +57,7 @@ public struct ItemListView: View {
 
     private var currentFolder: SummonFolder? {
         guard case .folder(let id) = model.sidebarSelection else { return nil }
-        return model.store.allFolders().first { $0.id == id }
+        return model.store.folder(id: id)
     }
 
     /// The same construct the panel uses, not a `List`.
@@ -64,7 +72,9 @@ public struct ItemListView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     ForEach(items) { item in
-                        ItemRow(model: model, item: item, onSelect: select).id(item.id)
+                        ItemRow(model: model, item: item,
+                                canReorder: canReorder, onSelect: select)
+                            .id(item.id)
                     }
                 }
                 .padding(.horizontal, Theme.Space.xs)
@@ -150,7 +160,17 @@ public struct ItemListView: View {
 struct ItemRow: View {
     @Bindable var model: AppModel
     let item: ItemSnapshot
+    let canReorder: Bool
     let onSelect: (UUID) -> Void
+
+    /// The row height `LibraryRow` draws, which the drop delegate needs in order to
+    /// turn a pointer position into "above" or "below".
+    static let height: CGFloat = 40
+
+    private var dropEdge: VerticalAlignment? {
+        guard let target = model.itemDropTarget, target.itemID == item.id else { return nil }
+        return target.placeAfter ? .bottom : .top
+    }
 
     var body: some View {
         // The same 40pt row the panel and the menu bar draw. Three surfaces had
@@ -170,8 +190,29 @@ struct ItemRow: View {
                 onSelect(item.id)
                 model.use(item.id, style: .copy)
             })
+            .overlay(alignment: .top) { if dropEdge == .top { DropLine() } }
+            .overlay(alignment: .bottom) { if dropEdge == .bottom { DropLine() } }
             .contextMenu { ItemContextMenu(model: model, item: item) }
-            .onDrag { model.dragProvider(for: item.id) ?? NSItemProvider() }
+            .onDrag { model.dragProvider(for: item.id) ?? model.identityOnlyDragProvider(for: item.id) }
+            .modifier(ReorderDropTarget(model: model, item: item, enabled: canReorder))
+    }
+}
+
+/// Applied conditionally, because a drop target that accepts a drag it cannot honour
+/// is worse than none: it shows an insertion line and then does nothing.
+private struct ReorderDropTarget: ViewModifier {
+    let model: AppModel
+    let item: ItemSnapshot
+    let enabled: Bool
+
+    func body(content: Content) -> some View {
+        if enabled {
+            content.onDrop(of: [SummonDragType.item],
+                           delegate: ItemReorderDropDelegate(item: item, model: model,
+                                                             rowHeight: ItemRow.height))
+        } else {
+            content
+        }
     }
 }
 
@@ -223,7 +264,7 @@ struct ItemCard: View {
                 .strokeBorder(isSelected ? Theme.primaryText.opacity(0.6) : Theme.hairline, lineWidth: 1)
         )
         .contextMenu { ItemContextMenu(model: model, item: item) }
-        .onDrag { model.dragProvider(for: item.id) ?? NSItemProvider() }
+        .onDrag { model.dragProvider(for: item.id) ?? model.identityOnlyDragProvider(for: item.id) }
     }
 }
 
@@ -235,6 +276,7 @@ struct ItemContextMenu: View {
         Button("Copy", systemImage: "doc.on.doc") { model.use(item.id, style: .copy) }
         Button(item.isPinned ? "Unpin" : "Pin",
                systemImage: item.isPinned ? "pin.slash" : "pin") { model.togglePin(item.id) }
+        FolderPickerMenu(model: model, item: item)
         if item.kind.isBlobBacked {
             Button("Open", systemImage: "arrow.up.forward.app") { model.use(item.id, style: .open) }
             Button("Reveal in Finder", systemImage: "folder") { model.revealInFinder(item.id) }

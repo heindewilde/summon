@@ -74,7 +74,9 @@ public enum FolderIcon {
         Group(title: "Places", symbols: [
             Symbol("house", "home personal"), Symbol("building", "office"),
             Symbol("mappin", "location address"), Symbol("globe", "web world international"),
-            Symbol("airplane", "travel trip"), Symbol("car", "drive vehicle"),
+            // SF Symbols has no outline airplane — the plain glyph is solid by design, and
+            // it was the only filled icon in a set that is otherwise all outlines.
+            Symbol("airplane.circle", "travel trip flight"), Symbol("car", "drive vehicle"),
             Symbol("bag", "shopping"), Symbol("cart", "shop ecommerce"),
         ]),
         Group(title: "Marks", symbols: [

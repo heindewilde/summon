@@ -132,7 +132,7 @@ struct LibraryStoreTests {
     func sensitivityInheritance() throws {
         let (store, vault, paths) = try makeStore()
         defer { paths.destroy() }
-        try vault.setUpPIN("482913")
+        try vault.setUpPIN("4829")
 
         let personal = store.createFolder(name: "Personal", sensitive: true)
         let ids = store.createFolder(name: "IDs", parent: personal)
@@ -146,7 +146,7 @@ struct LibraryStoreTests {
     func sensitiveItemEncrypts() throws {
         let (store, vault, paths) = try makeStore()
         defer { paths.destroy() }
-        try vault.setUpPIN("482913")
+        try vault.setUpPIN("4829")
 
         let item = store.createSnippet(title: "Passport number", body: "NLD1234567")
         try store.setSensitive(item, true)
@@ -173,7 +173,7 @@ struct LibraryStoreTests {
     func desensitizeDecrypts() throws {
         let (store, vault, paths) = try makeStore()
         defer { paths.destroy() }
-        try vault.setUpPIN("482913")
+        try vault.setUpPIN("4829")
 
         let item = store.createSnippet(title: "Bank details", body: "IBAN NL91 ABNA")
         try store.setSensitive(item, true)
@@ -187,7 +187,7 @@ struct LibraryStoreTests {
     func cannotEncryptWhileLocked() throws {
         let (store, vault, paths) = try makeStore()
         defer { paths.destroy() }
-        try vault.setUpPIN("482913")
+        try vault.setUpPIN("4829")
         let item = store.createSnippet(title: "Thing", body: "body")
         vault.lock()
 
@@ -303,5 +303,67 @@ struct LibraryStoreTests {
         store.delete(item)
         #expect(!FileManager.default.fileExists(atPath: url.path))
         #expect(store.snapshots.isEmpty)
+    }
+}
+
+@Suite("Tag management")
+@MainActor
+struct TagManagementTests {
+    private func store() throws -> LibraryStore {
+        let paths = LibraryPaths.temporary()
+        return try LibraryStore(paths: paths, vault: Vault(paths: paths))
+    }
+
+    @Test("Renaming a tag renames it on every item")
+    func renameEverywhere() throws {
+        let store = try store()
+        let a = store.createSnippet(title: "A", body: "…", tags: ["draft"])
+        let b = store.createSnippet(title: "B", body: "…", tags: ["draft", "legal"])
+
+        let draft = try #require(store.allTags().first { $0.name == "draft" })
+        #expect(store.renameTag(draft, to: "Drafts"))
+
+        #expect(a.tagNames == ["drafts"])
+        #expect(b.tagNames == ["drafts", "legal"])
+        // Normalised on the way in, like every other tag.
+        #expect(store.allTags().map(\.name).sorted() == ["drafts", "legal"])
+    }
+
+    @Test("Renaming onto an existing tag merges rather than duplicating")
+    func renameMerges() throws {
+        let store = try store()
+        let a = store.createSnippet(title: "A", body: "…", tags: ["invoice"])
+        let b = store.createSnippet(title: "B", body: "…", tags: ["invoices"])
+
+        let plural = try #require(store.allTags().first { $0.name == "invoices" })
+        #expect(store.renameTag(plural, to: "invoice"))
+
+        // One tag, on both items — not two rows in the sidebar sharing a name.
+        #expect(store.tagsInUse().map(\.name) == ["invoice"])
+        #expect(a.tagNames == ["invoice"])
+        #expect(b.tagNames == ["invoice"])
+    }
+
+    @Test("An empty or unchanged name is refused")
+    func renameRefusesNonsense() throws {
+        let store = try store()
+        store.createSnippet(title: "A", body: "…", tags: ["draft"])
+        let draft = try #require(store.allTags().first { $0.name == "draft" })
+        #expect(!store.renameTag(draft, to: "   "))
+        #expect(!store.renameTag(draft, to: "draft"))
+        #expect(draft.name == "draft")
+    }
+
+    @Test("Deleting a tag takes it off its items and leaves them alone")
+    func deleteTag() throws {
+        let store = try store()
+        let a = store.createSnippet(title: "A", body: "keep me", tags: ["draft", "legal"])
+        let draft = try #require(store.allTags().first { $0.name == "draft" })
+
+        store.deleteTag(draft)
+        #expect(a.tagNames == ["legal"])
+        // The item survives: a tag is a label, not a container.
+        #expect(store.item(id: a.id) != nil)
+        #expect(store.allTags().map(\.name) == ["legal"])
     }
 }

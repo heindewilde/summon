@@ -44,6 +44,13 @@ public final class SummonItem {
     public var useCount: Int = 0
 
     public var folder: SummonFolder?
+
+    /// Hand-chosen position among the items filed directly in `folder`.
+    ///
+    /// Only meaningful inside a folder: every other view (All Items, Recents, a tag)
+    /// has its own ordering rule, and a single manual order cannot serve them all.
+    public var sortIndex: Int = 0
+
     @Relationship(inverse: \SummonTag.items) public var tags: [SummonTag]? = []
     @Relationship(deleteRule: .cascade, inverse: \AppAffinity.item) public var affinities: [AppAffinity]? = []
 
@@ -163,10 +170,22 @@ public final class SummonFolder {
     }
 
     /// Every item in this folder and everything nested beneath it.
+    ///
+    /// Used where the subtree genuinely is the unit — sealing a folder has to reach
+    /// every item under it. It is *not* what the sidebar shows: selecting a parent
+    /// lists only `directItems`, so the list and the count agree.
     public func allItems() -> [SummonItem] {
         var result = items ?? []
         for child in children ?? [] { result.append(contentsOf: child.allItems()) }
         return result
+    }
+
+    /// The items filed in this folder itself, in their hand-chosen order.
+    public var directItems: [SummonItem] {
+        (items ?? []).sorted {
+            $0.sortIndex == $1.sortIndex ? $0.updatedAt > $1.updatedAt
+                                         : $0.sortIndex < $1.sortIndex
+        }
     }
 }
 

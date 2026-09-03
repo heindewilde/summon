@@ -11,11 +11,18 @@ public struct PanelPreview: View {
     public let fileURL: URL?
     public let thumbnailURL: URL?
 
-    public init(snapshot: ItemSnapshot, bodyText: String?, fileURL: URL?, thumbnailURL: URL?) {
+    /// False in the library, where the tag field sits directly below and showed the
+    /// same tags twice. True in the panel, which has no field and where the chips are
+    /// the only place tags appear at all.
+    public let showsTags: Bool
+
+    public init(snapshot: ItemSnapshot, bodyText: String?, fileURL: URL?,
+                thumbnailURL: URL?, showsTags: Bool = true) {
         self.snapshot = snapshot
         self.bodyText = bodyText
         self.fileURL = fileURL
         self.thumbnailURL = thumbnailURL
+        self.showsTags = showsTags
     }
 
     public var body: some View {
@@ -23,9 +30,15 @@ public struct PanelPreview: View {
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
 
-            Divider().overlay(Theme.hairline)
-            metadata
+            if hasMetadata {
+                Divider().overlay(Theme.hairline)
+                metadata
+            }
         }
+    }
+
+    private var hasMetadata: Bool {
+        !(snapshot.summary ?? "").isEmpty || (showsTags && !snapshot.tagNames.isEmpty)
     }
 
     @ViewBuilder
@@ -125,39 +138,36 @@ public struct PanelPreview: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
+    /// The summary, and the tags where they are the only place tags are visible.
+    ///
+    /// It used to also name the kind and count how often the item had been used. The
+    /// kind is already drawn as a badge on every row and glyph above every preview,
+    /// so naming it made "image" appear three times in one pane; the use count was
+    /// something to read rather than something to act on.
+    @ViewBuilder
     private var metadata: some View {
-        VStack(alignment: .leading, spacing: Theme.Space.xs) {
-            if let summary = snapshot.summary, !summary.isEmpty {
-                Text(summary)
-                    .font(.system(size: 11))
-                    .foregroundStyle(Theme.secondaryText)
-                    .lineLimit(3)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+        let summary = snapshot.summary ?? ""
+        let showsAnything = !summary.isEmpty || (showsTags && !snapshot.tagNames.isEmpty)
 
-            if !snapshot.tagNames.isEmpty {
-                HStack(spacing: Theme.Space.xxs) {
-                    ForEach(snapshot.tagNames.prefix(4), id: \.self) { TagChip(name: $0) }
+        if showsAnything {
+            VStack(alignment: .leading, spacing: Theme.Space.xs) {
+                if !summary.isEmpty {
+                    Text(summary)
+                        .font(.system(size: 11))
+                        .foregroundStyle(Theme.secondaryText)
+                        .lineLimit(3)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-            }
 
-            HStack(spacing: Theme.Space.s) {
-                Label(snapshot.kind.displayName, systemImage: snapshot.kind.symbolName)
-                if snapshot.useCount > 0 {
-                    Label("Used \(snapshot.useCount)×", systemImage: "arrow.uturn.backward")
+                if showsTags && !snapshot.tagNames.isEmpty {
+                    HStack(spacing: Theme.Space.xxs) {
+                        ForEach(snapshot.tagNames.prefix(4), id: \.self) { TagChip(name: $0) }
+                    }
                 }
-                if let last = snapshot.lastUsedAt {
-                    Text(last.formatted(.relative(presentation: .named)))
-                }
-                Spacer()
             }
-            .font(.system(size: 10.5))
-            .foregroundStyle(Theme.tertiaryText)
-            .labelStyle(.titleAndIcon)
-            .lineLimit(1)
+            .padding(Theme.Space.s)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(Theme.Space.s)
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

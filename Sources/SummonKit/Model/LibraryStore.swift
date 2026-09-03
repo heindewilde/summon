@@ -44,6 +44,7 @@ public final class LibraryStore {
     /// Identity map, rebuilt with the snapshots. Not observed — it is a lookup
     /// accelerator, never a source of view state.
     @ObservationIgnored private var itemsByID: [UUID: SummonItem] = [:]
+    @ObservationIgnored private var foldersByID: [UUID: SummonFolder] = [:]
 
     public init(paths: LibraryPaths, vault: Vault) throws {
         self.paths = paths
@@ -78,6 +79,18 @@ public final class LibraryStore {
         (try? context.fetch(FetchDescriptor<SummonFolder>())) ?? []
     }
 
+    /// A folder by id, without re-fetching the table.
+    ///
+    /// The same accelerator `item(id:)` has, and for the same reason: the sidebar,
+    /// the title bar and every drop resolve folders by id, and each of those was a
+    /// full fetch of the folder table.
+    public func folder(id: UUID) -> SummonFolder? {
+        if let cached = foldersByID[id], !cached.isDeleted { return cached }
+        guard let found = allFolders().first(where: { $0.id == id }) else { return nil }
+        foldersByID[found.id] = found
+        return found
+    }
+
     public func rootFolders() -> [SummonFolder] { children(of: nil) }
 
     public func allTags() -> [SummonTag] {
@@ -95,6 +108,8 @@ public final class LibraryStore {
         let key = vault.currentKey
         let items = allItems()
         itemsByID = Dictionary(items.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        foldersByID = Dictionary(allFolders().map { ($0.id, $0) },
+                                 uniquingKeysWith: { first, _ in first })
         snapshots = items.map { snapshot(for: $0, key: key) }
         revision &+= 1
     }
@@ -129,6 +144,8 @@ public final class LibraryStore {
             kind: item.kind,
             tagNames: item.tagNames,
             folderPath: item.folder?.path ?? [],
+            folderID: item.folder?.id,
+            sortIndex: item.sortIndex,
             summary: locked ? nil : item.summary,
             searchableText: searchable,
             previewLine: preview,
@@ -193,6 +210,7 @@ public final class LibraryStore {
         pinned: Bool = false
     ) -> SummonItem {
         let item = SummonItem(title: title, kind: rtf == nil ? .text : .richText, folder: folder)
+        item.sortIndex = nextSortIndex(in: folder)
         item.isPinned = pinned
         item.isSensitive = sensitive
         item.tags = tags.map { resolveTag(named: $0) }
@@ -266,6 +284,7 @@ public final class LibraryStore {
         let kind = ItemKind.forFile(at: url)
         let item = SummonItem(title: title ?? url.deletingPathExtension().lastPathComponent,
                               kind: kind, folder: folder)
+        item.sortIndex = nextSortIndex(in: folder)
         item.isSensitive = sensitive
         item.tags = tags.map { resolveTag(named: $0) }
         context.insert(item)
@@ -296,6 +315,7 @@ public final class LibraryStore {
         sensitive: Bool = false
     ) -> SummonItem? {
         let item = SummonItem(title: title, kind: kind, folder: folder)
+        item.sortIndex = nextSortIndex(in: folder)
         item.isSensitive = sensitive
         item.tags = tags.map { resolveTag(named: $0) }
         context.insert(item)
@@ -344,12 +364,84 @@ public final class LibraryStore {
     }
 
     public func move(_ item: SummonItem, to folder: SummonFolder?) {
+        guard item.folder?.id != folder?.id else { return }
         let wasSensitive = item.isEffectivelySensitive
+        let origin = item.folder
         item.folder = folder
+        // Lands at the end of the destination rather than wherever its old index
+        // happened to point, which would otherwise drop it into the middle.
+        item.sortIndex = (folder?.items ?? []).map(\.sortIndex).max().map { $0 + 1 } ?? 0
         item.updatedAt = Date()
         // Moving into or out of a sensitive folder changes how the bytes must be stored.
         reconcileSensitivity(item, wasSensitive: wasSensitive)
+        renumberItems(in: origin)
         save(); refresh()
+    }
+
+    /// Places `item` immediately before or after `sibling`, adopting its folder.
+    ///
+    /// The list is hand-ordered only inside a folder; everywhere else has its own
+    /// rule (recency, use count, rank) and there is no second order to reconcile.
+    public func reorderItem(_ item: SummonItem, relativeTo sibling: SummonItem,
+                            placeAfter: Bool) {
+        guard item.id != sibling.id else { return }
+        let destination = sibling.folder
+        let movedFolder = item.folder?.id != destination?.id
+        let wasSensitive = item.isEffectivelySensitive
+        let origin = item.folder
+
+        item.folder = destination
+        var ordered = (destination?.items ?? []).filter { $0.id != item.id }
+            .sorted { $0.sortIndex == $1.sortIndex ? $0.updatedAt > $1.updatedAt
+                                                   : $0.sortIndex < $1.sortIndex }
+        let index = ordered.firstIndex { $0.id == sibling.id } ?? ordered.count
+        ordered.insert(item, at: placeAfter ? index + 1 : index)
+        for (i, entry) in ordered.enumerated() { entry.sortIndex = i }
+
+        if movedFolder {
+            item.updatedAt = Date()
+            reconcileSensitivity(item, wasSensitive: wasSensitive)
+            renumberItems(in: origin)
+        }
+        save(); refresh()
+    }
+
+    /// One past the last item in `folder`, so anything new lands at the bottom
+    /// instead of tying with everything else at zero.
+    private func nextSortIndex(in folder: SummonFolder?) -> Int {
+        (folder?.items ?? []).map(\.sortIndex).max().map { $0 + 1 } ?? 0
+    }
+
+    /// Closes the gap an item left behind, so indices stay dense and comparable.
+    private func renumberItems(in folder: SummonFolder?) {
+        guard let folder else { return }
+        for (index, entry) in folder.directItems.enumerated() { entry.sortIndex = index }
+    }
+
+    /// Decrypts everything back to plaintext and clears every sensitive mark.
+    ///
+    /// The step that has to happen before the vault key is thrown away: removing the
+    /// key file with content still sealed leaves that content unreadable, with no way
+    /// back. Folders are cleared first, so an item does not re-inherit sensitivity
+    /// from its parent halfway through.
+    ///
+    /// Returns how many items were decrypted.
+    @discardableResult
+    public func clearAllSensitivity() throws -> Int {
+        guard vault.isUnlocked else { throw VaultError.locked }
+        // Counted up front: clearing a folder decrypts the items inside it, so
+        // counting as we go would report only the ones left over afterwards — and
+        // this number is what the confirmation told the user would happen.
+        let affected = allItems().count { $0.isEffectivelySensitive }
+
+        for folder in allFolders() where folder.isSensitive {
+            try setFolderSensitive(folder, false)
+        }
+        for item in allItems() where item.isSensitive || item.sealedBody != nil || item.blobSealed {
+            try setSensitive(item, false)
+        }
+        save(); refresh()
+        return affected
     }
 
     /// Marks an item sensitive (encrypting it) or not (decrypting it).
@@ -562,6 +654,47 @@ public final class LibraryStore {
             .filter { !$0.isEmpty }
         item.tags = unique.map { resolveTag(named: $0) }
         item.updatedAt = Date()
+        save(); refresh()
+    }
+
+    /// Renames a tag everywhere it is used.
+    ///
+    /// Renaming onto a name that already exists *merges* rather than creating two tags
+    /// that look identical in the sidebar — which is what a plain rename would do,
+    /// since nothing stops two rows sharing a name.
+    ///
+    /// Returns false when the name is empty or unchanged.
+    @discardableResult
+    public func renameTag(_ tag: SummonTag, to raw: String) -> Bool {
+        let name = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !name.isEmpty, name != tag.name else { return false }
+
+        if let existing = allTags().first(where: { $0.name == name && $0.id != tag.id }) {
+            for item in tag.items ?? [] {
+                var names = Set(item.tagNames)
+                names.remove(tag.name)
+                names.insert(name)
+                item.tags = names.map { resolveTag(named: $0) }
+                item.updatedAt = Date()
+            }
+            context.delete(tag)
+            _ = existing
+        } else {
+            tag.name = name
+            for item in tag.items ?? [] { item.updatedAt = Date() }
+        }
+        save(); refresh()
+        return true
+    }
+
+    /// Removes a tag from every item and deletes it. The items themselves are
+    /// untouched — a tag is a label, not a container.
+    public func deleteTag(_ tag: SummonTag) {
+        for item in tag.items ?? [] {
+            item.tags = (item.tags ?? []).filter { $0.id != tag.id }
+            item.updatedAt = Date()
+        }
+        context.delete(tag)
         save(); refresh()
     }
 

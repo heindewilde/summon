@@ -10,8 +10,8 @@ struct VaultCryptoTests {
     @Test("Master key round-trips through a PIN wrap")
     func wrapUnwrapRoundTrip() throws {
         let master = VaultKey.generate()
-        let wrapper = try VaultCrypto.wrap(master: master, pin: "482913", iterations: iters)
-        let recovered = try VaultCrypto.unwrap(wrapper, pin: "482913")
+        let wrapper = try VaultCrypto.wrap(master: master, pin: "4829", iterations: iters)
+        let recovered = try VaultCrypto.unwrap(wrapper, pin: "4829")
         #expect(recovered == master)
     }
 
@@ -77,9 +77,9 @@ struct VaultCryptoTests {
         }
     }
 
-    @Test("PIN policy accepts 4–12 digits and nothing else",
-          arguments: [("1234", true), ("482913", true), ("123", false),
-                      ("1234567890123", false), ("12a4", false), ("", false)])
+    @Test("PIN policy accepts exactly four digits and nothing else",
+          arguments: [("1234", true), ("0000", true), ("123", false),
+                      ("12345", false), ("482913", false), ("12a4", false), ("", false)])
     func pinPolicy(pin: String, valid: Bool) {
         #expect(VaultCrypto.isValidPIN(pin) == valid)
     }
@@ -105,7 +105,7 @@ struct VaultLifecycleTests {
     func setUpUnlocks() throws {
         let (vault, paths) = makeVault()
         defer { paths.destroy() }
-        try vault.setUpPIN("482913")
+        try vault.setUpPIN("4829")
         #expect(vault.state == .unlocked)
         #expect(vault.currentKey != nil)
     }
@@ -114,14 +114,14 @@ struct VaultLifecycleTests {
     func lockThenUnlock() throws {
         let (vault, paths) = makeVault()
         defer { paths.destroy() }
-        try vault.setUpPIN("482913")
+        try vault.setUpPIN("4829")
         let before = vault.currentKey
 
         vault.lock()
         #expect(vault.state == .locked)
         #expect(vault.currentKey == nil)
 
-        try vault.unlock(pin: "482913")
+        try vault.unlock(pin: "4829")
         #expect(vault.state == .unlocked)
         #expect(vault.currentKey == before)
     }
@@ -130,12 +130,12 @@ struct VaultLifecycleTests {
     func contentSurvivesLockCycle() throws {
         let (vault, paths) = makeVault()
         defer { paths.destroy() }
-        try vault.setUpPIN("482913")
+        try vault.setUpPIN("4829")
         let id = UUID()
         let sealed = try vault.currentKey!.seal("IBAN NL91 ABNA 0417 1643 00", itemID: id)
 
         vault.lock()
-        try vault.unlock(pin: "482913")
+        try vault.unlock(pin: "4829")
         #expect(try vault.currentKey!.openText(sealed, itemID: id) == "IBAN NL91 ABNA 0417 1643 00")
     }
 
@@ -147,12 +147,12 @@ struct VaultLifecycleTests {
         let id = UUID()
         let sealed = try vault.currentKey!.seal("client list", itemID: id)
 
-        try vault.changePIN(current: "1111", new: "999999")
+        try vault.changePIN(current: "1111", new: "9999")
         #expect(try vault.currentKey!.openText(sealed, itemID: id) == "client list")
 
         vault.lock()
         #expect(throws: VaultError.wrongPIN) { try vault.unlock(pin: "1111") }
-        try vault.unlock(pin: "999999")
+        try vault.unlock(pin: "9999")
         #expect(try vault.currentKey!.openText(sealed, itemID: id) == "client list")
     }
 
@@ -160,7 +160,7 @@ struct VaultLifecycleTests {
     func shortPINRefused() throws {
         let (vault, paths) = makeVault()
         defer { paths.destroy() }
-        #expect(throws: VaultError.pinTooShort) { try vault.setUpPIN("12") }
+        #expect(throws: VaultError.pinNotFourDigits) { try vault.setUpPIN("12") }
         #expect(vault.state == .notConfigured)
     }
 
@@ -168,7 +168,7 @@ struct VaultLifecycleTests {
     func throttleAfterFiveFailures() throws {
         let (vault, paths) = makeVault()
         defer { paths.destroy() }
-        try vault.setUpPIN("482913")
+        try vault.setUpPIN("4829")
         vault.lock()
 
         for _ in 0..<5 {
@@ -178,7 +178,7 @@ struct VaultLifecycleTests {
         #expect(vault.throttledUntil != nil)
 
         // Even the correct PIN is refused while throttled.
-        #expect(throws: (any Error).self) { try vault.unlock(pin: "482913") }
+        #expect(throws: (any Error).self) { try vault.unlock(pin: "4829") }
     }
 
     @Test("The vault reloads its configured state from disk")
@@ -186,11 +186,11 @@ struct VaultLifecycleTests {
         let paths = LibraryPaths.temporary()
         defer { paths.destroy() }
         let first = Vault(paths: paths)
-        try first.setUpPIN("482913")
+        try first.setUpPIN("4829")
 
         let second = Vault(paths: paths)
         #expect(second.state == .locked)
-        try second.unlock(pin: "482913")
+        try second.unlock(pin: "4829")
         #expect(second.currentKey == first.currentKey)
     }
 
@@ -198,7 +198,7 @@ struct VaultLifecycleTests {
     func autoLock() throws {
         let (vault, paths) = makeVault()
         defer { paths.destroy() }
-        try vault.setUpPIN("482913")
+        try vault.setUpPIN("4829")
         vault.autoLockMinutes = 5
 
         #expect(vault.lockIfIdle(now: Date().addingTimeInterval(60)) == false)
@@ -212,9 +212,80 @@ struct VaultLifecycleTests {
     func autoLockDisabled() throws {
         let (vault, paths) = makeVault()
         defer { paths.destroy() }
-        try vault.setUpPIN("482913")
+        try vault.setUpPIN("4829")
         vault.autoLockMinutes = 0
         #expect(vault.lockIfIdle(now: Date().addingTimeInterval(86_400)) == false)
         #expect(vault.state == .unlocked)
+    }
+
+    @Test("Turning off the PIN decrypts everything first")
+    func removingProtectionDecrypts() throws {
+        let paths = LibraryPaths.temporary()
+        defer { paths.destroy() }
+        let vault = Vault(paths: paths)
+        let store = try LibraryStore(paths: paths, vault: vault)
+        try vault.setUpPIN("1379")
+
+        let secrets = store.createFolder(name: "Secrets")
+        try store.setFolderSensitive(secrets, true)
+        let inFolder = store.createSnippet(title: "Bank", body: "IBAN NL00", folder: secrets)
+        let loose = store.createSnippet(title: "Passport", body: "NL123456")
+        try store.setSensitive(loose, true)
+        #expect(inFolder.sealedBody != nil)
+        #expect(loose.sealedBody != nil)
+
+        let decrypted = try store.clearAllSensitivity()
+        #expect(decrypted == 2)
+        // Readable on disk again — this is the step that has to happen before the key
+        // is thrown away, or the content is unreadable forever.
+        #expect(inFolder.bodyText == "IBAN NL00")
+        #expect(loose.bodyText == "NL123456")
+        #expect(!secrets.isSensitive)
+        #expect(!loose.isSensitive)
+
+        try vault.removePIN()
+        #expect(!vault.isConfigured)
+        // And still readable with no vault at all.
+        store.refresh()
+        #expect(store.snapshots.first { $0.id == loose.id }?.isLocked == false)
+        #expect(store.snapshots.first { $0.id == loose.id }?.searchableText.contains("NL123456") == true)
+    }
+
+    @Test("Turning off the PIN needs the vault open")
+    func removingProtectionNeedsUnlock() throws {
+        let paths = LibraryPaths.temporary()
+        defer { paths.destroy() }
+        let vault = Vault(paths: paths)
+        let store = try LibraryStore(paths: paths, vault: vault)
+        try vault.setUpPIN("1379")
+        let item = store.createSnippet(title: "Bank", body: "IBAN NL00")
+        try store.setSensitive(item, true)
+
+        vault.lock()
+        // Refusing is the whole point: decrypting is impossible without the key, and
+        // going ahead anyway would strand the content.
+        #expect(throws: VaultError.locked) { _ = try store.clearAllSensitivity() }
+    }
+
+    @Test("Changing the PIN re-keys rather than re-encrypting")
+    func changingPINKeepsContentSealed() throws {
+        let paths = LibraryPaths.temporary()
+        defer { paths.destroy() }
+        let vault = Vault(paths: paths)
+        let store = try LibraryStore(paths: paths, vault: vault)
+        try vault.setUpPIN("1379")
+        let item = store.createSnippet(title: "Bank", body: "IBAN NL00")
+        try store.setSensitive(item, true)
+        let sealedBefore = item.sealedBody
+
+        try vault.changePIN(current: "1379", new: "2468")
+        // The master key is unwrapped and re-wrapped; the content itself is untouched.
+        #expect(item.sealedBody == sealedBefore)
+
+        vault.lock()
+        #expect(throws: VaultError.wrongPIN) { try vault.unlock(pin: "1379") }
+        try vault.unlock(pin: "2468")
+        store.refresh()
+        #expect(store.snapshots.first { $0.id == item.id }?.searchableText.contains("IBAN") == true)
     }
 }

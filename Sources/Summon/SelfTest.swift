@@ -159,8 +159,199 @@ enum SelfTest {
             check("A rich snippet exists and carries formatting", false)
         }
 
+        // MARK: Encrypting while the vault is locked
+        //
+        // This used to fly the summon panel in over the library to announce that
+        // everything was about to be unlocked, when all anyone had done was flick one
+        // switch on one item. The window asks, and it asks about that item.
+        if !model.vault.isConfigured,
+           let subject = model.store.snapshots.first(where: { $0.kind.isTextual }) {
+            model.completePINSetup(pin: "1379") { _ in }
+            model.setItemSensitive(subject.id, true)
+            model.vault.lock()
+            model.store.refresh()
+            model.dismissPanel()
+
+            // Now ask to decrypt it, with the vault shut.
+            model.setItemSensitive(subject.id, false)
+            check("A locked vault asks in the window, not the panel",
+                  model.pinSheet != nil && !controller.isVisible,
+                  detail: "sheet: \(model.pinSheet.map(\.id) ?? "none"), panel: \(controller.isVisible)")
+            if case .unlock(let reason) = model.pinSheet {
+                check("The prompt names what you asked for, not the whole vault",
+                      reason.contains("decrypt") && !reason.lowercased().contains("everything"),
+                      detail: reason)
+            } else {
+                check("The prompt names what you asked for, not the whole vault", false,
+                      detail: "no unlock sheet")
+            }
+
+            // Entering the PIN finishes the interrupted action.
+            check("Unlocking from the sheet completes the action",
+                  model.unlockInPlace(pin: "1379")
+                      && model.store.item(id: subject.id)?.isSensitive == false)
+            model.finishPINSheet()
+
+            // And the way back out, from a locked vault, asks for the PIN first.
+            model.vault.lock()
+            check("Turning the PIN off while locked starts by asking for it",
+                  !model.vault.isUnlocked)
+            model.removePINProtection()
+            check("It refuses to discard the key while it cannot decrypt",
+                  model.vault.isConfigured)
+
+            try? model.vault.unlock(pin: "1379")
+            model.removePINProtection()
+            model.store.refresh()
+        }
+
+        // MARK: An encrypted image is readable again the moment it is unlocked
+        //
+        // The detail pane loaded its preview once, keyed on which item was selected.
+        // Unlocking does not change the selection, so nothing re-ran: the image stayed
+        // blank until you clicked away and back, which re-selected it. The data was
+        // always there — this checks the half the view depends on.
+        if let image = model.store.snapshots.first(where: { $0.kind == .image }) {
+            if !model.vault.isConfigured { model.completePINSetup(pin: "1379") { _ in } }
+            model.setItemSensitive(image.id, true)
+            check("An image can be encrypted", model.store.item(id: image.id)?.blobSealed == true)
+
+            model.vault.lock()
+            model.store.refresh()
+            check("Locked, it offers no preview", model.previewData(for: image.id).fileURL == nil)
+
+            try? model.vault.unlock(pin: "1379")
+            model.store.refresh()
+            let unlocked = model.previewData(for: image.id)
+            check("Unlocked, the file is materialised again",
+                  unlocked.fileURL != nil
+                      && FileManager.default.fileExists(atPath: unlocked.fileURL?.path ?? ""),
+                  detail: unlocked.fileURL?.lastPathComponent ?? "nothing")
+            check("And the snapshot stops reporting it as locked",
+                  model.store.snapshots.first { $0.id == image.id }?.isLocked == false)
+
+            model.setItemSensitive(image.id, false)
+            model.removePINProtection()
+            model.store.refresh()
+        }
+
+        // MARK: The detail pane fits the window it is given
+        //
+        // A grouped `Form` carries its own scroll view, and asking a scroll view for
+        // its ideal height gets an effectively unbounded answer. Inside the detail
+        // pane that propagated all the way up: the window grew past the screen and
+        // dragged the sidebar off the left edge with it. The pane must never demand
+        // more than the window it is placed in.
+        do {
+            let given = CGSize(width: 1120, height: 700)
+            var worst: (kind: String, height: CGFloat) = ("none", 0)
+            for kind in ItemKind.allCases {
+                model.sidebarSelection = .all
+                guard let subject = model.itemsForSidebar().first(where: { $0.kind == kind })
+                else { continue }
+                model.mainSelection = subject.id
+
+                let host = NSHostingView(rootView: MainWindowView(model: model))
+                host.frame = CGRect(origin: .zero, size: given)
+                host.layoutSubtreeIfNeeded()
+                let needed = host.fittingSize.height
+                if needed > worst.height { worst = (kind.rawValue, needed) }
+            }
+            check("The library window fits the size it is given",
+                  worst.height <= given.height,
+                  detail: String(format: "worst is %@ at %.0f pt against %.0f",
+                                 worst.kind as NSString, worst.height, given.height))
+            model.mainSelection = nil
+            model.sidebarSelection = .all
+        }
+
+        // MARK: Turning the PIN back off
+        //
+        // The way out. Removing the key file with content still sealed would leave it
+        // unreadable forever, so the decrypt has to happen first — and be counted, so
+        // the confirmation can say what it is about to do.
+        if !model.vault.isConfigured,
+           let victim = model.store.snapshots.first(where: { $0.kind.isTextual }) {
+            model.completePINSetup(pin: "2468") { _ in }
+            model.setItemSensitive(victim.id, true)
+            let sealed = model.store.item(id: victim.id)?.sealedBody != nil
+            check("An item can be encrypted once a PIN exists", sealed)
+
+            let decrypted = model.removePINProtection()
+            check("Turning off the PIN reports what it decrypted", decrypted == 1,
+                  detail: "\(decrypted.map(String.init) ?? "nil") items")
+            check("Turning off the PIN leaves no vault", !model.vault.isConfigured)
+            model.store.refresh()
+            let after = model.store.snapshots.first { $0.id == victim.id }
+            check("And the contents are readable again with no key at all",
+                  after?.isLocked == false && after?.searchableText.isEmpty == false)
+        }
+
+        // MARK: Appearance
+        //
+        // Applied to the application, not to a view tree: the panel is its own window,
+        // so a `.preferredColorScheme` on the library would leave it in the system's
+        // appearance while the library changed.
+        let originalAppearance = model.settings.appearance
+        model.settings.appearance = .dark
+        check("Choosing Dark switches the app's appearance",
+              NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua,
+              detail: NSApp.effectiveAppearance.name.rawValue)
+        model.settings.appearance = .light
+        check("Choosing Light switches it back",
+              NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .aqua,
+              detail: NSApp.effectiveAppearance.name.rawValue)
+        model.settings.appearance = .system
+        check("Match System hands the choice back to macOS", NSApp.appearance == nil)
+        model.settings.appearance = originalAppearance
+
+        // MARK: Marking something sensitive with no PIN yet
+        //
+        // This did nothing at all: the action asked for an unlocked vault, there was
+        // no PIN to unlock it with, and the request was recorded in a flag that
+        // nothing read. The encryption worked; there was simply no way to get a key.
+        if !model.vault.isConfigured,
+           let subject = model.store.snapshots.first(where: { $0.kind.isTextual && !$0.isSensitive }) {
+            model.setItemSensitive(subject.id, true)
+            check("Marking an item sensitive with no PIN asks for one",
+                  model.pinSheet == .create,
+                  detail: "sheet: \(model.pinSheet.map(\.id) ?? "none")")
+            check("It does not silently mark the item first",
+                  model.store.item(id: subject.id)?.isSensitive == false)
+
+            model.completePINSetup(pin: "1379") { message in
+                check("Setting the PIN succeeded", false, detail: message)
+            }
+            try? await Task.sleep(for: .milliseconds(120))
+            check("Setting the PIN closes the sheet", model.pinSheet == nil)
+            check("Setting the PIN finishes what you asked for",
+                  model.store.item(id: subject.id)?.isSensitive == true,
+                  detail: "sensitive: \(model.store.item(id: subject.id)?.isSensitive == true)")
+            check("And the contents are actually encrypted",
+                  model.store.item(id: subject.id)?.sealedBody != nil)
+
+            // Put it back, so the vault section below starts from a known shape.
+            model.setItemSensitive(subject.id, false)
+            // Decrypted first, on the line above: removing the PIN with content still
+            // sealed would leave it unreadable.
+            try? model.vault.removePIN()
+            model.store.refresh()
+        } else {
+            check("Marking an item sensitive with no PIN asks for one", false,
+                  detail: "a vault was already configured")
+        }
+
+        // Cancelling has to leave nothing behind.
+        if !model.vault.isConfigured,
+           let subject = model.store.snapshots.first(where: { $0.kind.isTextual }) {
+            model.setItemSensitive(subject.id, true)
+            model.cancelPINSheet()
+            check("Cancelling the PIN sheet leaves the item alone",
+                  model.pinSheet == nil && model.store.item(id: subject.id)?.isSensitive == false)
+        }
+
         // MARK: Vault, end to end
-        let vaultPIN = "482913"
+        let vaultPIN = "4829"
         if !model.vault.isConfigured {
             try? model.vault.setUpPIN(vaultPIN)
         }
@@ -186,7 +377,14 @@ enum SelfTest {
 
             model.vault.lock()
             model.store.refresh()
-            check("A locked item refuses to drag", model.dragProvider(for: victim.id) == nil)
+            check("A locked item refuses to drag its contents",
+                  model.dragProvider(for: victim.id) == nil)
+            // It can still be dragged into a folder, though: filing something reveals
+            // nothing about it, and being unable to tidy a locked item without first
+            // unlocking it was a rule with no reason behind it.
+            check("A locked item can still be dragged to file it",
+                  model.identityOnlyDragProvider(for: victim.id)
+                      .registeredTypeIdentifiers.contains(SummonDragType.item.identifier))
             try? model.vault.unlock(pin: vaultPIN)
             model.store.refresh()
         }
@@ -337,6 +535,72 @@ enum SelfTest {
         check("Icon search matches meaning, not just the symbol's name",
               FolderIcon.search("money").contains { $0.name == "dollarsign.circle" })
 
+        // MARK: What a drag actually puts on the pasteboard
+        //
+        // Registering a type on an NSItemProvider and having the drop side *recognise*
+        // it are two different things: the identifier has to be declared in the bundle
+        // and known to the type system, or `hasItemsConforming(to:)` on the receiving
+        // side quietly answers no and the drop is never offered to our delegate.
+        info("item type declared", "\(SummonDragType.item.isDeclared), dynamic: \(SummonDragType.item.isDynamic)")
+        info("folder type declared", "\(SummonDragType.folder.isDeclared), dynamic: \(SummonDragType.folder.isDynamic)")
+        check("The item drag type is a real declared type",
+              SummonDragType.item.isDeclared && !SummonDragType.item.isDynamic,
+              detail: SummonDragType.item.identifier)
+
+        if let any = model.store.snapshots.first(where: { !$0.isLocked }),
+           let provider = model.dragProvider(for: any.id) {
+            check("The provider reports the item type",
+                  provider.hasItemConformingToTypeIdentifier(SummonDragType.item.identifier),
+                  detail: provider.registeredTypeIdentifiers.joined(separator: ", "))
+
+            let readBack = await SummonDrag.id(from: [provider], type: SummonDragType.item)
+            check("The item id survives the round trip", readBack == any.id,
+                  detail: readBack.map(String.init(describing:)) ?? "nothing came back")
+
+        }
+
+        // MARK: Filing an item by dragging it onto a folder
+        //
+        // The drag has to carry the row's identity, not only its contents — that was
+        // the whole reason dropping an item on a folder did nothing.
+        if let subject = model.store.snapshots.first(where: { $0.kind.isTextual && !$0.isLocked }) {
+            let types = model.dragProvider(for: subject.id)?.registeredTypeIdentifiers ?? []
+            check("An item's drag carries which item it is",
+                  types.contains(SummonDragType.item.identifier),
+                  detail: types.joined(separator: ", "))
+
+            model.fileItem(subject.id, into: top)
+            check("Dragging an item onto a folder files it there",
+                  model.store.item(id: subject.id)?.folder?.id == top.id,
+                  detail: model.store.item(id: subject.id)?.folder?.name ?? "nowhere")
+
+            model.sidebarSelection = .folder(top.id)
+            check("The folder now shows it", model.itemsForSidebar().contains { $0.id == subject.id })
+
+            // A parent must not absorb what is filed beneath it.
+            model.store.moveFolder(inner, under: top)
+            let nested = model.store.createSnippet(title: "Nested probe", body: "…", folder: inner)
+            model.store.refresh()
+            model.sidebarSelection = .folder(top.id)
+            check("A parent folder shows its own items only",
+                  !model.itemsForSidebar().contains { $0.id == nested.id },
+                  detail: "\(model.itemsForSidebar().count) items in \(model.sidebarTitle)")
+            model.sidebarSelection = .folder(inner.id)
+            check("The child folder is where the nested item lives",
+                  model.itemsForSidebar().contains { $0.id == nested.id })
+
+            // And the count beside the row has to agree with the list it opens.
+            let row = model.sidebarFolderRows.first { $0.id == top.id }
+            model.sidebarSelection = .folder(top.id)
+            check("A folder's count matches the list it opens",
+                  row?.itemCount == model.itemsForSidebar().count,
+                  detail: "badge \(row?.itemCount ?? -1), list \(model.itemsForSidebar().count)")
+
+            model.store.delete(nested)
+            model.fileItem(subject.id, into: nil)
+            model.sidebarSelection = .all
+        }
+
         model.store.deleteFolder(inner)
         model.store.deleteFolder(top)
 
@@ -377,6 +641,47 @@ enum SelfTest {
                 model.mainSelection = snippet.id
                 _ = model.visibleItems
             }))
+
+            // What a drag costs per frame. `dropUpdated` fires continuously while you
+            // hold a row, and every one of those re-evaluates the sidebar — so this
+            // number, not the drop itself, is what "dragging feels laggy" measures.
+            // It used to walk the folder table and recursively count items for every
+            // row, on every frame; now the rows are a cached list of values.
+            // What one tag edit costs. The tag field used to report a change on every
+            // keystroke and write the list each time, so typing a five-letter tag paid
+            // this five times over; it now writes once, when a tag is added or removed.
+            if let tagged = model.store.item(id: snippet.id) {
+                let names = tagged.tagNames
+                info("setTags (was once per keystroke)", String(format: "%.2f ms", milliseconds(5) {
+                    model.store.setTags(tagged, names: names)
+                }))
+            }
+
+            let perFrame = milliseconds(200) { _ = model.sidebarFolderRows }
+            info("sidebar rows (drag frame)", String(format: "%.4f ms", perFrame))
+            check("A drag frame costs well under a frame's budget",
+                  perFrame < 1.0,
+                  detail: String(format: "%.4f ms per rebuild, 16.7 ms available", perFrame))
+
+            // The same work the old sidebar did inline, for comparison: fetch the
+            // folder table, sort it, and recursively count every item under each row.
+            let uncached = milliseconds(200) {
+                var total = 0
+                func walk(_ folders: [SummonFolder]) {
+                    for folder in folders {
+                        total += folder.allItems().count
+                        walk(folder.sortedChildren)
+                    }
+                }
+                walk(model.store.rootFolders())
+            }
+            info("sidebar rows (uncached, as it was)", String(format: "%.4f ms", uncached))
+
+            let cold = milliseconds(20) {
+                model.store.refresh()
+                _ = model.sidebarFolderRows
+            }
+            info("sidebar rows (after a change)", String(format: "%.2f ms", cold))
         }
 
         check("Panel hides on dismiss", !controller.isVisible)

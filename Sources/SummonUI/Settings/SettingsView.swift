@@ -5,18 +5,31 @@ import SummonKit
 public struct SettingsView: View {
     @Bindable var model: AppModel
 
-    public init(model: AppModel) { self.model = model }
+    /// Which tab is showing. Bound rather than left to the TabView so a screenshot
+    /// harness can open the one being reviewed.
+    @State private var tab: Tab
+
+    public enum Tab: String, Hashable { case general, library, privacy, intelligence }
+
+    public init(model: AppModel, tab: Tab = .general) {
+        self.model = model
+        _tab = State(initialValue: tab)
+    }
 
     public var body: some View {
-        TabView {
+        TabView(selection: $tab) {
             GeneralSettings(model: model)
                 .tabItem { Label("General", systemImage: "gearshape") }
+                .tag(Tab.general)
             LibrarySettings(model: model)
                 .tabItem { Label("Library", systemImage: "square.grid.2x2") }
+                .tag(Tab.library)
             PrivacySettings(model: model)
                 .tabItem { Label("Privacy", systemImage: "lock.shield") }
+                .tag(Tab.privacy)
             IntelligenceSettings(model: model)
                 .tabItem { Label("Intelligence", systemImage: "sparkles") }
+                .tag(Tab.intelligence)
         }
         .frame(width: 560, height: 420)
     }
@@ -56,6 +69,16 @@ struct GeneralSettings: View {
             }
 
             Section("Appearance") {
+                Picker("Theme", selection: Binding(
+                    get: { model.settings.appearance },
+                    set: { model.settings.appearance = $0 }
+                )) {
+                    ForEach(AppearanceChoice.allCases, id: \.self) { choice in
+                        Text(choice.label).tag(choice)
+                    }
+                }
+                .pickerStyle(.segmented)
+
                 Toggle("Show in the Dock", isOn: Binding(
                     get: { model.settings.showDockIcon },
                     set: {
@@ -147,91 +170,14 @@ struct LibrarySettings: View {
 
 struct PrivacySettings: View {
     @Bindable var model: AppModel
-    @State private var newPIN = ""
-    @State private var confirmPIN = ""
-    @State private var currentPIN = ""
-    @State private var message: String?
-    @State private var isError = false
+    @State private var sheet: PINSheet.Purpose?
 
     var body: some View {
         Form {
-            Section("Sensitive items") {
-                if model.vault.isConfigured {
-                    LabeledContent("Status") {
-                        Label(model.vault.isUnlocked ? "Unlocked" : "Locked",
-                              systemImage: model.vault.isUnlocked ? "lock.open.fill" : "lock.fill")
-                            .foregroundStyle(model.vault.isUnlocked ? Theme.success : Theme.secondaryText)
-                    }
-
-                    if Vault.biometricStorageAvailable {
-                        Toggle("Unlock with Touch ID", isOn: Binding(
-                            get: { model.vault.biometricsEnabled },
-                            set: { enabled in
-                                if enabled {
-                                    guard model.vault.isUnlocked else {
-                                        report("Unlock first, then enable Touch ID.", error: true)
-                                        return
-                                    }
-                                    do { try model.vault.enableBiometricUnlock(); report("Touch ID enabled.") }
-                                    catch { report(error.localizedDescription, error: true) }
-                                } else {
-                                    model.vault.disableBiometricUnlock()
-                                    report("Touch ID disabled.")
-                                }
-                            }
-                        ))
-                    }
-
-                    if Vault.biometricsAvailable && !Vault.biometricStorageAvailable {
-                        Label("""
-                        Touch ID unlock needs an Apple Developer ID. A locally-signed \
-                        build can’t store a key behind the biometric sensor, so this Mac \
-                        uses the PIN.
-                        """, systemImage: "touchid")
-                            .font(.system(size: 11))
-                            .foregroundStyle(Theme.secondaryText)
-                    }
-
-                    Picker("Lock automatically after", selection: Binding(
-                        get: { model.settings.autoLockMinutes },
-                        set: { model.settings.autoLockMinutes = $0; model.applySettings() }
-                    )) {
-                        Text("1 minute").tag(1)
-                        Text("5 minutes").tag(5)
-                        Text("15 minutes").tag(15)
-                        Text("1 hour").tag(60)
-                        Text("Never").tag(0)
-                    }
-
-                    LabeledContent("Change PIN") {
-                        VStack(alignment: .trailing, spacing: 4) {
-                            SecureField("Current", text: $currentPIN).frame(width: 150)
-                            SecureField("New", text: $newPIN).frame(width: 150)
-                            SecureField("Confirm", text: $confirmPIN).frame(width: 150)
-                            Button("Change") { changePIN() }
-                                .controlSize(.small)
-                                .disabled(newPIN.count < 4 || newPIN != confirmPIN)
-                        }
-                    }
-                } else {
-                    Text("No PIN set. Marking anything sensitive will ask for one.")
-                        .font(.system(size: 12))
-                    LabeledContent("Set a PIN") {
-                        VStack(alignment: .trailing, spacing: 4) {
-                            SecureField("PIN", text: $newPIN).frame(width: 150)
-                            SecureField("Confirm", text: $confirmPIN).frame(width: 150)
-                            Button("Set PIN") { setPIN() }
-                                .controlSize(.small)
-                                .disabled(newPIN.count < 4 || newPIN != confirmPIN)
-                        }
-                    }
-                }
-
-                if let message {
-                    Text(message)
-                        .font(.system(size: 11))
-                        .foregroundStyle(isError ? Theme.danger : Theme.success)
-                }
+            if model.vault.isConfigured {
+                configured
+            } else {
+                notConfigured
             }
 
             Section("How it works") {
@@ -247,32 +193,116 @@ struct PrivacySettings: View {
             }
         }
         .formStyle(.grouped)
-    }
-
-    private func report(_ text: String, error: Bool = false) {
-        message = text
-        isError = error
-    }
-
-    private func setPIN() {
-        do {
-            try model.vault.setUpPIN(newPIN)
-            newPIN = ""; confirmPIN = ""
-            report("PIN set. Sensitive items are now encrypted.")
-        } catch {
-            report((error as? VaultError)?.errorDescription ?? error.localizedDescription, error: true)
+        .sheet(item: $sheet) { purpose in
+            PINSheet(model: model, purpose: purpose) { sheet = nil }
         }
     }
 
-    private func changePIN() {
-        do {
-            try model.vault.changePIN(current: currentPIN, new: newPIN)
-            currentPIN = ""; newPIN = ""; confirmPIN = ""
-            report("PIN changed.")
-        } catch {
-            report((error as? VaultError)?.errorDescription ?? error.localizedDescription, error: true)
+    // MARK: - With a PIN set
+
+    @ViewBuilder
+    private var configured: some View {
+        Section("Lock") {
+            LabeledContent("Status") {
+                HStack(spacing: Theme.Space.s) {
+                    Label(model.vault.isUnlocked ? "Unlocked" : "Locked",
+                          systemImage: model.vault.isUnlocked ? "lock.open.fill" : "lock.fill")
+                        .foregroundStyle(model.vault.isUnlocked ? Theme.success : Theme.secondaryText)
+                    if model.vault.isUnlocked {
+                        Button("Lock Now") { model.lockVaultNow() }
+                            .controlSize(.small)
+                    }
+                }
+            }
+
+            Picker("Lock automatically after", selection: Binding(
+                get: { model.settings.autoLockMinutes },
+                set: { model.settings.autoLockMinutes = $0; model.applySettings() }
+            )) {
+                Text("1 minute").tag(1)
+                Text("5 minutes").tag(5)
+                Text("15 minutes").tag(15)
+                Text("1 hour").tag(60)
+                Text("Never").tag(0)
+            }
+
+            if Vault.biometricStorageAvailable {
+                Toggle("Unlock with Touch ID", isOn: Binding(
+                    get: { model.vault.biometricsEnabled },
+                    set: { enabled in
+                        if enabled {
+                            guard model.vault.isUnlocked else {
+                                model.show(Toast(text: "Unlock first", symbol: "lock", tone: .warning))
+                                return
+                            }
+                            do { try model.vault.enableBiometricUnlock() }
+                            catch {
+                                model.show(Toast(text: "Couldn’t enable Touch ID",
+                                                 symbol: "exclamationmark.triangle", tone: .danger,
+                                                 detail: error.localizedDescription))
+                            }
+                        } else {
+                            model.vault.disableBiometricUnlock()
+                        }
+                    }
+                ))
+            } else if Vault.biometricsAvailable {
+                Label("""
+                Touch ID unlock needs an Apple Developer ID. A locally-signed build \
+                can’t store a key behind the biometric sensor, so this Mac uses the PIN.
+                """, systemImage: "touchid")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.secondaryText)
+            }
+        }
+
+        Section("PIN") {
+            // What the PIN actually protects, so the section is not an abstraction.
+            LabeledContent("Protecting", value: protectedSummary)
+
+            // Unlabelled: these are two actions on the PIN, and inventing a noun for
+            // the left column ("Four digits", "Protection") only made the rows read
+            // like settings that they are not.
+            HStack {
+                Spacer()
+                Button("Change PIN…") { sheet = .change }
+                Button("Turn Off PIN…", role: .destructive) { sheet = .turnOff }
+            }
         }
     }
+
+    // MARK: - With none
+
+    @ViewBuilder
+    private var notConfigured: some View {
+        Section("Sensitive items") {
+            LabeledContent("PIN") {
+                Button("Set a PIN…") { sheet = .create }
+            }
+            Text("Nothing is encrypted until you set one. Marking an item or a folder sensitive will ask for it.")
+                .font(.system(size: 11))
+                .foregroundStyle(Theme.secondaryText)
+        }
+    }
+
+    private var sensitiveItemCount: Int {
+        model.store.snapshots.count(where: \.isSensitive)
+    }
+
+    private var sensitiveFolderCount: Int {
+        model.store.allFolders().count { $0.isSensitive }
+    }
+
+    private var protectedSummary: String {
+        let items = sensitiveItemCount
+        let folders = sensitiveFolderCount
+        if items == 0 && folders == 0 { return "Nothing yet" }
+        var parts: [String] = []
+        if items > 0 { parts.append(items == 1 ? "1 item" : "\(items) items") }
+        if folders > 0 { parts.append(folders == 1 ? "1 folder" : "\(folders) folders") }
+        return parts.joined(separator: " · ")
+    }
+
 }
 
 struct IntelligenceSettings: View {

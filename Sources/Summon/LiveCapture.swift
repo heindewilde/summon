@@ -24,8 +24,11 @@ enum LiveCapture {
         // keystroke somewhere neither of us intended.
         NSApp.setActivationPolicy(.accessory)
 
-        if ProcessInfo.processInfo.environment["SUMMON_APPEARANCE"] == "dark" {
-            NSApp.appearance = NSAppearance(named: .darkAqua)
+        // Through the setting rather than around it, so a capture exercises the same
+        // path the Appearance picker does.
+        if let choice = environment2["SUMMON_APPEARANCE"],
+           let appearance = AppearanceChoice(rawValue: choice) {
+            model.settings.appearance = appearance
         }
 
         await model.seedStarterLibraryIfEmpty()
@@ -58,7 +61,20 @@ enum LiveCapture {
             model.isPanelVisible = true
             // After isPanelVisible: openActionMenu() resolves its target through
             // actionTarget, which returns nil while the panel is not up.
-            if environment["SUMMON_LIVE_OVERLAY"] == "actions" { model.openActionMenu() }
+            if environment["SUMMON_LIVE_OVERLAY"] == "actions" {
+                model.openActionMenu()
+                // The list is taller than the space it gets for a document, so the
+                // selection can sit below the fold — which is the state worth looking
+                // at, and one a still frame cannot reach by pressing a key.
+                if let row = environment["SUMMON_LIVE_ACTION"], let index = Int(row) {
+                    // Set after the menu is on screen, so this drives the same change
+                    // an arrow key would rather than a starting value.
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .milliseconds(500))
+                        model.actionSelectedIndex = index
+                    }
+                }
+            }
             controller.showForCapture()
             try? await Task.sleep(for: .milliseconds(600))
             window = controller.debugPanel
@@ -94,7 +110,65 @@ enum LiveCapture {
             )
 
         case "settings":
-            window = present(SettingsView(model: model), size: CGSize(width: 560, height: 420))
+            // A PIN can be configured first, so the section that only exists once one
+            // is set can actually be looked at.
+            if environment2["SUMMON_LIVE_PIN"] == "1", !model.vault.isConfigured {
+                try? model.vault.setUpPIN("1379")
+            }
+            let tab = SettingsView.Tab(rawValue: environment2["SUMMON_LIVE_TAB"] ?? "") ?? .general
+            window = present(SettingsView(model: model, tab: tab),
+                             size: CGSize(width: 560, height: 460))
+
+        case "tagmenu":
+            // A half-typed tag, so the suggestion menu is open. It is drawn over the
+            // rows below it, which a still frame is the only way to check.
+            model.sidebarSelection = .all
+            if let subject = model.itemsForSidebar().first(where: { $0.kind == .document }) {
+                model.mainSelection = subject.id
+            }
+            model.tagDraftForCapture = environment2["SUMMON_LIVE_TAGDRAFT"] ?? "e"
+            window = present(MainWindowView(model: model), size: CGSize(width: 1120, height: 700))
+
+        case "encrypted":
+            // An item that is actually encrypted, with the vault open — the state the
+            // switch's "on" appearance is judged in.
+            model.sidebarSelection = .all
+            if !model.vault.isConfigured { try? model.vault.setUpPIN("1379") }
+            if let subject = model.itemsForSidebar().first(where: { $0.kind.isTextual }) {
+                model.setItemSensitive(subject.id, true)
+                model.store.refresh()
+                model.mainSelection = subject.id
+            }
+            window = present(MainWindowView(model: model), size: CGSize(width: 1120, height: 700))
+
+        case "unlock":
+            // The prompt shown when the vault is shut and you flick one switch.
+            model.sidebarSelection = .all
+            if !model.vault.isConfigured { try? model.vault.setUpPIN("1379") }
+            if let subject = model.itemsForSidebar().first(where: { $0.kind.isTextual }) {
+                model.mainSelection = subject.id
+                model.setItemSensitive(subject.id, true)
+                model.vault.lock()
+                model.store.refresh()
+                model.setItemSensitive(subject.id, false)
+            }
+            window = present(MainWindowView(model: model), size: CGSize(width: 1120, height: 700))
+
+        case "turnoff":
+            model.sidebarSelection = .all
+            if !model.vault.isConfigured { try? model.vault.setUpPIN("1379") }
+            if let subject = model.itemsForSidebar().first(where: { $0.kind.isTextual }) {
+                model.setItemSensitive(subject.id, true)
+            }
+            model.beginTurnOffPINForCapture()
+            window = present(MainWindowView(model: model), size: CGSize(width: 1120, height: 700))
+
+        case "pin":
+            // The PIN sheet, held open for review. It only ever appears in response
+            // to an action, which is not a state a screenshot can catch by hand.
+            model.sidebarSelection = .all
+            model.beginPINSetup()
+            window = present(MainWindowView(model: model), size: CGSize(width: 1120, height: 700))
 
         case "drop":
             // Freezes a drop indicator so its weight can actually be reviewed; a real
@@ -106,15 +180,23 @@ enum LiveCapture {
                     case "after": .after
                     default: .before
                 }
-                model.folderDropTarget = FolderDropTarget(folderID: target.id, zone: zone)
+                model.pinDropTargetForCapture(FolderDropTarget(folderID: target.id, zone: zone))
             }
             window = present(MainWindowView(model: model), size: CGSize(width: 1120, height: 700))
 
         default:
-            model.sidebarSelection = .folder(
-                model.store.allFolders().first { $0.name == "Client Replies" }?.id ?? UUID()
-            )
-            model.mainSelection = model.itemsForSidebar().first?.id
+            // SUMMON_LIVE_KIND picks what is selected, so a file's detail pane — which
+            // lays out quite differently from a snippet's — can be reviewed too.
+            if let kind = environment2["SUMMON_LIVE_KIND"] {
+                model.sidebarSelection = .all
+                model.mainSelection = model.itemsForSidebar()
+                    .first { $0.kind.rawValue == kind }?.id
+            } else {
+                model.sidebarSelection = .folder(
+                    model.store.allFolders().first { $0.name == "Client Replies" }?.id ?? UUID()
+                )
+                model.mainSelection = model.itemsForSidebar().first?.id
+            }
             window = present(MainWindowView(model: model), size: CGSize(width: 1120, height: 700))
         }
 

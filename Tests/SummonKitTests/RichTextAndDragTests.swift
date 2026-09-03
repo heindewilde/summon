@@ -79,7 +79,7 @@ struct RichTextTests {
     func formattingSurvivesSealing() throws {
         let (store, vault, paths) = try makeStore()
         defer { paths.destroy() }
-        try vault.setUpPIN("482913")
+        try vault.setUpPIN("4829")
 
         let rtf = try #require(RTF.data(from: boldText("Account details")))
         let item = store.createSnippet(title: "Bank", body: "Account details", rtf: rtf)
@@ -94,7 +94,7 @@ struct RichTextTests {
         vault.lock()
         #expect(store.resolveAttributed(item, key: nil) == nil)
 
-        try vault.unlock(pin: "482913")
+        try vault.unlock(pin: "4829")
         try store.setSensitive(item, false)
         let restored = try #require(store.resolveAttributed(item, key: nil))
         #expect(restored.string == "Account details")

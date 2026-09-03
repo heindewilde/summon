@@ -21,6 +21,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSUpdateDynamicServices()
 
         applyActivationPolicy()
+        // Applied here as well as from Settings: `AppSettings` is constructed before
+        // `NSApp` exists, so the stored choice has nobody to tell at that point.
+        model.settings.applyAppearance()
 
         if VerifyPaths.isRequested {
             Task { await VerifyPaths.run(controller: controller) }
@@ -34,6 +37,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         if let live = LiveCapture.mode {
             Task { await LiveCapture.run(mode: live, controller: controller) }
+            return
+        }
+
+        if DragProbe.isRequested {
+            Task { await DragProbe.run() }
             return
         }
 

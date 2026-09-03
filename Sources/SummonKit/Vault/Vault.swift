@@ -60,7 +60,7 @@ public final class Vault {
     // MARK: - Setup
 
     public func setUpPIN(_ pin: String) throws {
-        guard VaultCrypto.isValidPIN(pin) else { throw VaultError.pinTooShort }
+        guard VaultCrypto.isValidPIN(pin) else { throw VaultError.pinNotFourDigits }
         let master = VaultKey.generate()
         let w = try VaultCrypto.wrap(master: master, pin: pin)
         try persist(w)
@@ -71,7 +71,7 @@ public final class Vault {
     }
 
     public func changePIN(current: String, new: String) throws {
-        guard VaultCrypto.isValidPIN(new) else { throw VaultError.pinTooShort }
+        guard VaultCrypto.isValidPIN(new) else { throw VaultError.pinNotFourDigits }
         guard let w = wrapper else { throw VaultError.notConfigured }
         let master = try VaultCrypto.unwrap(w, pin: current)
         let fresh = try VaultCrypto.wrap(master: master, pin: new)

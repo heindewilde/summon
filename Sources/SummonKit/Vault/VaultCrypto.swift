@@ -2,11 +2,27 @@ import CommonCrypto
 import CryptoKit
 import Foundation
 
+/// The shape of a PIN, in one place so the field and the validator cannot disagree.
+public enum PINPolicy {
+    public static let length = 4
+
+    /// Exactly four digits.
+    ///
+    /// Fixed-length so the entry field can be four boxes that fill and move on by
+    /// themselves, with no separate "done" step to reach for. Four digits is only
+    /// 10,000 combinations, which is why the key derivation is deliberately slow and
+    /// why five wrong attempts start a cooldown — the length is a usability choice
+    /// held up by the two mechanisms either side of it, not on its own.
+    public static func isValid(_ pin: String) -> Bool {
+        pin.count == length && pin.allSatisfy(\.isNumber)
+    }
+}
+
 public enum VaultError: Error, Equatable, LocalizedError {
     case notConfigured
     case locked
     case wrongPIN
-    case pinTooShort
+    case pinNotFourDigits
     case throttled(retryAfter: TimeInterval)
     case biometricsUnavailable
     case biometricsFailed(String)
@@ -18,7 +34,7 @@ public enum VaultError: Error, Equatable, LocalizedError {
         case .notConfigured: "No PIN has been set up yet."
         case .locked: "The vault is locked."
         case .wrongPIN: "That PIN is not correct."
-        case .pinTooShort: "Use at least 4 digits."
+        case .pinNotFourDigits: "A PIN is four digits."
         case .throttled(let t): "Too many attempts. Try again in \(Int(ceil(t))) seconds."
         case .biometricsUnavailable: "Touch ID isn’t available on this Mac."
         case .biometricsFailed(let m): m
@@ -126,7 +142,5 @@ enum VaultCrypto {
         }
     }
 
-    static func isValidPIN(_ pin: String) -> Bool {
-        pin.count >= 4 && pin.count <= 12 && pin.allSatisfy(\.isNumber)
-    }
+    static func isValidPIN(_ pin: String) -> Bool { PINPolicy.isValid(pin) }
 }

@@ -4,12 +4,26 @@ import SummonKit
 
 /// The single source of Summon's visual identity.
 ///
-/// The chrome is deliberately monochrome. Colour in a launcher should mean something —
-/// what kind of thing a row is, or that an action is destructive — and a tinted
-/// selection bar or a gradient header means nothing, so it earns no colour. What is
-/// left is a small set of near-neutral surfaces separated by 3–6% steps rather than
-/// the heavy contrast a naive dark theme reaches for, hairline rules, and type that
-/// carries the hierarchy on weight and tier alone.
+/// One accent: the violet the app icon is drawn in. It marks **state** — what is
+/// selected, what has the keyboard, where you are, and the one button that finishes a
+/// sentence. Nothing else in the chrome is tinted.
+///
+/// This reverses 07d3a88, which took violet out on the grounds that a tinted selection
+/// bar means nothing. That was right about decoration and wrong about state: with
+/// everything neutral, "the row I am on" and "the row the pointer is over" sat two per
+/// cent apart. The rule that survives is the one that mattered — colour must carry
+/// information. Violet carries exactly one piece: this is where you are.
+///
+/// Violet is also `color(for: .text)` and `folderColor("violet")`, and that is allowed
+/// because the two never take the same role:
+///
+/// - the accent is always **behind or around** — a fill, a ring, a rule;
+/// - kind and folder colour are always **the thing itself** — a glyph, never a fill.
+///
+/// That split is load-bearing, not stylistic. A violet kind glyph on a *solid* violet
+/// selection measures 1.00:1 — the same colour on itself, invisible. So the selection
+/// fill is a tint and stays one; solid violet is for buttons and rings, where nothing
+/// coloured sits on top. `ContrastTests` asserts all of it.
 ///
 /// Both appearances are defined for every value; none is defined only for dark.
 public enum Theme {
@@ -22,11 +36,41 @@ public enum Theme {
     /// Sheets and popovers that sit above the chrome — the ⌘K action panel.
     public static let raised = Color(nsColor: .dyn(light: .srgb(1, 1, 1, 0.98),
                                                    dark: .srgb(0.145, 0.145, 0.157, 0.98)))
-    /// The selected row. Neutral: selection is position, not category.
-    public static let selection = Color(nsColor: .dyn(light: .srgb(0, 0, 0, 0.06),
-                                                      dark: .srgb(1, 1, 1, 0.08)))
+    // MARK: - State
+    //
+    // The four states are deliberately different in kind, not just in strength, so
+    // they cannot be mistaken for one another at a glance.
+
+    /// Solid violet. The one button that finishes a sentence, a drop line, progress.
+    /// Never a fill behind a kind glyph — see the note on this type.
+    public static let accent = Color(nsColor: .dyn(light: .srgb(0.36, 0.25, 0.78),
+                                                   dark: .srgb(0.64, 0.55, 1.00)))
+    /// Ink on top of `accent`. The accent inverts between appearances — dark violet on
+    /// light, light violet on dark — so what reads on it inverts too.
+    public static let onAccent = Color(nsColor: .dyn(light: .srgb(1, 1, 1),
+                                                     dark: .srgb(0.055, 0.055, 0.071)))
+
+    /// The selected row: keys act on this. A tint, never solid.
+    public static let selection = Color(nsColor: .dyn(light: .srgb(0.36, 0.25, 0.78, 0.14),
+                                                      dark: .srgb(0.64, 0.55, 1.00, 0.18)))
+    /// Still selected, but the keyboard is in another pane. The old neutral selection,
+    /// kept — this is the macOS convention, and in a three-pane window it is the only
+    /// way to say which column the arrow keys belong to.
+    public static let selectionInactive = Color(nsColor: .dyn(light: .srgb(0, 0, 0, 0.06),
+                                                              dark: .srgb(1, 1, 1, 0.08)))
+    /// Where you are in the navigation, which is not the same as what has focus.
+    public static let navActive = Color(nsColor: .dyn(light: .srgb(0.36, 0.25, 0.78, 0.18),
+                                                      dark: .srgb(0.64, 0.55, 1.00, 0.22)))
+    /// The pointer is here. Stays neutral on purpose: hover follows the mouse, and a
+    /// violet that chases the cursor across a list strobes.
     public static let rowHover = Color(nsColor: .dyn(light: .srgb(0, 0, 0, 0.035),
                                                      dark: .srgb(1, 1, 1, 0.05)))
+    /// Keystrokes land in this control. One per screen, ever.
+    public static let focusRing = Color(nsColor: .dyn(light: .srgb(0.36, 0.25, 0.78, 0.75),
+                                                      dark: .srgb(0.64, 0.55, 1.00, 0.75)))
+    /// A drop lands here. Its own token because a drop target drawn with `selection`
+    /// says "this folder is selected" instead — the same pixel, two meanings.
+    public static let dropTarget = accent
     public static let hairline = Color(nsColor: .dyn(light: .srgb(0, 0, 0, 0.08),
                                                      dark: .srgb(1, 1, 1, 0.08)))
     /// A field or well inset into the chrome.
@@ -93,22 +137,66 @@ public enum Theme {
     /// One row height, shared by the panel, the main window and the menu bar, so the
     /// three surfaces cannot drift apart.
     public static let rowHeight: CGFloat = 40
+    /// The sidebar's denser row. Named here because `SidebarView.rowHeight`,
+    /// `ItemRow.height` and a bare `32` in the action menu were three independent
+    /// constants for the same idea, and drop hit-testing reads them.
+    public static let rowCompact: CGFloat = 26
+    /// Action-menu and popover rows: between a list row and a sidebar row.
+    public static let rowMenu: CGFloat = 32
 
     // MARK: - Typography
     //
     // Named, because every call site used to hardcode `.system(size:)` — which is how
     // 9.5, 10, 10.5, 11, 12, 13, 16 and 20 all ended up in one panel.
+    //
+    // That fix did not hold. There are 21 distinct sizes in the app at the time of
+    // writing — 7.5, 8, 8.5, 9, 9.5, 10, 10.5, 11, 11.5, 12, 12.5, 13, 14, 15, 17, 18,
+    // 20, 21, 22, 25, 26 — which is worse than the drift this scale replaced, and
+    // `KeyHint` sets two adjacent labels at 10 and 10.5. The reason is that the scale
+    // was semantic-only: a call site wanting a small chip had no rung to stand on, so
+    // it invented one. The rungs below close that gap, and the semantic names sit on
+    // top of them.
 
     public enum Typography {
+        // The scale. Eight rungs, and nothing between them.
+        public static let micro = Font.system(size: 10)
+        public static let caption = Font.system(size: 11)
+        public static let body = Font.system(size: 12)
         public static let title = Font.system(size: 13)
+        public static let heading = Font.system(size: 15)
+        public static let field = Font.system(size: 18)
+        public static let display = Font.system(size: 21)
+        public static let statement = Font.system(size: 25)
+
+        // Roles, in terms of the scale.
         /// Matched characters. Emphasis by weight and tier, never by hue.
         public static let titleMatch = Font.system(size: 13, weight: .semibold)
-        public static let subtitle = Font.system(size: 13)
-        public static let meta = Font.system(size: 11)
+        public static let subtitle = title
+        public static let meta = caption
         public static let section = Font.system(size: 11, weight: .semibold)
-        public static let field = Font.system(size: 18)
         public static let key = Font.system(size: 11, weight: .medium)
-        public static let body = Font.system(size: 12)
+    }
+
+    // MARK: - Iconography
+    //
+    // A scale the app never had. Every `Image(systemName:)` picked its own number,
+    // which is how 8, 8.5, 9, 9.5, 20, 22 and 26 got into the type inventory above —
+    // they were never type sizes at all. Weight drifted the same way: the lock glyph
+    // is drawn at .light, .regular, .medium and .bold in four different places.
+
+    public enum Icon {
+        public static let micro = Font.system(size: 9)
+        public static let small = Font.system(size: 11)
+        public static let regular = Font.system(size: 13)
+        public static let large = Font.system(size: 15)
+        /// Empty states and sheet headers, where the glyph is the illustration.
+        public static let hero = Font.system(size: 26, weight: .light)
+
+        /// Fixed slots, so a glyph's own width cannot shunt the text beside it. A
+        /// paperclip and a text.alignleft are not the same width; a row of them
+        /// should still start at the same x.
+        public static let slotCompact: CGFloat = 16
+        public static let slot: CGFloat = 20
     }
 
     // MARK: - Motion
@@ -125,17 +213,88 @@ public enum Theme {
     /// Width change when the preview pane appears for an image or a PDF.
     public static let previewSplit = Animation.easeOut(duration: 0.10)
 
+    // State changes may animate; entrances still may not. The rule from 07d3a88 holds
+    // exactly where it was aimed — nothing on the search path moves, because the
+    // re-rank behind it completes in half a millisecond and animating that result
+    // would spend the win. Hover and selection are not the search path: they answer a
+    // pointer or an arrow key, and a hard cut there reads as a flicker.
+    public static let hover = Animation.easeOut(duration: 0.09)
+    public static let selectionChange = Animation.easeOut(duration: 0.12)
+    public static let disclosure = Animation.easeOut(duration: 0.14)
+
+    // MARK: - Elevation
+    //
+    // Shadows were four hand-picked black alphas (0.18, 0.22, 0.28) scattered across
+    // the action menu, the panel scrim, the tag dropdown and the toast. A black shadow
+    // over a light ground is one of the more visible light-mode bugs, so these carry
+    // an appearance like everything else.
+
+    public struct Shadow: Sendable {
+        public let color: Color
+        public let radius: CGFloat
+        public let y: CGFloat
+    }
+
+    /// Namespaced because `Theme.sheet` is already the sheet's *animation*. Two things
+    /// about the same surface, and neither name wants to be the awkward one.
+    public enum Elevation {
+        /// A menu or dropdown lifted off the surface below it.
+        public static let popover = Shadow(
+            color: Color(nsColor: .dyn(light: .srgb(0, 0, 0, 0.16), dark: .srgb(0, 0, 0, 0.34))),
+            radius: 14, y: 6)
+        /// A sheet, which sits higher and casts further.
+        public static let sheet = Shadow(
+            color: Color(nsColor: .dyn(light: .srgb(0, 0, 0, 0.20), dark: .srgb(0, 0, 0, 0.42))),
+            radius: 22, y: 10)
+        /// A toast, which is small and should not look heavy.
+        public static let toast = Shadow(
+            color: Color(nsColor: .dyn(light: .srgb(0, 0, 0, 0.12), dark: .srgb(0, 0, 0, 0.28))),
+            radius: 10, y: 4)
+    }
+
+
+
+    // MARK: - Brand
+    //
+    // The icon's own ground and violets, fixed rather than dynamic. These are for the
+    // surfaces that are the identity rather than the work — onboarding, the mark, an
+    // empty state that carries it. They do not follow the system appearance because
+    // the mark is drawn on near-black and its bloom only reads there.
+    //
+    // Onboarding kept these privately as an `Ink` enum, which meant the app had two
+    // colour systems that happened to agree. One is enough.
+
+    public enum Brand {
+        public static let page = Color(red: 0.055, green: 0.055, blue: 0.071)
+        public static let rail = Color(red: 0.086, green: 0.082, blue: 0.106)
+        public static let violet = Color(red: 0.64, green: 0.55, blue: 1.00)
+        public static let violetBright = Color(red: 0.84, green: 0.80, blue: 1.00)
+        public static let violetDeep = Color(red: 0.42, green: 0.30, blue: 0.92)
+        public static let primary = Color.white.opacity(0.94)
+        public static let secondary = Color.white.opacity(0.58)
+        public static let faint = Color.white.opacity(0.40)
+        public static let card = Color.white.opacity(0.05)
+        public static let hairline = Color.white.opacity(0.10)
+    }
+
     // MARK: - Type colours
     //
-    // Kept. These are the one place colour carries information — what kind of thing a
-    // row is — and the glyph is the only coloured element in the chrome.
+    // Kept. These say what kind of thing a row is, and they are always drawn as the
+    // glyph itself — never as a fill. `.text` is the same violet as `accent` on
+    // purpose: they never collide because they never take the same role, and a kind
+    // glyph on the selection tint still measures 4.5:1. On a solid accent it would be
+    // 1.00:1, which is why the selection fill is a tint and not a colour choice.
 
     public static func color(for kind: ItemKind) -> Color {
         switch kind {
         case .text: Color(nsColor: .dyn(light: .srgb(0.36, 0.25, 0.78), dark: .srgb(0.64, 0.55, 1.00)))
         case .richText: Color(nsColor: .dyn(light: .srgb(0.22, 0.36, 0.80), dark: .srgb(0.50, 0.66, 1.00)))
         case .image: Color(nsColor: .dyn(light: .srgb(0.05, 0.52, 0.52), dark: .srgb(0.33, 0.83, 0.80)))
-        case .document: Color(nsColor: .dyn(light: .srgb(0.76, 0.44, 0.07), dark: .srgb(1.00, 0.71, 0.32)))
+        // Darker in light than it looks like it should be, for the same reason
+        // `warning` is: amber on a near-white ground is always the one that fails. At
+        // 0.76/0.44/0.07 it measured 3.43:1 on the chrome — over the 3:1 glyph bar by
+        // a hair — and 2.78:1 once a selected row put the accent tint underneath it.
+        case .document: Color(nsColor: .dyn(light: .srgb(0.66, 0.38, 0.04), dark: .srgb(1.00, 0.71, 0.32)))
         case .file: Color(nsColor: .dyn(light: .srgb(0.36, 0.40, 0.48), dark: .srgb(0.66, 0.71, 0.80)))
         }
     }

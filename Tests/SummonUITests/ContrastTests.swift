@@ -128,6 +128,69 @@ struct ContrastTests {
         }
     }
 
+    // MARK: - The accent, and the rule that lets it share violet with `.text`
+
+    /// A token composited over the ground, as a background rather than as ink.
+    static func over(_ token: @autoclosure () -> Color, dark: Bool) -> RGB {
+        let (fill, alpha) = resolve(token(), dark: dark)
+        return blend(fill, alpha: alpha, over: ground(dark: dark))
+    }
+
+    @Test("The accent reads as ink on the chrome", arguments: [true, false])
+    func accentAsInk(dark: Bool) {
+        Self.check(Theme.accent, "accent", bar: 4.5, dark: dark)
+    }
+
+    @Test("Ink on a solid accent reads", arguments: [true, false])
+    func onAccent(dark: Bool) {
+        let fill = Self.over(Theme.accent, dark: dark)
+        let (ink, alpha) = Self.resolve(Theme.onAccent, dark: dark)
+        let measured = Self.ratio(Self.blend(ink, alpha: alpha, over: fill), fill)
+        #expect(measured >= 4.5,
+                "onAccent is \(String(format: "%.2f", measured)):1 in \(dark ? "dark" : "light")")
+    }
+
+    /// The one that makes the whole scheme legal. Selection is the accent and so is the
+    /// `.text` kind glyph, so a text row's glyph sits on its own hue whenever that row
+    /// is chosen. It survives only because the fill is a tint: on a solid accent the
+    /// same pair measures 1.00:1, the colour on itself.
+    @Test("Row content survives on the selection fill", arguments: [true, false])
+    func contentOnSelection(dark: Bool) {
+        let fill = Self.over(Theme.selection, dark: dark)
+
+        for (token, name, bar) in [(Theme.primaryText, "primaryText", 4.5),
+                                   (Theme.secondaryText, "secondaryText", 4.5)] {
+            let (ink, alpha) = Self.resolve(token, dark: dark)
+            let measured = Self.ratio(Self.blend(ink, alpha: alpha, over: fill), fill)
+            #expect(measured >= bar,
+                    "\(name) on selection is \(String(format: "%.2f", measured)):1 in \(dark ? "dark" : "light")")
+        }
+
+        for kind in ItemKind.allCases {
+            let (glyph, alpha) = Self.resolve(Theme.color(for: kind), dark: dark)
+            let measured = Self.ratio(Self.blend(glyph, alpha: alpha, over: fill), fill)
+            #expect(measured >= 3.0,
+                    "\(kind.rawValue) glyph on selection is \(String(format: "%.2f", measured)):1 in \(dark ? "dark" : "light")")
+        }
+    }
+
+    /// Selection has to be visible against the ground it sits on, or it says nothing.
+    @Test("Selection is distinguishable from the ground and from hover", arguments: [true, false])
+    func selectionIsVisible(dark: Bool) {
+        let base = Self.ground(dark: dark)
+        let selected = Self.over(Theme.selection, dark: dark)
+        let hovered = Self.over(Theme.rowHover, dark: dark)
+        #expect(Self.ratio(selected, base) >= 1.12,
+                "selection is \(String(format: "%.3f", Self.ratio(selected, base))):1 against the ground in \(dark ? "dark" : "light")")
+        #expect(Self.ratio(selected, hovered) >= 1.06,
+                "selection and hover are \(String(format: "%.3f", Self.ratio(selected, hovered))):1 apart in \(dark ? "dark" : "light")")
+    }
+
+    @Test("The focus ring clears the non-text bar", arguments: [true, false])
+    func focusRing(dark: Bool) {
+        Self.check(Theme.focusRing, "focusRing", bar: 3.0, dark: dark)
+    }
+
     @Test("Folder colours clear the non-text bar", arguments: [true, false])
     func folderColours(dark: Bool) {
         for name in Theme.folderColorNames {

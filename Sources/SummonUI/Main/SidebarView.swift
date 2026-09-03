@@ -312,9 +312,16 @@ struct FolderRow: View {
         .frame(height: SidebarView.rowHeight)
         .background {
             RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous)
-                // A fill means the drop goes *inside* this folder.
-                .fill(dropZone == .into ? Theme.selection
-                      : (isSelected ? Theme.selection : .clear))
+                .fill(isSelected ? Theme.selection : .clear)
+        }
+        // A ring means the drop goes *inside* this folder. It used to be drawn with
+        // `Theme.selection`, the same fill as selection itself — one pixel meaning two
+        // things, which only got away with it while that fill said nothing.
+        .overlay {
+            if dropZone == .into {
+                RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous)
+                    .strokeBorder(Theme.dropTarget, lineWidth: 1.5)
+            }
         }
         // A line means the drop goes *beside* it.
         .overlay(alignment: .top) { if dropZone == .before { DropLine() } }

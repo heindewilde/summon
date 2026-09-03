@@ -12,6 +12,9 @@ public struct OnboardingView: View {
     @State private var pin = ""
     @State private var pinConfirm = ""
     @State private var secretKind: VaultSecretKind = .pin
+    /// Derivation is slow on purpose and no longer blocks the main thread, so the
+    /// Set button stays clickable while it runs. This is what stops a second press.
+    @State private var settingUp = false
     @State private var secretError: String?
     @State private var enableTouchID = true
     @State private var seeding = false
@@ -314,15 +317,21 @@ public struct OnboardingView: View {
     // MARK: - Actions
 
     private func setPIN() {
-        do {
-            try model.vault.setUpSecret(pin, kind: secretKind)
-            if enableTouchID, Vault.biometricStorageAvailable {
-                try? model.vault.enableBiometricUnlock()
+        guard !settingUp else { return }
+        settingUp = true
+        Task {
+            defer { settingUp = false }
+            do {
+                try await model.vault.setUpSecret(pin, kind: secretKind)
+                if enableTouchID, Vault.biometricStorageAvailable {
+                    try? model.vault.enableBiometricUnlock()
+                }
+                model.store.scrubSensitiveContent()
+                secretError = nil
+                pin = ""; pinConfirm = ""
+            } catch {
+                secretError = (error as? VaultError)?.errorDescription ?? error.localizedDescription
             }
-            secretError = nil
-            pin = ""; pinConfirm = ""
-        } catch {
-            secretError = (error as? VaultError)?.errorDescription ?? error.localizedDescription
         }
     }
 

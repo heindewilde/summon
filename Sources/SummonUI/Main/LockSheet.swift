@@ -43,6 +43,8 @@ public struct LockSheet: View {
     @State private var step: Step
     @State private var error: String?
     @State private var shake = 0
+    /// True while a step is resolving, so a held return key cannot advance twice.
+    @State private var busy = false
     /// What the vault will use once this sheet is done. Only the choose step can move
     /// it; `current` is always proved against whatever the vault uses *now*.
     @State private var newKind: VaultSecretKind
@@ -255,14 +257,27 @@ public struct LockSheet: View {
 
     // MARK: - Advancing
 
+    /// Entered from `onComplete` and from buttons, neither of which can await.
+    ///
+    /// The steps that need the key now take a few hundred milliseconds — derivation
+    /// moved off the main actor, so the sheet stays live rather than freezing — which
+    /// is exactly long enough for a second return press to arrive. `model.isBusy`
+    /// covers the vault; `busy` covers this sheet, so a step cannot be advanced twice.
     private func advance() {
+        guard !busy else { return }
+        Task { await advanceAsync() }
+    }
+
+    private func advanceAsync() async {
+        busy = true
+        defer { busy = false }
         error = nil
         switch step {
         case .current:
-            // The PIN opens the vault here rather than being checked and discarded:
+            // The secret opens the vault here rather than being checked and discarded:
             // every purpose that asks for it needs the key next — to re-wrap it, to
             // decrypt with it, or to do the thing that was interrupted.
-            guard model.unlockInPlace(secret: current) else {
+            guard await model.unlockInPlace(secret: current) else {
                 error = model.secretError
                 wrongEntry { current = "" }
                 return
@@ -291,13 +306,16 @@ public struct LockSheet: View {
                 }
                 return
             }
+            var failure: String?
             switch purpose {
             case .create:
-                model.completeSecretSetup(secret: first, kind: newKind) { error = $0 }
+                await model.completeSecretSetup(secret: first, kind: newKind) { failure = $0 }
             case .change:
-                model.changeSecret(current: current, new: first, kind: newKind) { error = $0 }
+                await model.changeSecret(current: current, new: first,
+                                         kind: newKind) { failure = $0 }
             case .unlock, .turnOff: break
             }
+            error = failure
             if error == nil { dismiss() }
 
         case .confirmRemoval:

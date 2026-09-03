@@ -36,7 +36,7 @@ struct FileStoreTests {
     }
 
     @Test("A sealed blob is unreadable on disk and needs the key")
-    func sealedBlobIsOpaque() throws {
+    func sealedBlobIsOpaque() async throws {
         let paths = LibraryPaths.temporary()
         defer { paths.destroy() }
         let store = FileStore(paths: paths)
@@ -51,7 +51,7 @@ struct FileStoreTests {
         #expect(onDisk != secret)
         #expect(!String(decoding: onDisk, as: UTF8.self).contains("NLD1234567"))
 
-        #expect(throws: FileStoreError.self) { _ = try store.read(blob, itemID: id, key: nil) }
+        await #expect(throws: FileStoreError.self) { _ = try store.read(blob, itemID: id, key: nil) }
         #expect(try store.read(blob, itemID: id, key: key) == secret)
     }
 
@@ -91,6 +91,14 @@ struct FileStoreTests {
         #expect(url.lastPathComponent == "Report.txt")
         #expect(try Data(contentsOf: url) == Data("report".utf8))
 
+        // Readable only by its owner, and from the moment it exists. It used to be
+        // written and then chmod'd, which left decrypted content at the process umask
+        // for the moment in between.
+        let mode = try #require(
+            try FileManager.default.attributesOfItem(atPath: url.path)[.posixPermissions] as? NSNumber
+        )
+        #expect(mode.int16Value == 0o600)
+
         FileStore.clearScratch()
         #expect(!FileManager.default.fileExists(atPath: url.path))
     }
@@ -129,10 +137,10 @@ struct LibraryStoreTests {
     }
 
     @Test("Sensitivity is inherited from an ancestor folder")
-    func sensitivityInheritance() throws {
+    func sensitivityInheritance() async throws {
         let (store, vault, paths) = try makeStore()
         defer { paths.destroy() }
-        try vault.setUpPIN("4829")
+        try await vault.setUpPIN("4829")
 
         let personal = store.createFolder(name: "Personal", sensitive: true)
         let ids = store.createFolder(name: "IDs", parent: personal)
@@ -143,10 +151,10 @@ struct LibraryStoreTests {
     }
 
     @Test("Marking an item sensitive encrypts its body and locking hides the contents")
-    func sensitiveItemEncrypts() throws {
+    func sensitiveItemEncrypts() async throws {
         let (store, vault, paths) = try makeStore()
         defer { paths.destroy() }
-        try vault.setUpPIN("4829")
+        try await vault.setUpPIN("4829")
 
         let item = store.createSnippet(title: "Passport number", body: "NLD1234567")
         try store.setSensitive(item, true)
@@ -170,10 +178,10 @@ struct LibraryStoreTests {
     }
 
     @Test("Removing sensitivity decrypts the body back to plaintext")
-    func desensitizeDecrypts() throws {
+    func desensitizeDecrypts() async throws {
         let (store, vault, paths) = try makeStore()
         defer { paths.destroy() }
-        try vault.setUpPIN("4829")
+        try await vault.setUpPIN("4829")
 
         let item = store.createSnippet(title: "Bank details", body: "IBAN NL91 ABNA")
         try store.setSensitive(item, true)
@@ -184,10 +192,10 @@ struct LibraryStoreTests {
     }
 
     @Test("Sensitivity cannot be changed while the vault is locked")
-    func cannotEncryptWhileLocked() throws {
+    func cannotEncryptWhileLocked() async throws {
         let (store, vault, paths) = try makeStore()
         defer { paths.destroy() }
-        try vault.setUpPIN("4829")
+        try await vault.setUpPIN("4829")
         let item = store.createSnippet(title: "Thing", body: "body")
         vault.lock()
 

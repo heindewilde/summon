@@ -8,30 +8,30 @@ struct VaultCryptoTests {
     let iters = 1_000
 
     @Test("Master key round-trips through a PIN wrap")
-    func wrapUnwrapRoundTrip() throws {
+    func wrapUnwrapRoundTrip() async throws {
         let master = VaultKey.generate()
-        let wrapper = try VaultCrypto.wrap(master: master, secret: "4829", iterations: iters)
-        let recovered = try VaultCrypto.unwrap(wrapper, secret: "4829")
+        let wrapper = try await VaultCrypto.wrap(master: master, secret: "4829", iterations: iters)
+        let recovered = try await VaultCrypto.unwrap(wrapper, secret: "4829")
         #expect(recovered == master)
     }
 
     @Test("A wrong PIN is rejected, not silently mis-decrypted")
-    func wrongPINRejected() throws {
-        let wrapper = try VaultCrypto.wrap(master: .generate(), secret: "1234", iterations: iters)
-        #expect(throws: VaultError.wrongPIN) {
-            _ = try VaultCrypto.unwrap(wrapper, secret: "1235")
+    func wrongPINRejected() async throws {
+        let wrapper = try await VaultCrypto.wrap(master: .generate(), secret: "1234", iterations: iters)
+        await #expect(throws: VaultError.wrongPIN) {
+            _ = try await VaultCrypto.unwrap(wrapper, secret: "1235")
         }
     }
 
     @Test("Each wrap uses a fresh salt, so the same PIN yields different ciphertext")
-    func saltsAreUnique() throws {
+    func saltsAreUnique() async throws {
         let master = VaultKey.generate()
-        let a = try VaultCrypto.wrap(master: master, secret: "1234", iterations: iters)
-        let b = try VaultCrypto.wrap(master: master, secret: "1234", iterations: iters)
+        let a = try await VaultCrypto.wrap(master: master, secret: "1234", iterations: iters)
+        let b = try await VaultCrypto.wrap(master: master, secret: "1234", iterations: iters)
         #expect(a.salt != b.salt)
         #expect(a.sealedMaster != b.sealedMaster)
-        let ua = try VaultCrypto.unwrap(a, secret: "1234")
-        let ub = try VaultCrypto.unwrap(b, secret: "1234")
+        let ua = try await VaultCrypto.unwrap(a, secret: "1234")
+        let ub = try await VaultCrypto.unwrap(b, secret: "1234")
         #expect(ua == ub)
     }
 
@@ -98,10 +98,10 @@ struct VaultCryptoTests {
     }
 
     @Test("The wrapper records which kind of secret opens it")
-    func wrapperCarriesKind() throws {
-        let pinned = try VaultCrypto.wrap(master: .generate(), secret: "4829",
+    func wrapperCarriesKind() async throws {
+        let pinned = try await VaultCrypto.wrap(master: .generate(), secret: "4829",
                                           kind: .pin, iterations: iters)
-        let phrased = try VaultCrypto.wrap(master: .generate(), secret: "correct horse battery",
+        let phrased = try await VaultCrypto.wrap(master: .generate(), secret: "correct horse battery",
                                            kind: .passphrase, iterations: iters)
         #expect(pinned.kind == .pin)
         #expect(phrased.kind == .passphrase)
@@ -110,8 +110,8 @@ struct VaultCryptoTests {
     /// The compatibility case that matters: every vault written before passphrases
     /// existed has no `kindRaw` at all, and has to keep opening as a PIN.
     @Test("A wrapper written before passphrases existed still decodes, as a PIN")
-    func legacyWrapperDecodesAsPIN() throws {
-        let wrapper = try VaultCrypto.wrap(master: .generate(), secret: "4829",
+    func legacyWrapperDecodesAsPIN() async throws {
+        let wrapper = try await VaultCrypto.wrap(master: .generate(), secret: "4829",
                                            kind: .pin, iterations: iters)
         var fields = try #require(
             try JSONSerialization.jsonObject(with: JSONEncoder().encode(wrapper))
@@ -144,103 +144,103 @@ struct VaultLifecycleTests {
     }
 
     @Test("Setting a PIN configures and unlocks the vault")
-    func setUpUnlocks() throws {
+    func setUpUnlocks() async throws {
         let (vault, paths) = makeVault()
         defer { paths.destroy() }
-        try vault.setUpPIN("4829")
+        try await vault.setUpPIN("4829")
         #expect(vault.state == .unlocked)
         #expect(vault.currentKey != nil)
     }
 
     @Test("Locking discards the key; unlocking restores the same one")
-    func lockThenUnlock() throws {
+    func lockThenUnlock() async throws {
         let (vault, paths) = makeVault()
         defer { paths.destroy() }
-        try vault.setUpPIN("4829")
+        try await vault.setUpPIN("4829")
         let before = vault.currentKey
 
         vault.lock()
         #expect(vault.state == .locked)
         #expect(vault.currentKey == nil)
 
-        try vault.unlock(pin: "4829")
+        try await vault.unlock(pin: "4829")
         #expect(vault.state == .unlocked)
         #expect(vault.currentKey == before)
     }
 
     @Test("Content sealed before a lock is still readable after unlocking")
-    func contentSurvivesLockCycle() throws {
+    func contentSurvivesLockCycle() async throws {
         let (vault, paths) = makeVault()
         defer { paths.destroy() }
-        try vault.setUpPIN("4829")
+        try await vault.setUpPIN("4829")
         let id = UUID()
         let sealed = try vault.currentKey!.seal("IBAN NL91 ABNA 0417 1643 00", itemID: id)
 
         vault.lock()
-        try vault.unlock(pin: "4829")
+        try await vault.unlock(pin: "4829")
         #expect(try vault.currentKey!.openText(sealed, itemID: id) == "IBAN NL91 ABNA 0417 1643 00")
     }
 
     @Test("Changing the PIN preserves the data, and the old PIN stops working")
-    func changePINPreservesData() throws {
+    func changePINPreservesData() async throws {
         let (vault, paths) = makeVault()
         defer { paths.destroy() }
-        try vault.setUpPIN("1111")
+        try await vault.setUpPIN("1111")
         let id = UUID()
         let sealed = try vault.currentKey!.seal("client list", itemID: id)
 
-        try vault.changePIN(current: "1111", new: "9999")
+        try await vault.changePIN(current: "1111", new: "9999")
         #expect(try vault.currentKey!.openText(sealed, itemID: id) == "client list")
 
         vault.lock()
-        #expect(throws: VaultError.wrongPIN) { try vault.unlock(pin: "1111") }
-        try vault.unlock(pin: "9999")
+        await #expect(throws: VaultError.wrongPIN) { try await vault.unlock(pin: "1111") }
+        try await vault.unlock(pin: "9999")
         #expect(try vault.currentKey!.openText(sealed, itemID: id) == "client list")
     }
 
     @Test("A short PIN is refused")
-    func shortPINRefused() throws {
+    func shortPINRefused() async throws {
         let (vault, paths) = makeVault()
         defer { paths.destroy() }
-        #expect(throws: VaultError.pinNotFourDigits) { try vault.setUpPIN("12") }
+        await #expect(throws: VaultError.pinNotFourDigits) { try await vault.setUpPIN("12") }
         #expect(vault.state == .notConfigured)
     }
 
     @Test("Five wrong PINs trigger a cooldown")
-    func throttleAfterFiveFailures() throws {
+    func throttleAfterFiveFailures() async throws {
         let (vault, paths) = makeVault()
         defer { paths.destroy() }
-        try vault.setUpPIN("4829")
+        try await vault.setUpPIN("4829")
         vault.lock()
 
         for _ in 0..<5 {
-            #expect(throws: VaultError.wrongPIN) { try vault.unlock(pin: "000000") }
+            await #expect(throws: VaultError.wrongPIN) { try await vault.unlock(pin: "000000") }
         }
         #expect(vault.failedAttempts >= 5)
         #expect(vault.throttledUntil != nil)
 
         // Even the correct PIN is refused while throttled.
-        #expect(throws: (any Error).self) { try vault.unlock(pin: "4829") }
+        await #expect(throws: (any Error).self) { try await vault.unlock(pin: "4829") }
     }
 
     @Test("The vault reloads its configured state from disk")
-    func statePersists() throws {
+    func statePersists() async throws {
         let paths = LibraryPaths.temporary()
         defer { paths.destroy() }
         let first = Vault(paths: paths)
-        try first.setUpPIN("4829")
+        try await first.setUpPIN("4829")
 
         let second = Vault(paths: paths)
         #expect(second.state == .locked)
-        try second.unlock(pin: "4829")
+        try await second.unlock(pin: "4829")
         #expect(second.currentKey == first.currentKey)
     }
 
     @Test("Auto-lock fires only after the idle interval has elapsed")
-    func autoLock() throws {
+    func autoLock() async throws {
         let (vault, paths) = makeVault()
         defer { paths.destroy() }
-        try vault.setUpPIN("4829")
+        try await vault.setUpPIN("4829")
         vault.autoLockMinutes = 5
 
         #expect(vault.lockIfIdle(now: Date().addingTimeInterval(60)) == false)
@@ -251,22 +251,22 @@ struct VaultLifecycleTests {
     }
 
     @Test("Auto-lock set to zero never fires")
-    func autoLockDisabled() throws {
+    func autoLockDisabled() async throws {
         let (vault, paths) = makeVault()
         defer { paths.destroy() }
-        try vault.setUpPIN("4829")
+        try await vault.setUpPIN("4829")
         vault.autoLockMinutes = 0
         #expect(vault.lockIfIdle(now: Date().addingTimeInterval(86_400)) == false)
         #expect(vault.state == .unlocked)
     }
 
     @Test("Turning off the PIN decrypts everything first")
-    func removingProtectionDecrypts() throws {
+    func removingProtectionDecrypts() async throws {
         let paths = LibraryPaths.temporary()
         defer { paths.destroy() }
         let vault = Vault(paths: paths)
         let store = try LibraryStore(paths: paths, vault: vault)
-        try vault.setUpPIN("1379")
+        try await vault.setUpPIN("1379")
 
         let secrets = store.createFolder(name: "Secrets")
         try store.setFolderSensitive(secrets, true)
@@ -294,39 +294,39 @@ struct VaultLifecycleTests {
     }
 
     @Test("Turning off the PIN needs the vault open")
-    func removingProtectionNeedsUnlock() throws {
+    func removingProtectionNeedsUnlock() async throws {
         let paths = LibraryPaths.temporary()
         defer { paths.destroy() }
         let vault = Vault(paths: paths)
         let store = try LibraryStore(paths: paths, vault: vault)
-        try vault.setUpPIN("1379")
+        try await vault.setUpPIN("1379")
         let item = store.createSnippet(title: "Bank", body: "IBAN NL00")
         try store.setSensitive(item, true)
 
         vault.lock()
         // Refusing is the whole point: decrypting is impossible without the key, and
         // going ahead anyway would strand the content.
-        #expect(throws: VaultError.locked) { _ = try store.clearAllSensitivity() }
+        await #expect(throws: VaultError.locked) { _ = try store.clearAllSensitivity() }
     }
 
     @Test("Changing the PIN re-keys rather than re-encrypting")
-    func changingPINKeepsContentSealed() throws {
+    func changingPINKeepsContentSealed() async throws {
         let paths = LibraryPaths.temporary()
         defer { paths.destroy() }
         let vault = Vault(paths: paths)
         let store = try LibraryStore(paths: paths, vault: vault)
-        try vault.setUpPIN("1379")
+        try await vault.setUpPIN("1379")
         let item = store.createSnippet(title: "Bank", body: "IBAN NL00")
         try store.setSensitive(item, true)
         let sealedBefore = item.sealedBody
 
-        try vault.changePIN(current: "1379", new: "2468")
+        try await vault.changePIN(current: "1379", new: "2468")
         // The master key is unwrapped and re-wrapped; the content itself is untouched.
         #expect(item.sealedBody == sealedBefore)
 
         vault.lock()
-        #expect(throws: VaultError.wrongPIN) { try vault.unlock(pin: "1379") }
-        try vault.unlock(pin: "2468")
+        await #expect(throws: VaultError.wrongPIN) { try await vault.unlock(pin: "1379") }
+        try await vault.unlock(pin: "2468")
         store.refresh()
         #expect(store.snapshots.first { $0.id == item.id }?.searchableText.contains("IBAN") == true)
     }
@@ -339,12 +339,12 @@ struct SealedSummaryTests {
     /// The summary is the content's own first sentence when the model is unavailable
     /// or refuses to look — which for a sensitive item is always. It has to be sealed.
     @Test("A sensitive item's summary never sits in the clear")
-    func summaryIsSealedForSensitiveItems() throws {
+    func summaryIsSealedForSensitiveItems() async throws {
         let paths = LibraryPaths.temporary()
         defer { paths.destroy() }
         let vault = Vault(paths: paths)
         let store = try LibraryStore(paths: paths, vault: vault)
-        try vault.setUpPIN("1379")
+        try await vault.setUpPIN("1379")
 
         let secret = "Passport number NLD1234567, issued in Amsterdam."
         let item = store.createSnippet(title: "Passport", body: secret, sensitive: true)
@@ -358,12 +358,12 @@ struct SealedSummaryTests {
     }
 
     @Test("Marking an existing item sensitive seals the summary it already had")
-    func markingSensitiveSealsAnExistingSummary() throws {
+    func markingSensitiveSealsAnExistingSummary() async throws {
         let paths = LibraryPaths.temporary()
         defer { paths.destroy() }
         let vault = Vault(paths: paths)
         let store = try LibraryStore(paths: paths, vault: vault)
-        try vault.setUpPIN("1379")
+        try await vault.setUpPIN("1379")
 
         // This is the order that leaked: enriched while ordinary, sealed afterwards.
         let item = store.createSnippet(title: "Bank", body: "IBAN NL00 BANK 0123 4567 89")
@@ -381,12 +381,12 @@ struct SealedSummaryTests {
     }
 
     @Test("A locked item's snapshot carries no summary")
-    func lockedSnapshotHasNoSummary() throws {
+    func lockedSnapshotHasNoSummary() async throws {
         let paths = LibraryPaths.temporary()
         defer { paths.destroy() }
         let vault = Vault(paths: paths)
         let store = try LibraryStore(paths: paths, vault: vault)
-        try vault.setUpPIN("1379")
+        try await vault.setUpPIN("1379")
 
         let item = store.createSnippet(title: "Passport", body: "NLD1234567", sensitive: true)
         store.applySummary(item, "Passport number NLD1234567")
@@ -407,32 +407,32 @@ struct PassphraseTests {
     private let phrase = "correct horse battery"
 
     @Test("A vault can be set up with a passphrase instead of a PIN")
-    func setUpWithPassphrase() throws {
+    func setUpWithPassphrase() async throws {
         let paths = LibraryPaths.temporary()
         defer { paths.destroy() }
         let vault = Vault(paths: paths)
 
-        try vault.setUpSecret(phrase, kind: .passphrase)
+        try await vault.setUpSecret(phrase, kind: .passphrase)
         #expect(vault.secretKind == .passphrase)
         #expect(vault.isUnlocked)
 
         vault.lock()
-        #expect(throws: VaultError.wrongPIN) { try vault.unlock(secret: "4829") }
-        try vault.unlock(secret: phrase)
+        await #expect(throws: VaultError.wrongPIN) { try await vault.unlock(secret: "4829") }
+        try await vault.unlock(secret: phrase)
         #expect(vault.isUnlocked)
     }
 
     @Test("Each kind holds its own length rule at setup")
-    func setupEnforcesTheRightPolicy() throws {
+    func setupEnforcesTheRightPolicy() async throws {
         let paths = LibraryPaths.temporary()
         defer { paths.destroy() }
         let vault = Vault(paths: paths)
 
-        #expect(throws: VaultError.passphraseTooShort) {
-            try vault.setUpSecret("tooshort", kind: .passphrase)
+        await #expect(throws: VaultError.passphraseTooShort) {
+            try await vault.setUpSecret("tooshort", kind: .passphrase)
         }
-        #expect(throws: VaultError.pinNotFourDigits) {
-            try vault.setUpSecret(phrase, kind: .pin)
+        await #expect(throws: VaultError.pinNotFourDigits) {
+            try await vault.setUpSecret(phrase, kind: .pin)
         }
         #expect(!vault.isConfigured)
     }
@@ -440,50 +440,50 @@ struct PassphraseTests {
     /// The point of the switch being a re-wrap: content is sealed under the master
     /// key, which never changes, so nothing has to be decrypted and rewritten.
     @Test("Switching from a PIN to a passphrase leaves content sealed and readable")
-    func switchingKindKeepsContent() throws {
+    func switchingKindKeepsContent() async throws {
         let paths = LibraryPaths.temporary()
         defer { paths.destroy() }
         let vault = Vault(paths: paths)
         let store = try LibraryStore(paths: paths, vault: vault)
-        try vault.setUpPIN("4829")
+        try await vault.setUpPIN("4829")
 
         let item = store.createSnippet(title: "Passport", body: "NLD1234567", sensitive: true)
         let sealedBefore = item.sealedBody
         #expect(sealedBefore != nil)
 
-        try vault.changeSecret(current: "4829", new: phrase, kind: .passphrase)
+        try await vault.changeSecret(current: "4829", new: phrase, kind: .passphrase)
         #expect(vault.secretKind == .passphrase)
         // The very same ciphertext — this was a re-wrap, not a re-encrypt.
         #expect(item.sealedBody == sealedBefore)
 
         vault.lock()
-        try vault.unlock(secret: phrase)
+        try await vault.unlock(secret: phrase)
         #expect(store.resolveBodyText(item, key: vault.currentKey) == "NLD1234567")
     }
 
     @Test("Switching back to a PIN works the same way")
-    func switchingBackToPIN() throws {
+    func switchingBackToPIN() async throws {
         let paths = LibraryPaths.temporary()
         defer { paths.destroy() }
         let vault = Vault(paths: paths)
-        try vault.setUpSecret(phrase, kind: .passphrase)
+        try await vault.setUpSecret(phrase, kind: .passphrase)
 
-        try vault.changeSecret(current: phrase, new: "1379", kind: .pin)
+        try await vault.changeSecret(current: phrase, new: "1379", kind: .pin)
         #expect(vault.secretKind == .pin)
         vault.lock()
-        try vault.unlock(secret: "1379")
+        try await vault.unlock(secret: "1379")
         #expect(vault.isUnlocked)
     }
 
     @Test("A wrong current secret cannot re-key the vault")
-    func changeNeedsTheCurrentSecret() throws {
+    func changeNeedsTheCurrentSecret() async throws {
         let paths = LibraryPaths.temporary()
         defer { paths.destroy() }
         let vault = Vault(paths: paths)
-        try vault.setUpPIN("4829")
+        try await vault.setUpPIN("4829")
 
-        #expect(throws: VaultError.wrongPIN) {
-            try vault.changeSecret(current: "0000", new: phrase, kind: .passphrase)
+        await #expect(throws: VaultError.wrongPIN) {
+            try await vault.changeSecret(current: "0000", new: phrase, kind: .passphrase)
         }
         #expect(vault.secretKind == .pin)
     }
@@ -491,34 +491,34 @@ struct PassphraseTests {
     /// `changeSecret` used to unwrap directly, with no counter and no cooldown, which
     /// made "change my PIN" an unthrottled oracle for the current one.
     @Test("Changing the secret is throttled like any other guess")
-    func changeIsThrottled() throws {
+    func changeIsThrottled() async throws {
         let paths = LibraryPaths.temporary()
         defer { paths.destroy() }
         let vault = Vault(paths: paths)
-        try vault.setUpPIN("4829")
+        try await vault.setUpPIN("4829")
 
         for _ in 0..<5 {
-            #expect(throws: VaultError.wrongPIN) {
-                try vault.changeSecret(current: "0000", new: "1111", kind: .pin)
+            await #expect(throws: VaultError.wrongPIN) {
+                try await vault.changeSecret(current: "0000", new: "1111", kind: .pin)
             }
         }
         #expect(vault.failedAttempts == 5)
         #expect(vault.throttledUntil != nil)
 
         // And the cooldown applies to the change path, not only to unlocking.
-        #expect(throws: (any Error).self) {
-            try vault.changeSecret(current: "4829", new: "1111", kind: .pin)
+        await #expect(throws: (any Error).self) {
+            try await vault.changeSecret(current: "4829", new: "1111", kind: .pin)
         }
     }
 
     @Test("Changing without naming a kind keeps the one already in use")
-    func changeKeepsKindByDefault() throws {
+    func changeKeepsKindByDefault() async throws {
         let paths = LibraryPaths.temporary()
         defer { paths.destroy() }
         let vault = Vault(paths: paths)
-        try vault.setUpSecret(phrase, kind: .passphrase)
+        try await vault.setUpSecret(phrase, kind: .passphrase)
 
-        try vault.changeSecret(current: phrase, new: "a longer passphrase")
+        try await vault.changeSecret(current: phrase, new: "a longer passphrase")
         #expect(vault.secretKind == .passphrase)
     }
 }
@@ -530,12 +530,12 @@ struct SealResidueTests {
     /// The transition is the dangerous moment: the item was legitimately plaintext,
     /// and SQLite does not zero the pages it frees when that plaintext is nilled.
     @Test("Plaintext is gone from the store file after an item is sealed")
-    func sealingScrubsTheStoreFile() throws {
+    func sealingScrubsTheStoreFile() async throws {
         let paths = LibraryPaths.temporary()
         defer { paths.destroy() }
         let vault = Vault(paths: paths)
         let store = try LibraryStore(paths: paths, vault: vault)
-        try vault.setUpPIN("1379")
+        try await vault.setUpPIN("1379")
 
         // Distinctive enough that finding it in the file cannot be a coincidence.
         let secret = "ZmarkerQ Passport NLD1234567 ZmarkerQ"
@@ -552,12 +552,12 @@ struct SealResidueTests {
     }
 
     @Test("Turning protection off and on again leaves no earlier copy")
-    func repeatedTransitionsScrub() throws {
+    func repeatedTransitionsScrub() async throws {
         let paths = LibraryPaths.temporary()
         defer { paths.destroy() }
         let vault = Vault(paths: paths)
         let store = try LibraryStore(paths: paths, vault: vault)
-        try vault.setUpPIN("1379")
+        try await vault.setUpPIN("1379")
 
         let secret = "ZmarkerR IBAN NL00 BANK 0123 ZmarkerR"
         let item = store.createSnippet(title: "Bank", body: secret, sensitive: true)
@@ -568,7 +568,7 @@ struct SealResidueTests {
         _ = try store.clearAllSensitivity()
         #expect(try fileContains(paths.storeURL, secret))
 
-        try vault.setUpPIN("1379")
+        try await vault.setUpPIN("1379")
         try store.setSensitive(item, true)
         #expect(try !fileContains(paths.storeURL, secret))
     }
@@ -593,8 +593,8 @@ struct SealResidueTests {
 @MainActor
 struct CooldownTests {
 
-    private func wrapper(failures: Int, lastFailedAt: Date?) throws -> VaultWrapper {
-        var w = try VaultCrypto.wrap(master: .generate(), secret: "4829",
+    private func wrapper(failures: Int, lastFailedAt: Date?) async throws -> VaultWrapper {
+        var w = try await VaultCrypto.wrap(master: .generate(), secret: "4829",
                                      kind: .pin, iterations: 1_000)
         w.failedAttempts = failures
         w.lastFailedAt = lastFailedAt
@@ -603,8 +603,8 @@ struct CooldownTests {
 
     @Test("Under the threshold there is no cooldown at all",
           arguments: [0, 1, 4])
-    func noCooldownEarly(failures: Int) throws {
-        let w = try wrapper(failures: failures, lastFailedAt: Date())
+    func noCooldownEarly(failures: Int) async throws {
+        let w = try await wrapper(failures: failures, lastFailedAt: Date())
         #expect(Vault.remainingCooldown(w) == nil)
     }
 
@@ -618,8 +618,8 @@ struct CooldownTests {
     }
 
     @Test("Waiting it out clears it")
-    func expiresOnItsOwn() throws {
-        let w = try wrapper(failures: 5, lastFailedAt: Date())
+    func expiresOnItsOwn() async throws {
+        let w = try await wrapper(failures: 5, lastFailedAt: Date())
         let later = Date().addingTimeInterval(31)
         #expect(Vault.remainingCooldown(w, now: later) == nil)
     }
@@ -627,8 +627,8 @@ struct CooldownTests {
     /// The bug: `lockedUntil` was an absolute deadline, so moving the system clock
     /// back past it cleared the cooldown. Elapsed time cannot be gamed that way.
     @Test("Setting the clock back does not clear the cooldown")
-    func clockRollbackDoesNotHelp() throws {
-        let w = try wrapper(failures: 5, lastFailedAt: Date())
+    func clockRollbackDoesNotHelp() async throws {
+        let w = try await wrapper(failures: 5, lastFailedAt: Date())
         let yesterday = Date().addingTimeInterval(-86_400)
         let remaining = try #require(Vault.remainingCooldown(w, now: yesterday))
         // Negative elapsed time reads as none passed, so the full wait is still owed.
@@ -636,8 +636,8 @@ struct CooldownTests {
     }
 
     @Test("An absurd iteration count is clamped rather than hung on")
-    func iterationsAreClamped() throws {
-        var w = try wrapper(failures: 0, lastFailedAt: nil)
+    func iterationsAreClamped() async throws {
+        var w = try await wrapper(failures: 0, lastFailedAt: nil)
         w.iterations = .max
         #expect(w.safeIterations == VaultWrapper.maximumIterations)
 
@@ -649,6 +649,9 @@ struct CooldownTests {
     }
 }
 
+/// The scratch directory is process-wide, and `StoreTests.materializeSealed` clears
+/// it mid-test — so anything asserting about a materialised file belongs there,
+/// with the one test that owns that directory, rather than racing it from here.
 @Suite("Scratch files")
 struct ScratchFileTests {
 
@@ -674,26 +677,6 @@ struct ScratchFileTests {
                               isSealed: true, fileExtension: "pdf",
                               originalName: "Portfolio 2026.pdf")
         #expect(FileStore.scratchName(for: blob, itemID: id) == "Portfolio 2026.pdf")
-    }
-
-    @Test("A decrypted copy is readable only by its owner")
-    func materialisedFileIsPrivate() throws {
-        let paths = LibraryPaths.temporary()
-        defer { paths.destroy(); FileStore.clearScratch() }
-        let store = FileStore(paths: paths)
-        let key = VaultKey.generate()
-        let id = UUID()
-
-        let blob = try store.importData(Data("passport scan".utf8), itemID: id,
-                                        fileExtension: "txt", originalName: "scan.txt",
-                                        key: key)
-        let url = try store.materialize(blob, itemID: id, key: key)
-
-        let mode = try #require(
-            try FileManager.default.attributesOfItem(atPath: url.path)[.posixPermissions] as? NSNumber
-        )
-        #expect(mode.int16Value == 0o600)
-        #expect(try Data(contentsOf: url) == Data("passport scan".utf8))
     }
 
     @Test("A file above the import ceiling is refused rather than loaded")
@@ -732,10 +715,10 @@ struct ScrubMigrationTests {
     /// Reproduces what an older version left behind: an item that is sensitive, and
     /// whose summary was written straight onto the model in the clear.
     @Test("A plaintext summary on a sensitive item is sealed")
-    func sealsLeftoverSummaries() throws {
+    func sealsLeftoverSummaries() async throws {
         let (store, vault, paths) = try makeLibrary()
         defer { paths.destroy() }
-        try vault.setUpPIN("1379")
+        try await vault.setUpPIN("1379")
 
         let item = store.createSnippet(title: "Passport", body: "NLD1234567", sensitive: true)
         // Written the way the old code did, bypassing `applySummary`.
@@ -751,10 +734,10 @@ struct ScrubMigrationTests {
 
     /// The other half of the silent-failure bug: marked sensitive, never sealed.
     @Test("Content a swallowed failure left in the clear is sealed")
-    func sealsUnsealedContent() throws {
+    func sealsUnsealedContent() async throws {
         let (store, vault, paths) = try makeLibrary()
         defer { paths.destroy() }
-        try vault.setUpPIN("1379")
+        try await vault.setUpPIN("1379")
 
         let item = store.createSnippet(title: "Bank", body: "IBAN NL00 BANK 0123")
         // Marked sensitive with its bytes never following, which is exactly what the
@@ -770,10 +753,10 @@ struct ScrubMigrationTests {
     }
 
     @Test("It runs once, then leaves the library alone")
-    func runsOnce() throws {
+    func runsOnce() async throws {
         let (store, vault, paths) = try makeLibrary()
         defer { paths.destroy() }
-        try vault.setUpPIN("1379")
+        try await vault.setUpPIN("1379")
 
         let item = store.createSnippet(title: "Passport", body: "NLD1234567", sensitive: true)
         item.summary = "leftover"
@@ -786,10 +769,10 @@ struct ScrubMigrationTests {
     }
 
     @Test("Without the key it changes nothing and stays pending")
-    func needsTheKey() throws {
+    func needsTheKey() async throws {
         let (store, vault, paths) = try makeLibrary()
         defer { paths.destroy() }
-        try vault.setUpPIN("1379")
+        try await vault.setUpPIN("1379")
         let item = store.createSnippet(title: "Passport", body: "NLD1234567", sensitive: true)
         item.summary = "leftover"
         store.save()
@@ -799,15 +782,15 @@ struct ScrubMigrationTests {
         #expect(item.summary == "leftover")
 
         // And still runs once the vault is open, rather than having marked itself done.
-        try vault.unlock(pin: "1379")
+        try await vault.unlock(pin: "1379")
         #expect(store.scrubSensitiveContent() == 1)
     }
 
     @Test("An ordinary item is left exactly as it is")
-    func leavesOrdinaryItemsAlone() throws {
+    func leavesOrdinaryItemsAlone() async throws {
         let (store, vault, paths) = try makeLibrary()
         defer { paths.destroy() }
-        try vault.setUpPIN("1379")
+        try await vault.setUpPIN("1379")
 
         let item = store.createSnippet(title: "Terms", body: "Payment in 30 days")
         item.summary = "Standard payment terms"
@@ -821,10 +804,10 @@ struct ScrubMigrationTests {
     /// The residue is from seals that happened before this code existed, so the
     /// vacuum has to happen whether or not the pass found anything to re-seal.
     @Test("The one-time pass vacuums even when nothing needed re-sealing")
-    func vacuumsRegardless() throws {
+    func vacuumsRegardless() async throws {
         let (store, vault, paths) = try makeLibrary()
         defer { paths.destroy() }
-        try vault.setUpPIN("1379")
+        try await vault.setUpPIN("1379")
 
         let residue = "ZmarkerS old plaintext ZmarkerS"
         let item = store.createSnippet(title: "Old", body: residue)
@@ -848,5 +831,51 @@ struct ScrubMigrationTests {
 
         #expect(store.scrubSensitiveContent() == 0)
         #expect(!residuePresent())
+    }
+}
+
+@Suite("Unlocking does not block the caller")
+struct UnlockThreadingTests {
+
+    /// The point of the change: 600,000 rounds of PBKDF2 is a few hundred
+    /// milliseconds, and `Vault` is `@MainActor`, so every unlock used to spend that
+    /// long with the main thread blocked — a frozen panel at the exact moment someone
+    /// is typing into it.
+    ///
+    /// Asserted on the mechanism rather than on the clock. The first version of this
+    /// test timed how long the main actor went unanswered, which measured nothing:
+    /// the suite runs in parallel, so other tests' main-actor work dominated the gap,
+    /// and a build with derivation deliberately pinned to the main actor measured the
+    /// same 110ms as the correct one.
+    /// `Thread.isMainThread` cannot be read from an async context, so both readings
+    /// are taken inside synchronous closures and only the answers cross the boundary.
+    @MainActor
+    @Test("Key derivation does not run on the main thread")
+    func derivationLeavesTheMainThread() async throws {
+        func onMainThreadNow() -> Bool { Thread.isMainThread }
+
+        #expect(onMainThreadNow(), "the test itself has to start on the main thread")
+
+        let ranOnMainThread = try await VaultCrypto.offMain { Thread.isMainThread }
+        #expect(!ranOnMainThread)
+
+        // And back where we started, so callers keep their isolation.
+        #expect(onMainThreadNow())
+    }
+
+    @MainActor
+    @Test("An unlock still returns the same key, off-thread and all")
+    func unlockStillWorks() async throws {
+        let paths = LibraryPaths.temporary()
+        defer { paths.destroy() }
+        let vault = Vault(paths: paths)
+
+        try await vault.setUpSecret("correct horse battery", kind: .passphrase)
+        let before = vault.currentKey
+        vault.lock()
+
+        try await vault.unlock(secret: "correct horse battery")
+        #expect(vault.isUnlocked)
+        #expect(vault.currentKey == before)
     }
 }

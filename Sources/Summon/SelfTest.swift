@@ -166,7 +166,7 @@ enum SelfTest {
         // switch on one item. The window asks, and it asks about that item.
         if !model.vault.isConfigured,
            let subject = model.store.snapshots.first(where: { $0.kind.isTextual }) {
-            model.completeSecretSetup(secret: "1379") { _ in }
+            await model.completeSecretSetup(secret: "1379") { _ in }
             model.setItemSensitive(subject.id, true)
             model.vault.lock()
             model.store.refresh()
@@ -188,7 +188,7 @@ enum SelfTest {
 
             // Entering the PIN finishes the interrupted action.
             check("Unlocking from the sheet completes the action",
-                  model.unlockInPlace(secret: "1379")
+                  await model.unlockInPlace(secret: "1379")
                       && model.store.item(id: subject.id)?.isSensitive == false)
             model.finishLockSheet()
 
@@ -200,7 +200,7 @@ enum SelfTest {
             check("It refuses to discard the key while it cannot decrypt",
                   model.vault.isConfigured)
 
-            try? model.vault.unlock(pin: "1379")
+            try? await model.vault.unlock(pin: "1379")
             model.removeVaultProtection()
             model.store.refresh()
         }
@@ -212,7 +212,7 @@ enum SelfTest {
         // blank until you clicked away and back, which re-selected it. The data was
         // always there — this checks the half the view depends on.
         if let image = model.store.snapshots.first(where: { $0.kind == .image }) {
-            if !model.vault.isConfigured { model.completeSecretSetup(secret: "1379") { _ in } }
+            if !model.vault.isConfigured { await model.completeSecretSetup(secret: "1379") { _ in } }
             model.setItemSensitive(image.id, true)
             check("An image can be encrypted", model.store.item(id: image.id)?.blobSealed == true)
 
@@ -220,7 +220,7 @@ enum SelfTest {
             model.store.refresh()
             check("Locked, it offers no preview", model.previewData(for: image.id).fileURL == nil)
 
-            try? model.vault.unlock(pin: "1379")
+            try? await model.vault.unlock(pin: "1379")
             model.store.refresh()
             let unlocked = model.previewData(for: image.id)
             check("Unlocked, the file is materialised again",
@@ -272,7 +272,7 @@ enum SelfTest {
         // the confirmation can say what it is about to do.
         if !model.vault.isConfigured,
            let victim = model.store.snapshots.first(where: { $0.kind.isTextual }) {
-            model.completeSecretSetup(secret: "2468") { _ in }
+            await model.completeSecretSetup(secret: "2468") { _ in }
             model.setItemSensitive(victim.id, true)
             let sealed = model.store.item(id: victim.id)?.sealedBody != nil
             check("An item can be encrypted once a PIN exists", sealed)
@@ -319,7 +319,7 @@ enum SelfTest {
             check("It does not silently mark the item first",
                   model.store.item(id: subject.id)?.isSensitive == false)
 
-            model.completeSecretSetup(secret: "1379") { message in
+            await model.completeSecretSetup(secret: "1379") { message in
                 check("Setting the PIN succeeded", false, detail: message)
             }
             try? await Task.sleep(for: .milliseconds(120))
@@ -353,7 +353,7 @@ enum SelfTest {
         // MARK: Vault, end to end
         let vaultPIN = "4829"
         if !model.vault.isConfigured {
-            try? model.vault.setUpPIN(vaultPIN)
+            try? await model.vault.setUpPIN(vaultPIN)
         }
         check("Vault configures and unlocks", model.vault.isUnlocked)
 
@@ -369,7 +369,7 @@ enum SelfTest {
             check("Locked item hides its contents", locked?.searchableText.isEmpty == true)
             check("Locked item cannot be inserted", model.store.payload(for: victim.id) == nil)
 
-            try? model.vault.unlock(pin: vaultPIN)
+            try? await model.vault.unlock(pin: vaultPIN)
             model.store.refresh()
             let unlocked = model.store.snapshots.first { $0.id == victim.id }
             check("Unlocking restores the contents", unlocked?.searchableText.isEmpty == false)
@@ -385,7 +385,7 @@ enum SelfTest {
             check("A locked item can still be dragged to file it",
                   model.identityOnlyDragProvider(for: victim.id)
                       .registeredTypeIdentifiers.contains(SummonDragType.item.identifier))
-            try? model.vault.unlock(pin: vaultPIN)
+            try? await model.vault.unlock(pin: vaultPIN)
             model.store.refresh()
         }
 

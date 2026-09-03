@@ -224,24 +224,55 @@ enum VaultCrypto {
         return SymmetricKey(data: Data(out))
     }
 
+    /// `derive`, off whatever actor called it.
+    ///
+    /// 600,000 rounds of PBKDF2 is a few hundred milliseconds. `Vault` is
+    /// `@MainActor` and this used to be a synchronous call, which runs on the caller's
+    /// actor — so every unlock spent that long with the main thread blocked, freezing
+    /// the panel at the exact moment someone is typing into it.
+    static func deriveOffMain(
+        secret: String,
+        salt: Data,
+        iterations: Int
+    ) async throws -> SymmetricKey {
+        try await offMain { try derive(secret: secret, salt: salt, iterations: iterations) }
+    }
+
+    /// Runs `work` somewhere other than the caller's actor.
+    ///
+    /// Named and separated so the guarantee can be tested directly. Timing the main
+    /// actor's responsiveness cannot do it: the suite runs its tests in parallel, so
+    /// other main-actor work dominates the measurement, and a build with derivation
+    /// deliberately pinned to the main actor measures the same as a correct one.
+    ///
+    /// A nonisolated `async` function would already hop off the caller's actor, which
+    /// makes the detached task redundant today — but that is a property of where this
+    /// code happens to sit, and giving `VaultCrypto` an actor later would silently undo
+    /// it. This states the requirement instead of inheriting it.
+    static func offMain<T: Sendable>(
+        _ work: @escaping @Sendable () throws -> T
+    ) async throws -> T {
+        try await Task.detached(priority: .userInitiated, operation: work).value
+    }
+
     static func wrap(
         master: VaultKey,
         secret: String,
         kind: VaultSecretKind = .pin,
         iterations: Int = VaultWrapper.defaultIterations
-    ) throws -> VaultWrapper {
+    ) async throws -> VaultWrapper {
         var salt = Data(count: 32)
         _ = salt.withUnsafeMutableBytes { SecRandomCopyBytes(kSecRandomDefault, 32, $0.baseAddress!) }
-        let kek = try derive(secret: secret, salt: salt, iterations: iterations)
+        let kek = try await deriveOffMain(secret: secret, salt: salt, iterations: iterations)
         let box = try AES.GCM.seal(master.masterBytes, using: kek)
         guard let combined = box.combined else { throw VaultError.corruptWrapper }
         return VaultWrapper(salt: salt, iterations: iterations, sealedMaster: combined,
                             kindRaw: kind.rawValue)
     }
 
-    static func unwrap(_ wrapper: VaultWrapper, secret: String) throws -> VaultKey {
-        let kek = try derive(secret: secret, salt: wrapper.salt,
-                             iterations: wrapper.safeIterations)
+    static func unwrap(_ wrapper: VaultWrapper, secret: String) async throws -> VaultKey {
+        let kek = try await deriveOffMain(secret: secret, salt: wrapper.salt,
+                                          iterations: wrapper.safeIterations)
         do {
             let box = try AES.GCM.SealedBox(combined: wrapper.sealedMaster)
             return VaultKey(master: try AES.GCM.open(box, using: kek))

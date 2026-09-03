@@ -151,6 +151,14 @@ public final class AppModel {
     public var secretEntry: String = ""
     public var secretError: String?
 
+    /// True while a secret is being derived.
+    ///
+    /// Key derivation is deliberately slow — a few hundred milliseconds — and it no
+    /// longer blocks the main thread, which means the field stays live while it runs.
+    /// Every entry point checks this so a held return key cannot queue five unlock
+    /// attempts and burn the whole cooldown allowance on one impatient press.
+    public private(set) var isBusy = false
+
     // MARK: - ⌘K overlay
 
     public private(set) var overlay: PanelOverlay = .none
@@ -873,9 +881,9 @@ public final class AppModel {
     /// Unlocks from the library, where there is no panel to put the field in.
     /// Returns false and leaves an explanation in `secretError` when it is wrong.
     @discardableResult
-    public func unlockInPlace(secret: String) -> Bool {
+    public func unlockInPlace(secret: String) async -> Bool {
         do {
-            try vault.unlock(secret: secret)
+            try await vault.unlock(secret: secret)
             secretError = nil
             store.scrubSensitiveContent()
             store.refresh()
@@ -890,8 +898,17 @@ public final class AppModel {
     }
 
     public func submitSecret() {
+        // Fire-and-forget from the field's `onComplete`, which cannot await. `isBusy`
+        // is what stops a second submission landing while the first is still deriving.
+        Task { await submitSecretAsync() }
+    }
+
+    public func submitSecretAsync() async {
+        guard !isBusy else { return }
+        isBusy = true
+        defer { isBusy = false }
         do {
-            try vault.unlock(secret: secretEntry)
+            try await vault.unlock(secret: secretEntry)
             afterUnlock()
         } catch {
             secretError = (error as? VaultError)?.errorDescription ?? error.localizedDescription
@@ -1151,10 +1168,10 @@ public final class AppModel {
     /// Deliberately routed through the vault's own attempt counter: this is a guess
     /// like any other, and a verification path that skipped the cooldown would be a
     /// way around it.
-    public func verifySecret(_ secret: String) -> Bool {
+    public func verifySecret(_ secret: String) async -> Bool {
         let wasLocked = !vault.isUnlocked
         do {
-            try vault.unlock(secret: secret)
+            try await vault.unlock(secret: secret)
             if wasLocked { vault.lock() }
             secretError = nil
             return true
@@ -1175,10 +1192,10 @@ public final class AppModel {
         new: String,
         kind: VaultSecretKind,
         onError: (String) -> Void
-    ) {
+    ) async {
         let wasKind = vault.secretKind
         do {
-            try vault.changeSecret(current: current, new: new, kind: kind)
+            try await vault.changeSecret(current: current, new: new, kind: kind)
         } catch {
             onError((error as? VaultError)?.errorDescription ?? error.localizedDescription)
             return
@@ -1233,9 +1250,9 @@ public final class AppModel {
         secret: String,
         kind: VaultSecretKind = .pin,
         onError: (String) -> Void
-    ) {
+    ) async {
         do {
-            try vault.setUpSecret(secret, kind: kind)
+            try await vault.setUpSecret(secret, kind: kind)
         } catch {
             onError((error as? VaultError)?.errorDescription ?? error.localizedDescription)
             return

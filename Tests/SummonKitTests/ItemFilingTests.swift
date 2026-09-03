@@ -130,9 +130,9 @@ struct ItemFilingTests {
     }
 
     @Test("Moving an item into a sensitive folder encrypts it")
-    func movingIntoASensitiveFolderSeals() throws {
+    func movingIntoASensitiveFolderSeals() async throws {
         let store = try store()
-        try store.vault.setUpPIN("2413")
+        try await store.vault.setUpPIN("2413")
         let secrets = store.createFolder(name: "Secrets")
         try store.setFolderSensitive(secrets, true)
 

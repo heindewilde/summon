@@ -113,7 +113,7 @@ enum LiveCapture {
             // A PIN can be configured first, so the section that only exists once one
             // is set can actually be looked at.
             if environment2["SUMMON_LIVE_PIN"] == "1", !model.vault.isConfigured {
-                try? model.vault.setUpPIN("1379")
+                try? await model.vault.setUpPIN("1379")
             }
             let tab = SettingsView.Tab(rawValue: environment2["SUMMON_LIVE_TAB"] ?? "") ?? .general
             window = present(SettingsView(model: model, tab: tab),
@@ -133,7 +133,7 @@ enum LiveCapture {
             // An item that is actually encrypted, with the vault open — the state the
             // switch's "on" appearance is judged in.
             model.sidebarSelection = .all
-            if !model.vault.isConfigured { try? model.vault.setUpPIN("1379") }
+            if !model.vault.isConfigured { try? await model.vault.setUpPIN("1379") }
             if let subject = model.itemsForSidebar().first(where: { $0.kind.isTextual }) {
                 model.setItemSensitive(subject.id, true)
                 model.store.refresh()
@@ -144,7 +144,7 @@ enum LiveCapture {
         case "unlock":
             // The prompt shown when the vault is shut and you flick one switch.
             model.sidebarSelection = .all
-            if !model.vault.isConfigured { try? model.vault.setUpPIN("1379") }
+            if !model.vault.isConfigured { try? await model.vault.setUpPIN("1379") }
             if let subject = model.itemsForSidebar().first(where: { $0.kind.isTextual }) {
                 model.mainSelection = subject.id
                 model.setItemSensitive(subject.id, true)
@@ -156,7 +156,7 @@ enum LiveCapture {
 
         case "turnoff":
             model.sidebarSelection = .all
-            if !model.vault.isConfigured { try? model.vault.setUpPIN("1379") }
+            if !model.vault.isConfigured { try? await model.vault.setUpPIN("1379") }
             if let subject = model.itemsForSidebar().first(where: { $0.kind.isTextual }) {
                 model.setItemSensitive(subject.id, true)
             }

@@ -62,12 +62,12 @@ public final class Vault {
     /// Whether this vault is opened by a PIN or a passphrase.
     public var secretKind: VaultSecretKind { wrapper?.kind ?? .pin }
 
-    public func setUpSecret(_ secret: String, kind: VaultSecretKind) throws {
+    public func setUpSecret(_ secret: String, kind: VaultSecretKind) async throws {
         guard VaultSecretPolicy.isValid(secret, kind: kind) else {
             throw VaultSecretPolicy.violation(for: kind)
         }
         let master = VaultKey.generate()
-        let w = try VaultCrypto.wrap(master: master, secret: secret, kind: kind)
+        let w = try await VaultCrypto.wrap(master: master, secret: secret, kind: kind)
         try persist(w)
         wrapper = w
         key = master
@@ -75,8 +75,8 @@ public final class Vault {
         lastActivity = Date()
     }
 
-    public func setUpPIN(_ pin: String) throws {
-        try setUpSecret(pin, kind: .pin)
+    public func setUpPIN(_ pin: String) async throws {
+        try await setUpSecret(pin, kind: .pin)
     }
 
     /// Re-wraps the one master key under a new secret, optionally of a different kind.
@@ -84,14 +84,14 @@ public final class Vault {
     /// Switching between a PIN and a passphrase is this same operation: nothing is
     /// decrypted and nothing is rewritten, because the key sealing the content never
     /// changes — only the key sealing *it* does.
-    public func changeSecret(current: String, new: String, kind: VaultSecretKind? = nil) throws {
+    public func changeSecret(current: String, new: String, kind: VaultSecretKind? = nil) async throws {
         guard let w = wrapper else { throw VaultError.notConfigured }
         let newKind = kind ?? w.kind
         guard VaultSecretPolicy.isValid(new, kind: newKind) else {
             throw VaultSecretPolicy.violation(for: newKind)
         }
-        let master = try unwrapCounting(w, secret: current)
-        let fresh = try VaultCrypto.wrap(master: master, secret: new, kind: newKind)
+        let master = try await unwrapCounting(w, secret: current)
+        let fresh = try await VaultCrypto.wrap(master: master, secret: new, kind: newKind)
         try persist(fresh)
         wrapper = fresh
         key = master
@@ -99,8 +99,8 @@ public final class Vault {
         lastActivity = Date()
     }
 
-    public func changePIN(current: String, new: String) throws {
-        try changeSecret(current: current, new: new, kind: .pin)
+    public func changePIN(current: String, new: String) async throws {
+        try await changeSecret(current: current, new: new, kind: .pin)
     }
 
     /// Removes PIN protection entirely. Callers must decrypt content back to
@@ -115,16 +115,16 @@ public final class Vault {
 
     // MARK: - Unlock / lock
 
-    public func unlock(secret: String) throws {
+    public func unlock(secret: String) async throws {
         guard let w = wrapper else { throw VaultError.notConfigured }
-        key = try unwrapCounting(w, secret: secret)
+        key = try await unwrapCounting(w, secret: secret)
         state = .unlocked
         lastActivity = Date()
         lastError = nil
     }
 
-    public func unlock(pin: String) throws {
-        try unlock(secret: pin)
+    public func unlock(pin: String) async throws {
+        try await unlock(secret: pin)
     }
 
     /// Unwraps a guess, and holds the cooldown to it.
@@ -132,7 +132,7 @@ public final class Vault {
     /// Every path that takes a guess at the secret comes through here, so no caller
     /// can win a free attempt by choosing the other one. `changeSecret` used to unwrap
     /// directly, which made "change my PIN" an unthrottled oracle for the current one.
-    private func unwrapCounting(_ existing: VaultWrapper, secret: String) throws -> VaultKey {
+    private func unwrapCounting(_ existing: VaultWrapper, secret: String) async throws -> VaultKey {
         var w = existing
 
         if let remaining = Vault.remainingCooldown(w) {
@@ -140,7 +140,7 @@ public final class Vault {
         }
 
         do {
-            let master = try VaultCrypto.unwrap(w, secret: secret)
+            let master = try await VaultCrypto.unwrap(w, secret: secret)
             w.failedAttempts = 0
             w.lastFailedAt = nil
             try? persist(w)

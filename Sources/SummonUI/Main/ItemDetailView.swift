@@ -262,9 +262,12 @@ public struct ItemDetailView: View {
     }
 
     private func submitSecret() {
-        if model.unlockInPlace(secret: pin) {
-            pin = ""
-            load()
+        guard !model.isBusy else { return }
+        Task {
+            if await model.unlockInPlace(secret: pin) {
+                pin = ""
+                load()
+            }
         }
     }
 

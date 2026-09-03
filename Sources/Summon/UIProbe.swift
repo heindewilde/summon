@@ -12,6 +12,19 @@ import SummonUI
 enum UIProbe {
     static var isRequested: Bool { ProcessInfo.processInfo.environment["SUMMON_UIPROBE"] == "1" }
 
+    /// Where the report lands.
+    ///
+    /// `/tmp/summon-uiprobe.txt` was a fixed name in a directory every user of the
+    /// machine can write to, so a symlink pre-placed there redirected the write.
+    /// `NSTemporaryDirectory()` is per-user, and the name is unique per run.
+    private static let reportURL = URL(fileURLWithPath: NSTemporaryDirectory())
+        .appending(path: "summon-uiprobe-\(ProcessInfo.processInfo.processIdentifier).txt")
+
+    private static func writeReport(_ report: String) {
+        try? report.write(to: reportURL, atomically: true, encoding: .utf8)
+        print("uiprobe report: \(reportURL.path)")
+    }
+
     /// Posting real mouse and keyboard events is opt-in, because they go to whatever
     /// is under the pointer or frontmost — not necessarily to this app.
     static var mayPostInput: Bool {
@@ -111,7 +124,7 @@ enum UIProbe {
 
         guard AXIsProcessTrusted() else {
             line("SKIP  Accessibility is not granted, so the tree cannot be read")
-            try? report.write(toFile: "/tmp/summon-uiprobe.txt", atomically: true, encoding: .utf8)
+            writeReport(report)
             exit(2)
         }
 
@@ -124,7 +137,7 @@ enum UIProbe {
         guard let library = windows.first(where: { title($0).contains("Summon") && role($0) == "AXWindow" })
                 ?? windows.first else {
             line("FAIL  no window to inspect")
-            try? report.write(toFile: "/tmp/summon-uiprobe.txt", atomically: true, encoding: .utf8)
+            writeReport(report)
             exit(1)
         }
 
@@ -387,7 +400,7 @@ enum UIProbe {
         try? await Task.sleep(for: .milliseconds(300))
         guard mayPostInput else {
             line("····  synthetic input skipped (set SUMMON_UIPROBE_INPUT=1 to enable)")
-            try? report.write(toFile: "/tmp/summon-uiprobe.txt", atomically: true, encoding: .utf8)
+            writeReport(report)
             exit(0)
         }
         let source = CGEventSource(stateID: .hidSystemState)
@@ -400,7 +413,7 @@ enum UIProbe {
              ? "PASS  typing reaches the panel without activating the app"
              : "FAIL  typing did not reach the panel (query is “\(model.query)”)")
 
-        try? report.write(toFile: "/tmp/summon-uiprobe.txt", atomically: true, encoding: .utf8)
+        writeReport(report)
         exit(0)
     }
 }

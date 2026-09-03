@@ -317,6 +317,7 @@ public final class AppModel {
 
         applySettings()
         startAutoLockTimer()
+        startLockOnAwayObservers()
         runSearch()
 
         // A failure that only reaches the log is a failure the person using the app
@@ -695,6 +696,10 @@ public final class AppModel {
         // fetch plus a decrypt of every sealed item before the window appeared.
         runSearch()
         isPanelVisible = true
+        // Summoning the panel is the clearest signal of use there is. Without this,
+        // `autoLockMinutes` measured from the unlock rather than from the last thing
+        // you did, so an open vault relocked mid-session while you were using it.
+        vault.noteActivity()
         showPanelHandler?()
     }
 
@@ -713,6 +718,7 @@ public final class AppModel {
 
     public func use(_ id: UUID, style: UseStyle = .paste) {
         guard let snapshot = store.snapshots.first(where: { $0.id == id }) else { return }
+        vault.noteActivity()
 
         if snapshot.isLocked {
             mode = .unlock(pendingItemID: id)
@@ -927,6 +933,40 @@ public final class AppModel {
 
     public func toggleLock() {
         if vault.isUnlocked { lockVault() } else { mode = .unlock(pendingItemID: nil) }
+    }
+
+    /// Locks when the Mac stops being in front of the person using it.
+    ///
+    /// The idle timer alone did not cover this. It stops running while the machine is
+    /// asleep, so closing the lid a minute after unlocking left the master key in
+    /// memory until the next tick after waking. Sleeping and locking the screen are
+    /// both unambiguous "I have walked away", so they lock outright rather than
+    /// starting a countdown — and the README already claimed the key was discarded on
+    /// sleep, which until now it was not.
+    private func startLockOnAwayObservers() {
+        let workspace = NSWorkspace.shared.notificationCenter
+        for name in [NSWorkspace.willSleepNotification, NSWorkspace.sessionDidResignActiveNotification] {
+            workspace.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.lockIfUnlocked() }
+            }
+        }
+
+        // Screen lock has no NSWorkspace notification; it is a distributed one.
+        DistributedNotificationCenter.default().addObserver(
+            forName: .init("com.apple.screenIsLocked"), object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.lockIfUnlocked() }
+        }
+    }
+
+    /// Locks without a toast: nobody is looking at the screen when this fires.
+    private func lockIfUnlocked() {
+        guard vault.isUnlocked else { return }
+        vault.lock()
+        FileStore.clearScratch()
+        ThumbnailCache.shared.invalidateAll()
+        store.refresh()
+        runSearch()
     }
 
     private func startAutoLockTimer() {

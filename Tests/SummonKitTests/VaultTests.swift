@@ -588,3 +588,132 @@ struct SealResidueTests {
         return false
     }
 }
+
+@Suite("Cooldown and wrapper bounds")
+@MainActor
+struct CooldownTests {
+
+    private func wrapper(failures: Int, lastFailedAt: Date?) throws -> VaultWrapper {
+        var w = try VaultCrypto.wrap(master: .generate(), secret: "4829",
+                                     kind: .pin, iterations: 1_000)
+        w.failedAttempts = failures
+        w.lastFailedAt = lastFailedAt
+        return w
+    }
+
+    @Test("Under the threshold there is no cooldown at all",
+          arguments: [0, 1, 4])
+    func noCooldownEarly(failures: Int) throws {
+        let w = try wrapper(failures: failures, lastFailedAt: Date())
+        #expect(Vault.remainingCooldown(w) == nil)
+    }
+
+    @Test("The cooldown escalates and caps at five minutes")
+    func cooldownEscalates() {
+        #expect(Vault.cooldown(afterFailures: 4) == 0)
+        #expect(Vault.cooldown(afterFailures: 5) == 30)
+        #expect(Vault.cooldown(afterFailures: 6) == 60)
+        #expect(Vault.cooldown(afterFailures: 7) == 120)
+        #expect(Vault.cooldown(afterFailures: 20) == 300)
+    }
+
+    @Test("Waiting it out clears it")
+    func expiresOnItsOwn() throws {
+        let w = try wrapper(failures: 5, lastFailedAt: Date())
+        let later = Date().addingTimeInterval(31)
+        #expect(Vault.remainingCooldown(w, now: later) == nil)
+    }
+
+    /// The bug: `lockedUntil` was an absolute deadline, so moving the system clock
+    /// back past it cleared the cooldown. Elapsed time cannot be gamed that way.
+    @Test("Setting the clock back does not clear the cooldown")
+    func clockRollbackDoesNotHelp() throws {
+        let w = try wrapper(failures: 5, lastFailedAt: Date())
+        let yesterday = Date().addingTimeInterval(-86_400)
+        let remaining = try #require(Vault.remainingCooldown(w, now: yesterday))
+        // Negative elapsed time reads as none passed, so the full wait is still owed.
+        #expect(remaining == 30)
+    }
+
+    @Test("An absurd iteration count is clamped rather than hung on")
+    func iterationsAreClamped() throws {
+        var w = try wrapper(failures: 0, lastFailedAt: nil)
+        w.iterations = .max
+        #expect(w.safeIterations == VaultWrapper.maximumIterations)
+
+        w.iterations = 0
+        #expect(w.safeIterations == VaultWrapper.minimumIterations)
+
+        w.iterations = 600_000
+        #expect(w.safeIterations == 600_000)
+    }
+}
+
+@Suite("Scratch files")
+struct ScratchFileTests {
+
+    @Test("A stored name cannot put a decrypted copy outside the scratch directory",
+          arguments: ["../../evil.txt", "../evil.txt", "/etc/evil.txt",
+                      "..", ".", "", "a/b/c.txt"])
+    func scratchNameIsContained(originalName: String) {
+        let id = UUID()
+        let blob = StoredBlob(filename: "\(id).enc", byteSize: 1, contentHash: "",
+                              isSealed: true, fileExtension: "txt",
+                              originalName: originalName)
+        let name = FileStore.scratchName(for: blob, itemID: id)
+        #expect(!name.contains("/"))
+        #expect(name != "..")
+        #expect(name != ".")
+        #expect(!name.isEmpty)
+    }
+
+    @Test("An ordinary name is kept, so the file opens as itself elsewhere")
+    func ordinaryNameSurvives() {
+        let id = UUID()
+        let blob = StoredBlob(filename: "\(id).enc", byteSize: 1, contentHash: "",
+                              isSealed: true, fileExtension: "pdf",
+                              originalName: "Portfolio 2026.pdf")
+        #expect(FileStore.scratchName(for: blob, itemID: id) == "Portfolio 2026.pdf")
+    }
+
+    @Test("A decrypted copy is readable only by its owner")
+    func materialisedFileIsPrivate() throws {
+        let paths = LibraryPaths.temporary()
+        defer { paths.destroy(); FileStore.clearScratch() }
+        let store = FileStore(paths: paths)
+        let key = VaultKey.generate()
+        let id = UUID()
+
+        let blob = try store.importData(Data("passport scan".utf8), itemID: id,
+                                        fileExtension: "txt", originalName: "scan.txt",
+                                        key: key)
+        let url = try store.materialize(blob, itemID: id, key: key)
+
+        let mode = try #require(
+            try FileManager.default.attributesOfItem(atPath: url.path)[.posixPermissions] as? NSNumber
+        )
+        #expect(mode.int16Value == 0o600)
+        #expect(try Data(contentsOf: url) == Data("passport scan".utf8))
+    }
+
+    @Test("A file above the import ceiling is refused rather than loaded")
+    func oversizedImportIsRefused() throws {
+        let paths = LibraryPaths.temporary()
+        defer { paths.destroy() }
+        let store = FileStore(paths: paths)
+
+        let url = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appending(path: "huge-\(UUID().uuidString).bin")
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        // Sparse, so the test costs no real disk: the size check reads metadata.
+        try Data().write(to: url)
+        let handle = try FileHandle(forWritingTo: url)
+        try handle.truncate(atOffset: UInt64(FileStore.maximumImportBytes + 1))
+        try handle.close()
+
+        #expect(throws: FileStoreError.self) {
+            _ = try store.importFile(at: url, itemID: UUID(), key: nil)
+        }
+    }
+}

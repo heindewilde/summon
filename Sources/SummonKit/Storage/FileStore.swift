@@ -16,12 +16,18 @@ public enum FileStoreError: Error, LocalizedError {
     case unreadable(URL)
     case missingBlob(String)
     case needsUnlock
+    case tooLarge(URL, Int)
 
     public var errorDescription: String? {
         switch self {
-        case .unreadable(let url): "Could not read \(url.lastPathComponent)."
-        case .missingBlob(let name): "The stored file \(name) is missing."
-        case .needsUnlock: "Unlock Summon to open this item."
+        case .unreadable(let url): return "Could not read \(url.lastPathComponent)."
+        case .missingBlob(let name): return "The stored file \(name) is missing."
+        case .needsUnlock: return "Unlock Summon to open this item."
+        case .tooLarge(let url, let size):
+            let limit = ByteCountFormatter.string(fromByteCount: Int64(FileStore.maximumImportBytes),
+                                                  countStyle: .file)
+            let actual = ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file)
+            return "\(url.lastPathComponent) is \(actual). Summon holds files up to \(limit)."
         }
     }
 }
@@ -47,7 +53,19 @@ public struct FileStore: Sendable {
 
     // MARK: - Import
 
+    /// The largest single file Summon will take in.
+    ///
+    /// Import reads the whole file into memory to hash it, and sealing it makes a
+    /// second copy of the same size, so a dropped disk image was two copies of a disk
+    /// image in RAM. This is a library of things you reuse — the canned reply, the
+    /// portfolio PDF — and 256 MB is far above anything that fits that description.
+    public static let maximumImportBytes = 256 * 1024 * 1024
+
     public func importFile(at url: URL, itemID: UUID, key: VaultKey?) throws -> StoredBlob {
+        let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+        guard size <= FileStore.maximumImportBytes else {
+            throw FileStoreError.tooLarge(url, size)
+        }
         guard let data = try? Data(contentsOf: url) else { throw FileStoreError.unreadable(url) }
         return try store(data, itemID: itemID, fileExtension: url.pathExtension,
                          originalName: url.lastPathComponent, key: key)
@@ -110,12 +128,32 @@ public struct FileStore: Sendable {
         guard blob.isSealed else { return location(of: blob) }
         let data = try read(blob, itemID: itemID, key: key)
         let dir = FileStore.scratchDirectory()
-        let name = blob.originalName.isEmpty ? "\(itemID.uuidString).\(blob.fileExtension)" : blob.originalName
-        let url = dir.appending(path: name)
-        try data.write(to: url, options: .atomic)
-        // Readable only by this user; removed wholesale at quit.
-        try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+        let url = dir.appending(path: FileStore.scratchName(for: blob, itemID: itemID))
+
+        // Created with its permissions rather than chmod'd afterwards. Writing first
+        // and tightening second left a decrypted copy of sealed content at the process
+        // umask — normally 0644 — for the moment in between.
+        let manager = FileManager.default
+        try? manager.removeItem(at: url)
+        guard manager.createFile(atPath: url.path, contents: data,
+                                 attributes: [.posixPermissions: 0o600])
+        else { throw FileStoreError.unreadable(url) }
         return url
+    }
+
+    /// A filename that cannot escape the scratch directory.
+    ///
+    /// `originalName` is stored metadata, and every current writer of it is either a
+    /// `lastPathComponent` — which cannot contain a separator — or a generated string.
+    /// But it is appended straight onto a path, and `importData(originalName:)` is
+    /// public, so this is one careless caller away from writing outside the directory.
+    static func scratchName(for blob: StoredBlob, itemID: UUID) -> String {
+        let fallback = "\(itemID.uuidString).\(blob.fileExtension.isEmpty ? "bin" : blob.fileExtension)"
+        // `lastPathComponent` strips any directory part; the rest rules out the names
+        // that traverse without one.
+        let candidate = (blob.originalName as NSString).lastPathComponent
+        guard !candidate.isEmpty, candidate != ".", candidate != ".." else { return fallback }
+        return candidate
     }
 
     // MARK: - Sensitivity transitions
@@ -180,16 +218,26 @@ public struct FileStore: Sendable {
         return total
     }
 
-    private static let scratchName = "Summon-Scratch"
+    private static let scratchDirectoryName = "Summon-Scratch"
 
     public static func scratchDirectory() -> URL {
-        let dir = URL(fileURLWithPath: NSTemporaryDirectory()).appending(path: scratchName)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true,
-                                                 attributes: [.posixPermissions: 0o700])
+        let dir = URL(fileURLWithPath: NSTemporaryDirectory()).appending(path: scratchDirectoryName)
+        let manager = FileManager.default
+        try? manager.createDirectory(at: dir, withIntermediateDirectories: true,
+                                     attributes: [.posixPermissions: 0o700])
+        // Re-asserted: the attribute above only applies when this call is the one that
+        // creates the directory, and a directory left over from an earlier run — or
+        // created by something else — would keep whatever mode it already had.
+        try? manager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: dir.path)
         return dir
     }
 
-    /// Wipes decrypted temporary copies. Called at quit and whenever the vault locks.
+    /// Wipes decrypted temporary copies.
+    ///
+    /// Called at launch as well as at quit, on lock, and when the panel closes. The
+    /// exit paths cannot cover a crash or a force-quit, which would otherwise leave
+    /// plaintext copies of sealed files in the temporary directory indefinitely —
+    /// clearing on the way in is what puts a bound on that.
     public static func clearScratch() {
         try? FileManager.default.removeItem(at: scratchDirectory())
     }

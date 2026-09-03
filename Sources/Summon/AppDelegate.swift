@@ -25,6 +25,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // `NSApp` exists, so the stored choice has nobody to tell at that point.
         model.settings.applyAppearance()
 
+        // Anything left in the scratch directory got there before this launch, which
+        // means a crash or a force-quit took the exit paths away from it. Decrypted
+        // copies of sealed files are exactly what should not outlive a session.
+        FileStore.clearScratch()
+
         // Before any harness mode is dispatched: several of them are destructive, and
         // the demo library is the only one they are allowed to be destructive to.
         Harness.refuseIfPointedAtARealLibrary()

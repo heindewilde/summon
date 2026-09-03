@@ -153,7 +153,16 @@ struct VaultWrapper: Codable, Sendable {
     var iterations: Int
     var sealedMaster: Data
     var failedAttempts: Int = 0
-    var lockedUntil: Date?
+
+    /// When the last wrong guess happened, and the only clock the cooldown trusts.
+    ///
+    /// This replaces an absolute `lockedUntil`, which was a wall-clock deadline and so
+    /// cleared itself if the system clock was set back. Elapsed time is measured from
+    /// here instead, and a clock moved backwards reads as no time passed at all — so
+    /// fiddling with it can only ever lengthen the wait. A `lockedUntil` in an older
+    /// wrapper is ignored on decode, which forgets a cooldown that was pending at
+    /// upgrade; that is one free attempt, once, and worth the simpler rule.
+    var lastFailedAt: Date?
 
     /// Which kind of secret opens this wrapper.
     ///
@@ -168,13 +177,39 @@ struct VaultWrapper: Codable, Sendable {
     }
 
     static let defaultIterations = 600_000
+
+    /// Bounds on the iteration count read back from disk.
+    ///
+    /// `iterations` is a plain number in a file the app does not control, and it is fed
+    /// straight to PBKDF2. The ceiling is what matters: a wrapper claiming two billion
+    /// rounds is not a slow unlock, it is a hang with no way out. The floor is mostly
+    /// tidiness — someone who can edit the field can already guess offline — but it
+    /// stops a tampered-down file making guesses through the app cheap too.
+    static let minimumIterations = 1_000
+    static let maximumIterations = 4_000_000
+
+    /// The count actually handed to the KDF.
+    var safeIterations: Int {
+        min(max(iterations, VaultWrapper.minimumIterations), VaultWrapper.maximumIterations)
+    }
 }
 
 enum VaultCrypto {
     /// PBKDF2-SHA256. CryptoKit has no password-based KDF, so this uses CommonCrypto.
     static func derive(secret: String, salt: Data, iterations: Int) throws -> SymmetricKey {
-        let secretBytes = Array(secret.utf8)
+        var secretBytes = Array(secret.utf8)
         var out = [UInt8](repeating: 0, count: 32)
+        // Wiped on the way out. These two are the only key material here held in
+        // buffers this code fully owns — a `[UInt8]` it allocated and nothing else has
+        // a reference to — so zeroing them actually means something. The master key
+        // itself lives in a `Data`, which copy-on-write may have duplicated anywhere,
+        // and pretending to scrub that would be theatre; the Hardened Runtime is what
+        // keeps another process from reading it.
+        defer {
+            secretBytes.resetBytes(in: secretBytes.indices)
+            out.resetBytes(in: out.indices)
+        }
+
         let status = salt.withUnsafeBytes { saltBuf -> Int32 in
             CCKeyDerivationPBKDF(
                 CCPBKDFAlgorithm(kCCPBKDF2),
@@ -205,7 +240,8 @@ enum VaultCrypto {
     }
 
     static func unwrap(_ wrapper: VaultWrapper, secret: String) throws -> VaultKey {
-        let kek = try derive(secret: secret, salt: wrapper.salt, iterations: wrapper.iterations)
+        let kek = try derive(secret: secret, salt: wrapper.salt,
+                             iterations: wrapper.safeIterations)
         do {
             let box = try AES.GCM.SealedBox(combined: wrapper.sealedMaster)
             return VaultKey(master: try AES.GCM.open(box, using: kek))

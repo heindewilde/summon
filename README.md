@@ -241,8 +241,8 @@ Requires **macOS 26** and **Xcode 26** (Swift 6.1+). There are **no dependencies
 ```bash
 Scripts/run.sh              # debug build, then launch
 Scripts/run.sh --demo       # …against a throwaway library
-Scripts/selftest.sh         # 54 runtime checks on a fresh demo library
-swift test                  # 182 tests over the logic layer
+Scripts/selftest.sh         # 88 runtime checks on a fresh demo library
+swift test                  # 248 tests over the logic layer
 swift test -c release       # the same, plus the performance budgets
 ```
 
@@ -356,8 +356,8 @@ Sources/
 
 | | |
 |---|---|
-| **182 tests** across 25 suites | The whole logic layer: vault round-trips and wrong-PIN rejection, ranking and frecency, placeholder parsing, folder trees and cycle refusal, every keyboard binding *and* the keys the panel deliberately declines, contrast ratios, and content edge cases from empty titles to right-to-left text |
-| **54 runtime checks** | `Scripts/selftest.sh` drives the real app: hot key registration, panel window configuration, search reaching inside a PDF, the vault lifecycle end to end, and each keyboard binding actually reaching behaviour |
+| **248 tests** across 37 suites | The whole logic layer: vault round-trips and wrong-secret rejection, the cooldown holding against a clock set backwards, that extraction opens no socket and that a seal leaves no plaintext in the store file, ranking and frecency, placeholder parsing, folder trees and cycle refusal, every keyboard binding *and* the keys the panel deliberately declines, contrast ratios, and content edge cases from empty titles to right-to-left text |
+| **88 runtime checks** | `Scripts/selftest.sh` drives the real app: hot key registration, panel window configuration, search reaching inside a PDF, the vault lifecycle end to end, and each keyboard binding actually reaching behaviour |
 | **Performance budgets** | Asserted in release builds, and they fail the build. The wall-clock ones run locally; CI keeps the structural assertions, because timing on a shared runner measures the runner |
 | **A paste round trip** | Opens a scratch document in TextEdit, summons a snippet into it, and reads the result back through the Accessibility API — refusing to run unless TextEdit is genuinely frontmost |
 

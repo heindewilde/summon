@@ -135,29 +135,48 @@ public final class Vault {
     private func unwrapCounting(_ existing: VaultWrapper, secret: String) throws -> VaultKey {
         var w = existing
 
-        if let until = w.lockedUntil, until > Date() {
-            throw VaultError.throttled(retryAfter: until.timeIntervalSinceNow)
+        if let remaining = Vault.remainingCooldown(w) {
+            throw VaultError.throttled(retryAfter: remaining)
         }
 
         do {
             let master = try VaultCrypto.unwrap(w, secret: secret)
             w.failedAttempts = 0
-            w.lockedUntil = nil
+            w.lastFailedAt = nil
             try? persist(w)
             wrapper = w
             return master
         } catch {
             w.failedAttempts += 1
-            // Escalating cooldown after five wrong guesses: 30s, 60s, 120s, capped at 5m.
-            if w.failedAttempts >= 5 {
-                let over = w.failedAttempts - 4
-                let delay = min(300, 30 * pow(2, Double(over - 1)))
-                w.lockedUntil = Date().addingTimeInterval(delay)
-            }
+            w.lastFailedAt = Date()
             try? persist(w)
             wrapper = w
             throw VaultError.wrongPIN
         }
+    }
+
+    /// Wrong guesses tolerated before the cooldown starts.
+    static let attemptsBeforeCooldown = 5
+
+    /// Escalating cooldown: 30s, 60s, 120s, capped at five minutes.
+    static func cooldown(afterFailures failures: Int) -> TimeInterval {
+        guard failures >= attemptsBeforeCooldown else { return 0 }
+        let over = failures - (attemptsBeforeCooldown - 1)
+        return min(300, 30 * pow(2, Double(over - 1)))
+    }
+
+    /// How much longer the cooldown has to run, or nil if it has expired.
+    ///
+    /// Measured forwards from the last wrong guess rather than against a stored
+    /// deadline. A deadline is wall-clock, so setting the system clock back cleared
+    /// it; measuring elapsed time means a clock moved backwards looks like no time
+    /// has passed, and the wait can only ever get longer.
+    static func remainingCooldown(_ w: VaultWrapper, now: Date = Date()) -> TimeInterval? {
+        let required = cooldown(afterFailures: w.failedAttempts)
+        guard required > 0, let last = w.lastFailedAt else { return nil }
+        let elapsed = now.timeIntervalSince(last)
+        guard elapsed < required else { return nil }
+        return required - max(0, elapsed)
     }
 
     public func lock() {
@@ -180,8 +199,8 @@ public final class Vault {
     public var failedAttempts: Int { wrapper?.failedAttempts ?? 0 }
 
     public var throttledUntil: Date? {
-        guard let until = wrapper?.lockedUntil, until > Date() else { return nil }
-        return until
+        guard let w = wrapper, let remaining = Vault.remainingCooldown(w) else { return nil }
+        return Date().addingTimeInterval(remaining)
     }
 
     // MARK: - Biometrics

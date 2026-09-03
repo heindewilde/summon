@@ -43,13 +43,26 @@ public final class ClipboardMonitor {
     public private(set) var persistBetweenLaunches: Bool = false
     public var maxEntries: Int = 40
 
-    /// Apps whose copies are never recorded. Password managers are excluded by their
-    /// concealed-type marker too, but explicit exclusions are belt and braces.
+    /// Apps whose copies are never recorded.
+    ///
+    /// Belt and braces behind the concealed-type marker, which is the mechanism that
+    /// actually scales — this list can only ever name managers someone thought of.
+    /// It is also matched against the *frontmost* app at poll time, which up to 0.4s
+    /// after a copy need not be the app that did the copying, so it cannot be relied
+    /// on as the primary defence.
     public var excludedBundleIDs: Set<String> = [
         "com.agilebits.onepassword7",
         "com.1password.1password",
+        "com.1password.1password-launcher",
         "com.apple.keychainaccess",
+        "com.apple.Passwords",
         "com.bitwarden.desktop",
+        "org.keepassxc.keepassxc",
+        "com.dashlane.Dashlane",
+        "com.lastpass.LastPass",
+        "com.mattgemmell.Strongbox",
+        "in.sinew.Enpass-Desktop",
+        "com.protonmail.pass.desktop",
     ]
 
     private var timer: Timer?
@@ -117,9 +130,10 @@ public final class ClipboardMonitor {
         guard pb.changeCount != lastChangeCount else { return }
         lastChangeCount = pb.changeCount
 
-        // Never record something the source app marked as concealed.
-        let available = pb.types ?? []
-        if ClipboardMonitor.concealedTypes.contains(where: available.contains) { return }
+        // Never record something the source app marked as concealed. Checked across
+        // every item, not just `pb.types`: that reports the types of the first item
+        // only, so a marker on any later one was missed.
+        if isConcealed(pb) { return }
 
         let front = NSWorkspace.shared.frontmostApplication
         let bundleID = front?.bundleIdentifier
@@ -137,6 +151,17 @@ public final class ClipboardMonitor {
         entries.insert(entry, at: 0)
         if entries.count > maxEntries { entries.removeLast(entries.count - maxEntries) }
         persistIfNeeded()
+    }
+
+    func isConcealed(_ pb: NSPasteboard) -> Bool {
+        if let items = pb.pasteboardItems, !items.isEmpty {
+            return items.contains { item in
+                ClipboardMonitor.concealedTypes.contains(where: item.types.contains)
+            }
+        }
+        // Falls back to the first-item view when the items are unavailable, which is
+        // still better than reading an unreadable pasteboard as safe to record.
+        return ClipboardMonitor.concealedTypes.contains(where: (pb.types ?? []).contains)
     }
 
     private func makeEntry(from pb: NSPasteboard, bundleID: String?, appName: String?) -> Entry? {

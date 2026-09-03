@@ -39,16 +39,6 @@ public struct OnboardingView: View {
         _step = State(initialValue: initialStep)
     }
 
-    /// The type scale. This had six sizes between 11 and 12.5pt doing four different
-    /// jobs, which is why everything under a heading read as one undifferentiated grey.
-    /// Five sizes, each with one job, and a real gap between them.
-    private enum Size {
-        static let statement: CGFloat = 25
-        static let title: CGFloat = 21
-        static let body: CGFloat = 13
-        static let detail: CGFloat = 12
-        static let wordmark: CGFloat = 17
-    }
 
     public var body: some View {
         HStack(spacing: 0) {
@@ -107,15 +97,15 @@ public struct OnboardingView: View {
         VStack(spacing: Theme.Space.m) {
             SummonMarkShape(progress: markProgress)
                 .fill(
-                    LinearGradient(colors: [Theme.Brand.violetBright, Theme.Brand.violet, Theme.Brand.violetDeep],
+                    LinearGradient(colors: [Theme.Brand.violetBright, Theme.accent, Theme.Brand.violetDeep],
                                    startPoint: .topLeading, endPoint: .bottomTrailing)
                 )
                 .frame(width: 104, height: 104)
                 .shadow(color: Theme.Brand.violet.opacity(0.55), radius: 22)
 
             Text("Summon")
-                .font(.system(size: Size.wordmark, weight: .semibold))
-                .foregroundStyle(Theme.Brand.primary)
+                .font(Theme.Typography.field.weight(.semibold))
+                .foregroundStyle(Theme.primaryText)
                 .opacity(markProgress)
         }
         .frame(width: Self.railWidth)
@@ -153,8 +143,8 @@ public struct OnboardingView: View {
     private var welcome: some View {
         VStack(alignment: .leading, spacing: Theme.Space.l) {
             Text("One place for the things you reuse.")
-                .font(.system(size: Size.statement, weight: .semibold))
-                .foregroundStyle(Theme.Brand.primary)
+                .font(Theme.Typography.statement.weight(.semibold))
+                .foregroundStyle(Theme.primaryText)
                 .fixedSize(horizontal: false, vertical: true)
 
             VStack(alignment: .leading, spacing: Theme.Space.s) {
@@ -200,24 +190,24 @@ public struct OnboardingView: View {
                 // belongs to.
                 HStack(alignment: .center, spacing: Theme.Space.s) {
                     Image(systemName: "hand.tap")
-                        .foregroundStyle(Theme.Brand.primary)
+                        .foregroundStyle(Theme.primaryText)
                         .frame(width: 20)
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Let Summon paste for you")
-                            .font(.system(size: Size.body, weight: .medium))
-                            .foregroundStyle(Theme.Brand.primary)
+                            .font(Theme.Typography.title.weight(.medium))
+                            .foregroundStyle(Theme.primaryText)
                         Text("Otherwise it copies, and you press ⌘V yourself.")
-                            .font(.system(size: Size.detail))
-                            .foregroundStyle(Theme.Brand.secondary)
+                            .font(Theme.Typography.body)
+                            .foregroundStyle(Theme.secondaryText)
                     }
                     Spacer()
                     if Inserter.hasAccessibility {
                         Label("Allowed", systemImage: "checkmark.circle.fill")
-                            .font(.system(size: Size.detail))
-                            .foregroundStyle(Theme.Brand.violet)
+                            .font(Theme.Typography.body)
+                            .foregroundStyle(Theme.accent)
                     } else {
                         Button("Allow…") { Inserter.requestAccessibility() }
-                            .buttonStyle(QuietButton())
+                            .buttonStyle(.summonQuiet)
                     }
                 }
             }
@@ -225,26 +215,26 @@ public struct OnboardingView: View {
             card {
                 HStack(alignment: .center, spacing: Theme.Space.s) {
                     Image(systemName: "tray.full")
-                        .foregroundStyle(Theme.Brand.primary)
+                        .foregroundStyle(Theme.primaryText)
                         .frame(width: 20)
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Start with a few examples")
-                            .font(.system(size: Size.body, weight: .medium))
-                            .foregroundStyle(Theme.Brand.primary)
+                            .font(Theme.Typography.title.weight(.medium))
+                            .foregroundStyle(Theme.primaryText)
                         Text("Snippets, a document and an image. Delete anytime.")
-                            .font(.system(size: Size.detail))
-                            .foregroundStyle(Theme.Brand.secondary)
+                            .font(Theme.Typography.body)
+                            .foregroundStyle(Theme.secondaryText)
                     }
                     Spacer()
                     if seeded {
                         Label("Added", systemImage: "checkmark.circle.fill")
-                            .font(.system(size: Size.detail))
-                            .foregroundStyle(Theme.Brand.violet)
+                            .font(Theme.Typography.body)
+                            .foregroundStyle(Theme.accent)
                     } else if seeding {
                         ProgressView().controlSize(.small)
                     } else {
                         Button("Add") { seedLibrary() }
-                            .buttonStyle(QuietButton())
+                            .buttonStyle(.summonQuiet)
                     }
                 }
             }
@@ -256,11 +246,11 @@ public struct OnboardingView: View {
     private func stepTitle(_ title: String, _ subtitle: String) -> some View {
         VStack(alignment: .leading, spacing: Theme.Space.xxs) {
             Text(title)
-                .font(.system(size: Size.title, weight: .semibold))
-                .foregroundStyle(Theme.Brand.primary)
+                .font(Theme.Typography.display.weight(.semibold))
+                .foregroundStyle(Theme.primaryText)
             Text(subtitle)
-                .font(.system(size: Size.body))
-                .foregroundStyle(Theme.Brand.secondary)
+                .font(Theme.Typography.title)
+                .foregroundStyle(Theme.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -272,12 +262,12 @@ public struct OnboardingView: View {
     private func bullet(_ symbol: String, _ text: String) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: Theme.Space.s) {
             Image(systemName: symbol)
-                .font(.system(size: Size.body))
-                .foregroundStyle(Theme.Brand.violet)
+                .font(Theme.Typography.title)
+                .foregroundStyle(Theme.accent)
                 .frame(width: 18, alignment: .leading)
             Text(text)
-                .font(.system(size: Size.body))
-                .foregroundStyle(Theme.Brand.secondary)
+                .font(Theme.Typography.title)
+                .foregroundStyle(Theme.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -285,14 +275,7 @@ public struct OnboardingView: View {
     private func card<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
         content()
             .padding(Theme.Space.s)
-            .background(
-                RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous)
-                    .fill(Theme.Brand.card)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous)
-                            .strokeBorder(Theme.Brand.hairline, lineWidth: 1)
-                    )
-            )
+            .cardBackground(radius: Theme.Radius.large)
     }
 
     private func settingRow<Control: View>(_ title: String, _ detail: String,
@@ -301,11 +284,11 @@ public struct OnboardingView: View {
             HStack(spacing: Theme.Space.s) {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(title)
-                        .font(.system(size: Size.body, weight: .medium))
-                        .foregroundStyle(Theme.Brand.primary)
+                        .font(Theme.Typography.title.weight(.medium))
+                        .foregroundStyle(Theme.primaryText)
                     Text(detail)
-                        .font(.system(size: Size.detail))
-                        .foregroundStyle(Theme.Brand.secondary)
+                        .font(Theme.Typography.body)
+                        .foregroundStyle(Theme.secondaryText)
                 }
                 Spacer()
                 control()
@@ -317,7 +300,7 @@ public struct OnboardingView: View {
         HStack(spacing: Theme.Space.s) {
             ForEach(0...lastStep, id: \.self) { index in
                 Capsule()
-                    .fill(index == step ? Theme.Brand.violet : Theme.Brand.hairline)
+                    .fill(index == step ? Theme.accent : Theme.hairline)
                     .frame(width: index == step ? 18 : 6, height: 6)
                     .animation(Theme.panelIn, value: step)
             }
@@ -326,12 +309,12 @@ public struct OnboardingView: View {
 
             if step > 0 {
                 Button("Back") { step -= 1 }
-                    .buttonStyle(QuietButton())
+                    .buttonStyle(.summonQuiet)
             }
             Button(step == lastStep ? "Start using Summon" : "Continue") {
                 if step == lastStep { finish() } else { step += 1 }
             }
-            .buttonStyle(PrimaryButton())
+            .buttonStyle(.summonPrimary)
             .keyboardShortcut(.defaultAction)
         }
         .padding(.top, Theme.Space.m)
@@ -352,41 +335,5 @@ public struct OnboardingView: View {
         model.settings.hasCompletedOnboarding = true
         model.reregisterHotKeys()
         dismiss()
-    }
-}
-
-private struct PrimaryButton: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.system(size: 13, weight: .medium))
-            .foregroundStyle(Theme.Brand.page)
-            .padding(.horizontal, Theme.Space.l)
-            .padding(.vertical, Theme.Space.s)
-            .background(
-                RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous)
-                    .fill(Theme.Brand.violet)
-            )
-            .opacity(configuration.isPressed ? 0.78 : 1)
-    }
-}
-
-private struct QuietButton: ButtonStyle {
-    @Environment(\.isEnabled) private var isEnabled
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.system(size: 13, weight: .medium))
-            .foregroundStyle(isEnabled ? Theme.Brand.primary : Theme.Brand.faint)
-            .padding(.horizontal, Theme.Space.m)
-            .padding(.vertical, Theme.Space.s)
-            .background(
-                RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous)
-                    .fill(Theme.Brand.card)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous)
-                            .strokeBorder(Theme.Brand.hairline, lineWidth: 1)
-                    )
-            )
-            .opacity(configuration.isPressed ? 0.7 : 1)
     }
 }

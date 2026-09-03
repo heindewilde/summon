@@ -332,6 +332,34 @@ public struct LockPill: View {
     }
 }
 
+/// A glass ground for a window's columns.
+///
+/// The panel had one of these all along and the library window had nothing — it took
+/// the system's opaque window background, which is why the accent and the bloom
+/// arrived everywhere except the surface people spend the most time in.
+public struct GlassBackground: View {
+    public var material: NSVisualEffectView.Material
+    public var bloom: Double
+    public var tint: Color
+
+    public init(material: NSVisualEffectView.Material = .underWindowBackground,
+                bloom: Double = 1, tint: Color = Theme.chrome) {
+        self.material = material
+        self.bloom = bloom
+        self.tint = tint
+    }
+
+    public var body: some View {
+        ZStack {
+            VisualEffectBackground(material: material, blending: .behindWindow)
+            LinearGradient(colors: [tint.opacity(0.88), tint],
+                           startPoint: .top, endPoint: .bottom)
+            if bloom > 0 { Bloom(intensity: bloom) }
+        }
+        .ignoresSafeArea()
+    }
+}
+
 /// Blurred backdrop that reads correctly in both appearances.
 public struct PanelBackground: View {
     public init() {}

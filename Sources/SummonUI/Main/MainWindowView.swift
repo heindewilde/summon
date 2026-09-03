@@ -13,23 +13,32 @@ public struct MainWindowView: View {
     public var body: some View {
         NavigationSplitView {
             SidebarView(model: model)
+                // The window used to take the system's opaque background, which is why
+                // the ground and the bloom reached every surface except the one people
+                // spend the most time in.
+                .background(GlassBackground(material: .sidebar, bloom: 1.1))
                 .navigationSplitViewColumnWidth(min: 196, ideal: 224, max: 280)
         } content: {
             ItemListView(model: model, items: items)
                 .frame(minWidth: 300)
+                .background(GlassBackground(material: .underWindowBackground, bloom: 0.35))
                 .navigationSplitViewColumnWidth(min: 300, ideal: 360, max: 560)
                 .navigationTitle(model.sidebarTitle)
                 .navigationSubtitle(subtitle)
                 .searchable(text: $model.mainSearch, placement: .toolbar, prompt: "Search this view")
         } detail: {
-            if let id = model.mainSelection, items.contains(where: { $0.id == id }) {
-                ItemDetailView(model: model, itemID: id)
-            } else {
-                detailPlaceholder
+            Group {
+                if let id = model.mainSelection, items.contains(where: { $0.id == id }) {
+                    ItemDetailView(model: model, itemID: id)
+                } else {
+                    detailPlaceholder
+                }
             }
+            .background(GlassBackground(material: .underWindowBackground, bloom: 0.5))
         }
         .navigationSplitViewStyle(.balanced)
         .toolbar { toolbar }
+        .toolbarBackground(.hidden, for: .windowToolbar)
         .overlay(alignment: .bottom) {
             if let toast = model.toast {
                 ToastView(toast: toast)

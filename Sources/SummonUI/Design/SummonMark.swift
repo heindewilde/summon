@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 
 /// Summon's mark: a spiral wound clockwise inward, the shape the app icon carries.
 ///
@@ -63,19 +64,13 @@ public enum SummonMark {
         return CGPoint(x: r * cos(a), y: r * sin(a))
     }
 
-    /// The mark as a single closed path, scaled so its ink spans `fill` of `rect`'s
-    /// shorter side, and centred there.
+    /// The winding outlined from the mouth to `tMax`, in the nominal space.
     ///
-    /// Fitting to the ink rather than to the construction radius matters: a partial
-    /// spiral's bounding box falls well short of its full diameter, and by a different
-    /// amount for every winding, so nothing but measuring gets the size right.
-    ///
-    /// The stroke tapers, so the path is built by offsetting a sampled centreline rather
-    /// than by stroking — `setLineWidth` is one value for a whole path. The round caps
-    /// are woven into the same loop; adding them as separate circles would wind against
-    /// the body under the nonzero fill rule and punch holes in it.
-    public static func path(in rect: CGRect, winding w: Winding = .standard,
-                            fill: CGFloat = 0.84) -> CGPath {
+    /// The stroke tapers, so it is built by offsetting a sampled centreline rather than
+    /// by stroking — `setLineWidth` is one value for a whole path. The round caps are
+    /// woven into the same loop; adding them as separate circles would wind against the
+    /// body under the nonzero fill rule and punch holes in it.
+    private static func outline(_ w: Winding, upTo tMax: CGFloat) -> CGPath {
         let sweep = -w.turns * 2 * .pi          // negative: clockwise, winding inward
         let startAngle = CGFloat.pi * 0.72
         let steps = 720, capSteps = 32
@@ -92,7 +87,7 @@ public enum SummonMark {
                     halfWidth(at: radius(t, w), w))
         }
 
-        let samples = (0...steps).map { sample(CGFloat($0) / CGFloat(steps)) }
+        let samples = (0...steps).map { sample(CGFloat($0) / CGFloat(steps) * tMax) }
         let left = samples.map { CGPoint(x: $0.p.x + $0.normal.x * $0.half,
                                          y: $0.p.y + $0.normal.y * $0.half) }
         let right = samples.map { CGPoint(x: $0.p.x - $0.normal.x * $0.half,
@@ -109,19 +104,36 @@ public enum SummonMark {
 
         let loop = left + cap(samples[steps], outward: 1)
             + right.reversed() + cap(samples[0], outward: -1).reversed()
-        let raw = CGMutablePath()
-        raw.addLines(between: loop)
-        raw.closeSubpath()
+        let path = CGMutablePath()
+        path.addLines(between: loop)
+        path.closeSubpath()
+        return path
+    }
 
-        // Fit the ink to the frame, centred on the bounding box rather than on the
-        // construction centre — the mouth is heavier than the terminus, so the two are
-        // not the same point.
-        let box = raw.boundingBoxOfPath
+    /// The mark as a single closed path, scaled so its ink spans `fill` of `rect`'s
+    /// shorter side, and centred there.
+    ///
+    /// `progress` below 1 returns the spiral drawn only that far from the mouth, for
+    /// stroking it on. The fit is always measured from the *finished* mark, so a
+    /// partial one occupies its final position instead of growing into place.
+    ///
+    /// Fitting to the ink rather than to the construction radius matters: a partial
+    /// spiral's bounding box falls well short of its full diameter, and by a different
+    /// amount for every winding, so nothing but measuring gets the size right.
+    public static func path(in rect: CGRect, winding w: Winding = .standard,
+                            fill: CGFloat = 0.84, progress: CGFloat = 1) -> CGPath {
+        let finished = outline(w, upTo: 1)
+
+        // Centred on the bounding box rather than the construction centre — the mouth
+        // is heavier than the terminus, so the two are not the same point.
+        let box = finished.boundingBoxOfPath
         let scale = min(rect.width, rect.height) * fill / max(box.width, box.height)
         var fit = CGAffineTransform(translationX: rect.midX, y: rect.midY)
             .scaledBy(x: scale, y: scale)
             .translatedBy(x: -box.midX, y: -box.midY)
-        return raw.copy(using: &fit) ?? raw
+
+        let drawn = progress >= 1 ? finished : outline(w, upTo: max(0.02, progress))
+        return drawn.copy(using: &fit) ?? drawn
     }
 
     // MARK: - Menu bar
@@ -144,4 +156,35 @@ public enum SummonMark {
         image.isTemplate = true
         return image
     }()
+}
+
+/// The mark as a SwiftUI shape, for drawing it inline in the app.
+///
+/// SwiftUI's y axis runs down and the path is built y-up, so it is flipped within the
+/// rect on the way out. Without that the spiral winds the other way — a mirror image
+/// of the app icon, which is a difference nobody would name but everybody would feel.
+public struct SummonMarkShape: Shape {
+    public var winding: SummonMark.Winding
+    public var fill: CGFloat
+    /// How much of the spiral is drawn, from the mouth. Animating this strokes the
+    /// mark on; it is `animatableData`, so SwiftUI interpolates it directly.
+    public var progress: CGFloat
+
+    public init(winding: SummonMark.Winding = .standard, fill: CGFloat = 1,
+                progress: CGFloat = 1) {
+        self.winding = winding
+        self.fill = fill
+        self.progress = progress
+    }
+
+    public var animatableData: CGFloat {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    public func path(in rect: CGRect) -> Path {
+        let drawn = SummonMark.path(in: rect, winding: winding, fill: fill, progress: progress)
+        var flip = CGAffineTransform(a: 1, b: 0, c: 0, d: -1, tx: 0, ty: rect.minY + rect.maxY)
+        return Path(drawn.copy(using: &flip) ?? drawn)
+    }
 }

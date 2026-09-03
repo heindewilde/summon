@@ -77,7 +77,7 @@ enum SnapshotRunner {
                    name: "menubar", scheme: scheme, size: CGSize(width: 330, height: 520))
 
             render(OnboardingView(model: model), name: "onboarding", scheme: scheme,
-                   size: CGSize(width: 620, height: 470))
+                   size: CGSize(width: 760, height: 420))
 
             render(SettingsView(model: model), name: "settings", scheme: scheme,
                    size: CGSize(width: 560, height: 420))
@@ -110,12 +110,6 @@ enum SnapshotRunner {
                name: "lock-sheet-pin", scheme: scheme, size: sheetSize)
         render(LockSheet(model: model, purpose: .create, initialKind: .passphrase),
                name: "lock-sheet-passphrase", scheme: scheme, size: sheetSize)
-
-        // Onboarding's row grows when the fields do, which is the layout most likely
-        // to be wrong — two 170pt fields where there were two 110pt ones.
-        render(OnboardingView(model: model, initialKind: .passphrase),
-               name: "onboarding-passphrase", scheme: scheme,
-               size: CGSize(width: 620, height: 470))
 
         for kind in VaultSecretKind.allCases {
             try? model.vault.removePIN()

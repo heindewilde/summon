@@ -135,12 +135,11 @@ enum LiveCapture {
             )
 
         case "onboarding":
-            let onboardingKind = VaultSecretKind(rawValue: environment2["SUMMON_LIVE_SECRET"] ?? "")
-            // Step 2 is the privacy card, the one holding the lock fields.
+            // Step 2 is the try-it card; it reflects live panel state, so it is worth
+            // opening directly rather than clicking through to.
             let step = Int(environment2["SUMMON_LIVE_STEP"] ?? "") ?? 0
-            let view = OnboardingView(model: model, initialKind: onboardingKind ?? .pin,
-                                      initialStep: step)
-            window = present(view, size: CGSize(width: 620, height: 480))
+            window = present(OnboardingView(model: model, initialStep: step),
+                             size: CGSize(width: 760, height: 420))
 
         case "settings":
             // A PIN can be configured first, so the section that only exists once one

@@ -14,7 +14,10 @@ import SwiftUI
 public struct LibraryRow: View {
     public let item: ItemSnapshot
     public var titlePositions: [Int] = []
-    public var isSelected: Bool = false
+    /// What the row is saying about itself. A `RowState` rather than an `isSelected`
+    /// flag, because the flag let a caller hand hover in as selection — which the menu
+    /// bar did, invisibly, until selection started meaning something.
+    public var state: RowState = .idle
     /// The ⌘-number, when this surface binds one. Nil draws nothing — a badge with
     /// no handler behind it is a promise the app does not keep.
     public var shortcutIndex: Int?
@@ -25,13 +28,13 @@ public struct LibraryRow: View {
 
     public init(item: ItemSnapshot,
                 titlePositions: [Int] = [],
-                isSelected: Bool = false,
+                state: RowState = .idle,
                 shortcutIndex: Int? = nil,
                 trailingText: String? = nil,
                 onCopy: (() -> Void)? = nil) {
         self.item = item
         self.titlePositions = titlePositions
-        self.isSelected = isSelected
+        self.state = state
         self.shortcutIndex = shortcutIndex
         self.trailingText = trailingText
         self.onCopy = onCopy
@@ -39,6 +42,12 @@ public struct LibraryRow: View {
 
     @State private var hovering = false
     @State private var justCopied = false
+
+    /// Hover only applies to a row that is not already saying something louder. The
+    /// row owns this rather than its callers, which is what stops three surfaces from
+    /// each inventing their own answer.
+    private var resolved: RowState { state == .idle && hovering ? .hover : state }
+    private var isSelected: Bool { state == .selected || state == .selectedInactive }
 
     /// Measured, because the same row is asked to live in a 750pt panel and a 290pt
     /// library column. Below this there is no honest room for a subtitle, and
@@ -57,13 +66,13 @@ public struct LibraryRow: View {
 
             if item.isPinned {
                 Image(systemName: "pin.fill")
-                    .font(.system(size: 9))
+                    .font(Theme.Icon.micro)
                     .foregroundStyle(Theme.tertiaryText)
                     .accessibilityHidden(true)
             }
             if item.hasPlaceholders {
                 Image(systemName: "square.dashed.inset.filled")
-                    .font(.system(size: 10))
+                    .font(Theme.Icon.micro)
                     .foregroundStyle(Theme.tertiaryText)
                     .accessibilityHidden(true)
                     .help("Has fill-in fields")
@@ -94,9 +103,9 @@ public struct LibraryRow: View {
                     // Confirmation lands where you clicked, so nothing else on screen
                     // has to move to tell you it worked.
                     Image(systemName: justCopied ? "checkmark" : "doc.on.doc")
-                        .font(.system(size: 11))
+                        .font(Theme.Icon.small)
                         .foregroundStyle(justCopied ? Theme.success : Theme.secondaryText)
-                        .frame(width: 18, height: 18)
+                        .frame(width: Theme.Icon.slot, height: Theme.Icon.slot)
                         .contentShape(.rect)
                 }
                 .buttonStyle(.plain)
@@ -113,6 +122,8 @@ public struct LibraryRow: View {
 
             if let shortcutIndex, shortcutIndex < 9 {
                 Text("⌘\(shortcutIndex + 1)")
+                    // On the scale at 11; rounded on purpose, so a numeral in the
+                    // chrome cannot be mistaken for a numeral in someone's content.
                     .font(.system(size: 11, weight: .medium, design: .rounded))
                     .foregroundStyle(Theme.faintText)
                     .frame(width: 22, alignment: .trailing)
@@ -123,14 +134,7 @@ public struct LibraryRow: View {
         .frame(height: Theme.rowHeight)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         .onHover { hovering = $0 }
-        .background {
-            RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous)
-                .fill(hovering && !isSelected ? Theme.rowHover : .clear)
-        }
-        .background {
-            RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous)
-                .fill(isSelected ? Theme.selection : .clear)
-        }
+        .rowSurface(resolved)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityLabel)
         .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)

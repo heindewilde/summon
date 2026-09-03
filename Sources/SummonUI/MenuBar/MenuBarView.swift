@@ -174,13 +174,11 @@ struct MenuBarRow: View {
     let item: ItemSnapshot
     let action: () -> Void
     var body: some View {
-        // `isSelected: hovering` used to be passed here, which painted the selection
-        // treatment on hover. That was invisible while selection was a neutral fill a
-        // shade stronger than the hover one; now that selection is the accent it would
-        // mean everything the pointer crosses looks like the chosen thing. `LibraryRow`
-        // tracks its own hover and always did.
+        // This used to hand hover in as selection. `LibraryRow` takes a `RowState` now,
+        // so the row is simply left at its default and resolves its own hover — the
+        // mistake is no longer expressible.
         Button(action: action) {
-            LibraryRow(item: item, isSelected: false)
+            LibraryRow(item: item)
         }
         .buttonStyle(.plain)
     }

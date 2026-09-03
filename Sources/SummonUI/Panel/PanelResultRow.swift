@@ -32,7 +32,7 @@ public struct PanelResultRow: View {
     public var body: some View {
         LibraryRow(item: item,
                    titlePositions: result.titlePositions,
-                   isSelected: isSelected,
+                   state: isSelected ? .selected : .idle,
                    shortcutIndex: index,
                    trailingText: item.kind.displayName)
             .contentShape(.rect)

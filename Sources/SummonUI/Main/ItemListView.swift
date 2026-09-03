@@ -164,8 +164,9 @@ struct ItemRow: View {
     let onSelect: (UUID) -> Void
 
     /// The row height `LibraryRow` draws, which the drop delegate needs in order to
-    /// turn a pointer position into "above" or "below".
-    static let height: CGFloat = 40
+    /// turn a pointer position into "above" or "below". Read from the token rather
+    /// than retyped, so a density change cannot silently break drop hit-testing.
+    static let height: CGFloat = Theme.rowHeight
 
     private var dropEdge: VerticalAlignment? {
         guard let target = model.itemDropTarget, target.itemID == item.id else { return nil }
@@ -176,7 +177,7 @@ struct ItemRow: View {
         // The same 40pt row the panel and the menu bar draw. Three surfaces had
         // grown three heights and three type scales; now there is one component.
         LibraryRow(item: item,
-                   isSelected: model.mainSelection == item.id,
+                   state: model.mainSelection == item.id ? .selected : .idle,
                    onCopy: { model.use(item.id, style: .copy) })
             .contentShape(.rect)
             // Double-click copies. Registered before the single tap so the single

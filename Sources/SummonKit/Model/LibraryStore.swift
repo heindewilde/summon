@@ -625,6 +625,104 @@ public final class LibraryStore {
         save(); refresh()
     }
 
+
+    // MARK: - Repairs for libraries written by an earlier version
+
+    /// What `scrubSensitiveContent` has already done to this library.
+    private struct Migrations: Codable {
+        /// Bumped when a new repair is added. 1: seal plaintext summaries, re-seal
+        /// anything a silently-swallowed failure left in the clear, and vacuum once.
+        var scrubVersion = 0
+    }
+
+    private func loadMigrations() -> Migrations {
+        guard let data = try? Data(contentsOf: paths.migrationsFile),
+              let decoded = try? JSONDecoder().decode(Migrations.self, from: data)
+        else { return Migrations() }
+        return decoded
+    }
+
+    private func save(_ migrations: Migrations) {
+        guard let data = try? JSONEncoder().encode(migrations) else { return }
+        try? data.write(to: paths.migrationsFile, options: .atomic)
+    }
+
+    static let currentScrubVersion = 1
+
+    /// Brings an existing library up to the guarantees the current version makes.
+    ///
+    /// Every fix for the sealed-content leaks was forward-looking: a summary is sealed
+    /// as it is written, and a seal transition vacuums as it happens. Neither does
+    /// anything for a library that was already using the app. Such a library still has
+    /// the plaintext first sentence of every sensitive item sitting in the store, and
+    /// still has whatever earlier seals left in SQLite's free list, and nothing would
+    /// touch either until each item next happened to change.
+    ///
+    /// So this runs once per library, the first time the vault is opened after the
+    /// upgrade. It needs the key, which is why it cannot simply run at launch.
+    ///
+    /// Also repairs the other side of the silent-failure bug: an item marked sensitive
+    /// whose bytes never got sealed, because the old code swallowed the error and left
+    /// a lock in the UI with plaintext on disk.
+    ///
+    /// Returns the number of items it changed. Safe to call as often as you like.
+    @discardableResult
+    public func scrubSensitiveContent() -> Int {
+        var migrations = loadMigrations()
+        guard migrations.scrubVersion < LibraryStore.currentScrubVersion else { return 0 }
+        guard let key = vault.currentKey else { return 0 }
+
+        var repaired = 0
+        for item in allItems() where item.isEffectivelySensitive {
+            var changed = false
+
+            // The leak this exists for.
+            if let summary = item.summary, let sealed = try? key.seal(summary, itemID: item.id) {
+                item.sealedSummary = sealed
+                item.summary = nil
+                changed = true
+            }
+            // These should already be sealed. One being here means an earlier `try?`
+            // ate the failure, so the item has read as protected while it was not.
+            if let extracted = item.extractedText,
+               let sealed = try? key.seal(extracted, itemID: item.id) {
+                item.sealedExtractedText = sealed
+                item.extractedText = nil
+                changed = true
+            }
+            if let plain = item.bodyText ?? item.bodyRTF.map({ String(decoding: $0, as: UTF8.self) }),
+               let sealed = try? key.seal(item.bodyRTF ?? Data(plain.utf8), itemID: item.id) {
+                item.sealedBody = sealed
+                item.bodyText = nil
+                item.bodyRTF = nil
+                changed = true
+            }
+            if let blob = item.storedBlob, !blob.isSealed,
+               let sealed = try? files.seal(blob, itemID: item.id, key: key) {
+                item.apply(sealed)
+                files.deleteThumbnail(itemID: item.id)
+                changed = true
+            }
+
+            if changed { repaired += 1 }
+        }
+
+        save()
+        // Unconditional, not only when something was repaired: the residue in the free
+        // list is from seals that happened long before this ran, and it is there
+        // whether or not this pass found anything still in the clear.
+        compactStore()
+        refresh()
+
+        migrations.scrubVersion = LibraryStore.currentScrubVersion
+        save(migrations)
+
+        if repaired > 0 {
+            Log.store.info("Scrubbed \(repaired, privacy: .public) items left in the clear by an earlier version.")
+        }
+        return repaired
+    }
+
     // MARK: - Usage tracking
 
     /// Records that an item was used, optionally while a particular app was frontmost.

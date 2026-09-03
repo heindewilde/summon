@@ -717,3 +717,136 @@ struct ScratchFileTests {
         }
     }
 }
+
+@Suite("Repairing an older library")
+@MainActor
+struct ScrubMigrationTests {
+
+    private func makeLibrary() throws -> (LibraryStore, Vault, LibraryPaths) {
+        let paths = LibraryPaths.temporary()
+        let vault = Vault(paths: paths)
+        let store = try LibraryStore(paths: paths, vault: vault)
+        return (store, vault, paths)
+    }
+
+    /// Reproduces what an older version left behind: an item that is sensitive, and
+    /// whose summary was written straight onto the model in the clear.
+    @Test("A plaintext summary on a sensitive item is sealed")
+    func sealsLeftoverSummaries() throws {
+        let (store, vault, paths) = try makeLibrary()
+        defer { paths.destroy() }
+        try vault.setUpPIN("1379")
+
+        let item = store.createSnippet(title: "Passport", body: "NLD1234567", sensitive: true)
+        // Written the way the old code did, bypassing `applySummary`.
+        item.summary = "Passport number NLD1234567"
+        item.sealedSummary = nil
+        store.save()
+
+        #expect(store.scrubSensitiveContent() == 1)
+        #expect(item.summary == nil)
+        #expect(item.sealedSummary != nil)
+        #expect(store.resolveSummary(item, key: vault.currentKey) == "Passport number NLD1234567")
+    }
+
+    /// The other half of the silent-failure bug: marked sensitive, never sealed.
+    @Test("Content a swallowed failure left in the clear is sealed")
+    func sealsUnsealedContent() throws {
+        let (store, vault, paths) = try makeLibrary()
+        defer { paths.destroy() }
+        try vault.setUpPIN("1379")
+
+        let item = store.createSnippet(title: "Bank", body: "IBAN NL00 BANK 0123")
+        // Marked sensitive with its bytes never following, which is exactly what the
+        // old `try?` produced when a seal failed.
+        item.isSensitive = true
+        store.save()
+        #expect(item.bodyText != nil)
+
+        #expect(store.scrubSensitiveContent() == 1)
+        #expect(item.bodyText == nil)
+        #expect(item.sealedBody != nil)
+        #expect(store.resolveBodyText(item, key: vault.currentKey) == "IBAN NL00 BANK 0123")
+    }
+
+    @Test("It runs once, then leaves the library alone")
+    func runsOnce() throws {
+        let (store, vault, paths) = try makeLibrary()
+        defer { paths.destroy() }
+        try vault.setUpPIN("1379")
+
+        let item = store.createSnippet(title: "Passport", body: "NLD1234567", sensitive: true)
+        item.summary = "leftover"
+        store.save()
+
+        #expect(store.scrubSensitiveContent() == 1)
+        // A second call must not repeat the work, or every unlock would vacuum.
+        #expect(store.scrubSensitiveContent() == 0)
+        #expect(FileManager.default.fileExists(atPath: paths.migrationsFile.path))
+    }
+
+    @Test("Without the key it changes nothing and stays pending")
+    func needsTheKey() throws {
+        let (store, vault, paths) = try makeLibrary()
+        defer { paths.destroy() }
+        try vault.setUpPIN("1379")
+        let item = store.createSnippet(title: "Passport", body: "NLD1234567", sensitive: true)
+        item.summary = "leftover"
+        store.save()
+
+        vault.lock()
+        #expect(store.scrubSensitiveContent() == 0)
+        #expect(item.summary == "leftover")
+
+        // And still runs once the vault is open, rather than having marked itself done.
+        try vault.unlock(pin: "1379")
+        #expect(store.scrubSensitiveContent() == 1)
+    }
+
+    @Test("An ordinary item is left exactly as it is")
+    func leavesOrdinaryItemsAlone() throws {
+        let (store, vault, paths) = try makeLibrary()
+        defer { paths.destroy() }
+        try vault.setUpPIN("1379")
+
+        let item = store.createSnippet(title: "Terms", body: "Payment in 30 days")
+        item.summary = "Standard payment terms"
+        store.save()
+
+        #expect(store.scrubSensitiveContent() == 0)
+        #expect(item.summary == "Standard payment terms")
+        #expect(item.bodyText == "Payment in 30 days")
+    }
+
+    /// The residue is from seals that happened before this code existed, so the
+    /// vacuum has to happen whether or not the pass found anything to re-seal.
+    @Test("The one-time pass vacuums even when nothing needed re-sealing")
+    func vacuumsRegardless() throws {
+        let (store, vault, paths) = try makeLibrary()
+        defer { paths.destroy() }
+        try vault.setUpPIN("1379")
+
+        let residue = "ZmarkerS old plaintext ZmarkerS"
+        let item = store.createSnippet(title: "Old", body: residue)
+        store.save()
+        // Sealed the way the current code does, but with the vacuum skipped, which is
+        // the state every library upgraded from an earlier version is in.
+        item.sealedBody = try #require(try vault.currentKey?.seal(residue, itemID: item.id))
+        item.bodyText = nil
+        item.isSensitive = true
+        store.save()
+
+        let storeURL = paths.storeURL
+        func residuePresent() -> Bool {
+            for path in [storeURL.path, storeURL.path + "-wal"] {
+                guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)) else { continue }
+                if data.range(of: Data(residue.utf8)) != nil { return true }
+            }
+            return false
+        }
+        #expect(residuePresent())
+
+        #expect(store.scrubSensitiveContent() == 0)
+        #expect(!residuePresent())
+    }
+}

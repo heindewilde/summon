@@ -877,6 +877,7 @@ public final class AppModel {
         do {
             try vault.unlock(secret: secret)
             secretError = nil
+            store.scrubSensitiveContent()
             store.refresh()
             runSearch()
             show(Toast(text: "Unlocked", symbol: "lock.open", tone: .success))
@@ -901,6 +902,9 @@ public final class AppModel {
     private func afterUnlock() {
         secretEntry = ""
         secretError = nil
+        // The first open after an upgrade is the only chance to repair what earlier
+        // versions left in the clear, because repairing it needs the key.
+        store.scrubSensitiveContent()
         store.refresh()
         runSearch()
         if case .unlock(let pending) = mode {
@@ -1237,6 +1241,7 @@ public final class AppModel {
             return
         }
         lockSheet = nil
+        store.scrubSensitiveContent()
         store.refresh()
         runSearch()
         show(Toast(text: "\(kind.displayName) set", symbol: "lock.fill", tone: .success,

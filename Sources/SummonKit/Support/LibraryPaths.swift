@@ -13,6 +13,11 @@ public struct LibraryPaths: Sendable {
     public var thumbnails: URL { root.appending(path: "Thumbnails") }
     public var vaultKeyFile: URL { root.appending(path: "vault.wrap") }
 
+    /// Which one-off repairs this library has already had. Per-library rather than
+    /// per-user: the demo library and a real one are at different versions, and a
+    /// preference shared between them would claim work on one had been done on both.
+    public var migrationsFile: URL { root.appending(path: "migrations.json") }
+
     public init(root: URL) { self.root = root }
 
     public static var isDemoMode: Bool {

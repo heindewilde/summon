@@ -117,6 +117,22 @@ enum LiveCapture {
                 size: CGSize(width: 288, height: 372)
             )
 
+        case "clipboard":
+            // The clipboard tray, which has no other way to be looked at: it is a
+            // sidebar selection rather than a mode, and `ImageRenderer` cannot draw the
+            // window it lives in.
+            model.sidebarSelection = .clipboard
+            if model.clipboard.entries.isEmpty {
+                model.clipboard.seedForCapture([
+                    .init(capturedAt: .now.addingTimeInterval(-90), kind: .text,
+                          text: "NL91 ABNA 0417 1643 00", sourceAppName: "Safari"),
+                    .init(capturedAt: .now.addingTimeInterval(-2400), kind: .text,
+                          text: "Thanks — I'll get that over to you before Friday.",
+                          sourceAppName: "Mail"),
+                ])
+            }
+            window = present(MainWindowView(model: model), size: CGSize(width: 1120, height: 700))
+
         case "menubar":
             window = present(
                 MenuBarView(model: model, openMainWindow: {}, openSettings: {}),

@@ -29,6 +29,20 @@ public final class ClipboardMonitor {
             return t.isEmpty ? "Empty" : String(t.prefix(200))
         }
 
+        public init(id: UUID = UUID(), capturedAt: Date, kind: ItemKind, text: String? = nil,
+                    rtf: Data? = nil, imageData: Data? = nil, fileURL: URL? = nil,
+                    sourceBundleID: String? = nil, sourceAppName: String? = nil) {
+            self.id = id
+            self.capturedAt = capturedAt
+            self.kind = kind
+            self.text = text
+            self.rtf = rtf
+            self.imageData = imageData
+            self.fileURL = fileURL
+            self.sourceBundleID = sourceBundleID
+            self.sourceAppName = sourceAppName
+        }
+
         public var suggestedTitle: String {
             if let fileURL { return fileURL.deletingPathExtension().lastPathComponent }
             if imageData != nil {
@@ -186,6 +200,16 @@ public final class ClipboardMonitor {
                          sourceBundleID: bundleID, sourceAppName: appName)
         }
         return nil
+    }
+
+    /// Fills the tray for a capture run.
+    ///
+    /// The tray is normally filled by watching the pasteboard, which a screenshot
+    /// cannot do — so the one surface in the app whose contents arrive by copying
+    /// things was also the one that could never be reviewed. `LiveCapture` refuses to
+    /// run outside the demo library, so this cannot touch a real one.
+    public func seedForCapture(_ seeded: [Entry]) {
+        entries = seeded
     }
 
     public func clear() {

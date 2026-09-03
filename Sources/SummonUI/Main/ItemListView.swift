@@ -235,13 +235,13 @@ struct ItemCard: View {
                         .clipShape(.rect(cornerRadius: Theme.Radius.small, style: .continuous))
                 } else if item.kind.isTextual && !item.isLocked {
                     Text(item.previewLine)
-                        .font(.system(size: 9.5))
+                        .font(Theme.Typography.micro)
                         .foregroundStyle(Theme.secondaryText)
                         .lineLimit(5)
                         .padding(Theme.Space.xs)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 } else {
-                    KindBadge(kind: item.kind, size: 34, isLocked: item.isLocked)
+                    KindIcon(kind: item.kind, style: .tile, size: 34, isLocked: item.isLocked)
                 }
             }
             .frame(height: 96)
@@ -249,10 +249,10 @@ struct ItemCard: View {
 
             HStack(spacing: Theme.Space.xxs) {
                 Text(item.title)
-                    .font(.system(size: 11.5, weight: .medium))
+                    .font(Theme.Typography.body.weight(.medium))
                     .lineLimit(1)
                 if item.isPinned {
-                    Image(systemName: "pin.fill").font(.system(size: 8))
+                    Image(systemName: "pin.fill").font(Theme.Icon.micro)
                         .foregroundStyle(Theme.secondaryText)
                 }
             }
@@ -262,7 +262,9 @@ struct ItemCard: View {
                     in: .rect(cornerRadius: Theme.Radius.medium))
         .overlay(
             RoundedRectangle(cornerRadius: Theme.Radius.medium)
-                .strokeBorder(isSelected ? Theme.primaryText.opacity(0.6) : Theme.hairline, lineWidth: 1)
+                // Was `primaryText.opacity(0.6)` — an eyeballed alpha on a text colour,
+                // used as a border, which inverts between appearances.
+                .strokeBorder(isSelected ? Theme.accent : Theme.hairline, lineWidth: 1)
         )
         .contextMenu { ItemContextMenu(model: model, item: item) }
         .onDrag { model.dragProvider(for: item.id) ?? model.identityOnlyDragProvider(for: item.id) }
@@ -306,32 +308,63 @@ struct ClipboardListView: View {
                         : "Clipboard history is turned off. Turn it on in Settings to capture what you copy."
                 )
             } else {
-                List {
-                    ForEach(model.clipboard.entries) { entry in
-                        HStack(spacing: Theme.Space.s) {
-                            KindBadge(kind: entry.kind, size: 30)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(entry.preview)
-                                    .font(.system(size: 12))
-                                    .lineLimit(2)
-                                Text("\(entry.sourceAppName ?? "Unknown") · \(entry.capturedAt.formatted(.relative(presentation: .numeric)))")
-                                    .font(.system(size: 10.5))
-                                    .foregroundStyle(Theme.tertiaryText)
-                            }
-                            Spacer()
-                            Button("Keep") { model.saveClipboardEntry(entry) }
-                                .buttonStyle(.borderless)
-                                .tint(Theme.primaryText)
-                        }
-                        .padding(.vertical, 2)
-                        .contextMenu {
-                            Button("Keep in Library") { model.saveClipboardEntry(entry) }
-                            Button("Remove", role: .destructive) { model.clipboard.remove(entry.id) }
+                // A `ScrollView`, not a `List` — the same construct the item list above
+                // uses, for the reason written at the top of this file. This was the one
+                // surface still on `List`, so it was also the one surface where a
+                // selected row painted the system accent blue.
+                SnapshotSafeScrollView {
+                    SnapshotSafeLazyVStack(alignment: .leading, spacing: 0) {
+                        ForEach(model.clipboard.entries) { entry in
+                            ClipboardEntryRow(model: model, entry: entry)
                         }
                     }
+                    .padding(.horizontal, Theme.Space.s)
+                    .padding(.vertical, Theme.Space.xs)
                 }
-                .listStyle(.inset)
             }
         }
+    }
+}
+
+/// One captured clipboard entry, in the library window.
+///
+/// Named for its surface because the menu bar has its own, narrower row of the same
+/// name — the two are genuinely different shapes, not a duplication to fold together.
+private struct ClipboardEntryRow: View {
+    @Bindable var model: AppModel
+    let entry: ClipboardMonitor.Entry
+
+    @State private var hovering = false
+
+    var body: some View {
+        HStack(spacing: Theme.Space.s) {
+            KindIcon(kind: entry.kind, style: .tile, size: 30)
+            VStack(alignment: .leading, spacing: Theme.Space.xxs) {
+                Text(entry.preview)
+                    .font(Theme.Typography.body)
+                    .foregroundStyle(Theme.primaryText)
+                    .lineLimit(2)
+                Text("\(entry.sourceAppName ?? "Unknown") · \(entry.capturedAt.formatted(.relative(presentation: .numeric)))")
+                    .font(Theme.Typography.micro)
+                    .foregroundStyle(Theme.tertiaryText)
+            }
+            Spacer(minLength: Theme.Space.s)
+            // Always visible. Hiding it until hover was a change nobody asked for: the
+            // tray's whole purpose is keeping things, and a row with no visible way to
+            // do that reads as inert.
+            Button("Keep") { model.saveClipboardEntry(entry) }
+                .buttonStyle(.summonQuiet)
+        }
+        .padding(.horizontal, Theme.Space.s)
+        .padding(.vertical, Theme.Space.xs)
+        .onHover { hovering = $0 }
+        .rowSurface(hovering ? .hover : .idle)
+        .contentShape(.rect)
+        .contextMenu {
+            Button("Keep in Library") { model.saveClipboardEntry(entry) }
+            Button("Remove", role: .destructive) { model.clipboard.remove(entry.id) }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(entry.preview), from \(entry.sourceAppName ?? "an unknown app")")
     }
 }

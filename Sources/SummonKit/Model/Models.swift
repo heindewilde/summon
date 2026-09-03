@@ -32,8 +32,15 @@ public final class SummonItem {
     public var extractedText: String?
     public var sealedExtractedText: Data?
 
-    /// One-line summary, from the on-device model or a heuristic.
+    /// One-line summary, from the on-device model or a heuristic. Nil once sealed.
+    ///
+    /// Sealed alongside the body, and for the same reason. The model never sees
+    /// sensitive content, so a sensitive item's summary always comes from the
+    /// heuristic — which is the content's own first sentence, verbatim. Left in the
+    /// clear it published the one thing the seal exists to hide.
     public var summary: String?
+    /// AES-GCM sealed summary for sensitive items.
+    public var sealedSummary: Data?
 
     public var isPinned: Bool = false
     public var isSensitive: Bool = false

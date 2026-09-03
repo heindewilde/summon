@@ -146,7 +146,7 @@ public final class LibraryStore {
             folderPath: item.folder?.path ?? [],
             folderID: item.folder?.id,
             sortIndex: item.sortIndex,
-            summary: locked ? nil : item.summary,
+            summary: resolveSummary(item, key: key),
             searchableText: searchable,
             previewLine: preview,
             isPinned: item.isPinned,
@@ -193,6 +193,33 @@ public final class LibraryStore {
             return try? key.openText(sealed, itemID: item.id)
         }
         return item.extractedText
+    }
+
+    public func resolveSummary(_ item: SummonItem, key: VaultKey?) -> String? {
+        if let sealed = item.sealedSummary {
+            guard let key else { return nil }
+            return try? key.openText(sealed, itemID: item.id)
+        }
+        return item.summary
+    }
+
+    /// Writes a summary, sealing it when the item is sensitive and the vault is open.
+    ///
+    /// Public because the importer sets summaries after enrichment, and going through
+    /// the store is what keeps the sealed/plain pair from drifting apart.
+    public func applySummary(_ item: SummonItem, _ text: String?) {
+        guard let text, !text.isEmpty else {
+            item.summary = nil
+            item.sealedSummary = nil
+            return
+        }
+        if item.isEffectivelySensitive, let key = vault.currentKey {
+            item.sealedSummary = try? key.seal(text, itemID: item.id)
+            item.summary = nil
+        } else {
+            item.summary = text
+            item.sealedSummary = nil
+        }
     }
 
     public static func plainText(fromRTF data: Data) -> String { RTF.plainText(from: data) }
@@ -482,6 +509,10 @@ public final class LibraryStore {
                 item.sealedExtractedText = try? key.seal(extracted, itemID: item.id)
                 item.extractedText = nil
             }
+            if let summary = item.summary {
+                item.sealedSummary = try? key.seal(summary, itemID: item.id)
+                item.summary = nil
+            }
             if let blob = item.storedBlob, let sealed = try? files.seal(blob, itemID: item.id, key: key) {
                 item.apply(sealed)
             }
@@ -499,6 +530,10 @@ public final class LibraryStore {
             if let sealed = item.sealedExtractedText {
                 item.extractedText = try? key.openText(sealed, itemID: item.id)
                 item.sealedExtractedText = nil
+            }
+            if let sealed = item.sealedSummary {
+                item.summary = try? key.openText(sealed, itemID: item.id)
+                item.sealedSummary = nil
             }
             if let blob = item.storedBlob, let plain = try? files.unseal(blob, itemID: item.id, key: key) {
                 item.apply(plain)

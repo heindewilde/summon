@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import PDFKit
+import UniformTypeIdentifiers
 import Vision
 
 /// Pulls readable text out of images and documents so their *contents* are findable,
@@ -54,20 +55,178 @@ public struct TextExtractor: Sendable {
 
     // MARK: - Documents
 
+    /// How one document's text gets read.
+    ///
+    /// Chosen from the file's uniform type rather than left to AppKit, which is the
+    /// whole point of this enum — see `documentText(url:)`.
+    private enum Reader {
+        case pdf
+        /// An `NSAttributedString` reader, named explicitly so none can be inferred.
+        case attributed(NSAttributedString.DocumentType)
+        /// Markup we strip ourselves instead of handing to WebKit.
+        case markup
+        case plain
+        case unsupported
+    }
+
+    private static func reader(for url: URL) -> Reader {
+        guard let type = UTType(filenameExtension: url.pathExtension) else { return .plain }
+
+        if type.conforms(to: .pdf) { return .pdf }
+
+        // HTML and web archives are read by us, not by AppKit. Its HTML reader is
+        // WebKit-backed and resolves remote subresources, so an `<img src="https://…">`
+        // in an imported file was an outbound request from an app that documents itself
+        // as making none — and enrichment runs on *decrypted* content, so a sealed
+        // document could be made to call out. See `strippedMarkup(from:)`.
+        if type.conforms(to: .html) || type.conforms(to: .xml)
+            || type.conforms(to: .webArchive) { return .markup }
+
+        if type.conforms(to: .rtf) { return .attributed(.rtf) }
+        // No UTType statics exist for these three, so they are resolved by identifier.
+        for (wordProcessor, documentType) in Self.wordProcessorTypes
+        where type.conforms(to: wordProcessor) {
+            return .attributed(documentType)
+        }
+
+        if type.conforms(to: .text) { return .plain }
+        return .unsupported
+    }
+
+    private static let wordProcessorTypes: [(UTType, NSAttributedString.DocumentType)] =
+        [
+            ("com.microsoft.word.doc", .docFormat),
+            ("org.openxmlformats.wordprocessingml.document", .officeOpenXML),
+            ("org.oasis-open.opendocument.text", .openDocument),
+        ].compactMap { identifier, documentType in
+            UTType(identifier).map { ($0, documentType) }
+        }
+
     public static func documentText(url: URL) async -> String {
         await Task.detached(priority: .utility) {
-            if url.pathExtension.lowercased() == "pdf" {
+            switch reader(for: url) {
+            case .pdf:
                 return pdfText(url: url)
-            }
-            // Plain and rich text documents read directly.
-            if let attributed = try? NSAttributedString(url: url, options: [:], documentAttributes: nil) {
+
+            case .attributed(let documentType):
+                // Read from `Data`, not from the URL: the URL form sets a base URL the
+                // readers use to resolve relative references, and passing the type
+                // explicitly is what stops one being sniffed from the contents.
+                guard let data = try? Data(contentsOf: url),
+                      let attributed = try? NSAttributedString(
+                          data: data,
+                          options: [.documentType: documentType],
+                          documentAttributes: nil
+                      )
+                else { return plainText(url: url) }
                 return String(attributed.string.prefix(maxCharacters))
+
+            case .markup:
+                guard let data = try? Data(contentsOf: url) else { return "" }
+                return strippedMarkup(from: data)
+
+            case .plain:
+                return plainText(url: url)
+
+            case .unsupported:
+                return ""
             }
-            if let text = try? String(contentsOf: url, encoding: .utf8) {
-                return String(text.prefix(maxCharacters))
-            }
-            return ""
         }.value
+    }
+
+    private static func plainText(url: URL) -> String {
+        if let text = try? String(contentsOf: url, encoding: .utf8) {
+            return String(text.prefix(maxCharacters))
+        }
+        // Falls back for the legacy encodings a plain .txt still shows up in.
+        if let data = try? Data(contentsOf: url),
+           let text = String(data: data, encoding: .isoLatin1) {
+            return String(text.prefix(maxCharacters))
+        }
+        return ""
+    }
+
+    // MARK: - Markup
+
+    /// Words out of markup, with nothing resolved and nothing fetched.
+    ///
+    /// Extraction only needs text for the search index, so tags go and their contents
+    /// stay. Deliberately hand-rolled: every framework reader for these formats is
+    /// WebKit-backed, and none of them can be told not to touch the network with any
+    /// confidence worth relying on.
+    static func strippedMarkup(from data: Data) -> String {
+        guard var source = String(data: data, encoding: .utf8)
+            ?? String(data: data, encoding: .isoLatin1)
+        else { return "" }
+
+        // Bounded before any pattern runs, so a pathological file cannot make the
+        // scan expensive. Four bytes per output character is generous for markup.
+        source = String(source.prefix(maxCharacters * 4))
+
+        for element in ["script", "style", "head"] {
+            source = source.replacingOccurrences(
+                of: "<\(element)\\b[^>]*>[\\s\\S]*?</\(element)\\s*>",
+                with: " ",
+                options: [.regularExpression, .caseInsensitive]
+            )
+        }
+        // Comments, CDATA and processing instructions, then every remaining tag.
+        source = source.replacingOccurrences(of: "<!--[\\s\\S]*?-->", with: " ",
+                                             options: .regularExpression)
+        source = source.replacingOccurrences(of: "<[^>]*>", with: " ",
+                                             options: .regularExpression)
+
+        return String(collapsingWhitespace(decodingEntities(source)).prefix(maxCharacters))
+    }
+
+    private static let namedEntities: [String: String] = [
+        "amp": "&", "lt": "<", "gt": ">", "quot": "\"", "apos": "'",
+        "nbsp": "\u{00A0}", "hellip": "…", "mdash": "—", "ndash": "–",
+        "lsquo": "‘", "rsquo": "’", "ldquo": "“", "rdquo": "”", "eacute": "é",
+    ]
+
+    private static func decodingEntities(_ text: String) -> String {
+        guard text.contains("&") else { return text }
+        var out = ""
+        out.reserveCapacity(text.count)
+        var rest = Substring(text)
+
+        while let start = rest.firstIndex(of: "&") {
+            out += rest[rest.startIndex..<start]
+            let after = rest.index(after: start)
+            // An entity is short; anything longer is a stray ampersand.
+            let window = rest[after...].prefix(12)
+            guard let semi = window.firstIndex(of: ";") else {
+                out.append("&")
+                rest = rest[after...]
+                continue
+            }
+            let name = rest[after..<semi]
+            if name.hasPrefix("#"),
+               let scalar = numericEntity(name.dropFirst()) {
+                out.append(Character(scalar))
+            } else if let replacement = namedEntities[name.lowercased()] {
+                out += replacement
+            } else {
+                out += "&\(name);"
+            }
+            rest = rest[rest.index(after: semi)...]
+        }
+        out += rest
+        return out
+    }
+
+    private static func numericEntity(_ digits: Substring) -> Unicode.Scalar? {
+        let value = digits.first.map({ $0 == "x" || $0 == "X" })  == true
+            ? UInt32(digits.dropFirst(), radix: 16)
+            : UInt32(digits, radix: 10)
+        return value.flatMap(Unicode.Scalar.init)
+    }
+
+    private static func collapsingWhitespace(_ text: String) -> String {
+        text.split(whereSeparator: \.isWhitespace)
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     static func pdfText(url: URL) -> String {

@@ -289,3 +289,72 @@ struct VaultLifecycleTests {
         #expect(store.snapshots.first { $0.id == item.id }?.searchableText.contains("IBAN") == true)
     }
 }
+
+@Suite("Sealed summaries")
+@MainActor
+struct SealedSummaryTests {
+
+    /// The summary is the content's own first sentence when the model is unavailable
+    /// or refuses to look — which for a sensitive item is always. It has to be sealed.
+    @Test("A sensitive item's summary never sits in the clear")
+    func summaryIsSealedForSensitiveItems() throws {
+        let paths = LibraryPaths.temporary()
+        defer { paths.destroy() }
+        let vault = Vault(paths: paths)
+        let store = try LibraryStore(paths: paths, vault: vault)
+        try vault.setUpPIN("1379")
+
+        let secret = "Passport number NLD1234567, issued in Amsterdam."
+        let item = store.createSnippet(title: "Passport", body: secret, sensitive: true)
+        store.applySummary(item, Heuristics.summary(forText: secret))
+
+        #expect(item.summary == nil)
+        #expect(item.sealedSummary != nil)
+        #expect(store.resolveSummary(item, key: vault.currentKey)?.contains("NLD1234567") == true)
+        // And nothing at all once the key is gone.
+        #expect(store.resolveSummary(item, key: nil) == nil)
+    }
+
+    @Test("Marking an existing item sensitive seals the summary it already had")
+    func markingSensitiveSealsAnExistingSummary() throws {
+        let paths = LibraryPaths.temporary()
+        defer { paths.destroy() }
+        let vault = Vault(paths: paths)
+        let store = try LibraryStore(paths: paths, vault: vault)
+        try vault.setUpPIN("1379")
+
+        // This is the order that leaked: enriched while ordinary, sealed afterwards.
+        let item = store.createSnippet(title: "Bank", body: "IBAN NL00 BANK 0123 4567 89")
+        store.applySummary(item, "IBAN NL00 BANK 0123 4567 89")
+        #expect(item.summary != nil)
+
+        try store.setSensitive(item, true)
+        #expect(item.summary == nil)
+        #expect(item.sealedSummary != nil)
+
+        // Reversible, like every other sealed field.
+        try store.setSensitive(item, false)
+        #expect(item.sealedSummary == nil)
+        #expect(item.summary == "IBAN NL00 BANK 0123 4567 89")
+    }
+
+    @Test("A locked item's snapshot carries no summary")
+    func lockedSnapshotHasNoSummary() throws {
+        let paths = LibraryPaths.temporary()
+        defer { paths.destroy() }
+        let vault = Vault(paths: paths)
+        let store = try LibraryStore(paths: paths, vault: vault)
+        try vault.setUpPIN("1379")
+
+        let item = store.createSnippet(title: "Passport", body: "NLD1234567", sensitive: true)
+        store.applySummary(item, "Passport number NLD1234567")
+        store.save()
+
+        vault.lock()
+        store.refresh()
+        let snapshot = try #require(store.snapshots.first { $0.id == item.id })
+        #expect(snapshot.isLocked)
+        #expect(snapshot.summary == nil)
+        #expect(snapshot.title == "Passport")
+    }
+}

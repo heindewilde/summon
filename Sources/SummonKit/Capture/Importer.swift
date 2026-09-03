@@ -167,7 +167,11 @@ public final class Importer {
         if (stillThere.tags ?? []).isEmpty, !suggestion.tags.isEmpty {
             stillThere.tags = suggestion.tags.map { store.resolveTag(named: $0) }
         }
-        if stillThere.summary == nil { stillThere.summary = suggestion.summary }
+        if stillThere.summary == nil, stillThere.sealedSummary == nil {
+            // Through the store, not straight onto the property: for a sensitive item
+            // the heuristic summary is its own first sentence, so it has to be sealed.
+            store.applySummary(stillThere, suggestion.summary)
+        }
         stillThere.updatedAt = Date()
 
         store.save()

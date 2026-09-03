@@ -17,8 +17,18 @@ public enum CapturedSelection: Sendable {
 @MainActor
 public struct SelectionCapture {
     private let inserter: Inserter
+    /// Called immediately before the user's own clipboard is put back.
+    ///
+    /// Restoring writes to the pasteboard, which bumps `changeCount` and so looks to
+    /// the clipboard monitor exactly like a fresh copy. Without this, a password that
+    /// was correctly skipped on the way in came back around as a new history entry
+    /// attributed to whatever app happened to be frontmost.
+    private let willRestore: @MainActor () -> Void
 
-    public init(inserter: Inserter) { self.inserter = inserter }
+    public init(inserter: Inserter, willRestore: @MainActor @escaping () -> Void = {}) {
+        self.inserter = inserter
+        self.willRestore = willRestore
+    }
 
     public func capture() async -> CapturedSelection {
         let front = NSWorkspace.shared.frontmostApplication
@@ -57,7 +67,10 @@ public struct SelectionCapture {
     private func captureViaCopy() async -> CapturedSelection {
         let pb = NSPasteboard.general
         let saved = SelectionCapture.snapshotPasteboard(pb)
-        defer { SelectionCapture.restorePasteboard(pb, from: saved) }
+        defer {
+            willRestore()
+            SelectionCapture.restorePasteboard(pb, from: saved)
+        }
 
         guard let type = await inserter.copyCurrentSelection() else { return .nothing }
 
@@ -75,18 +88,23 @@ public struct SelectionCapture {
     }
 
     /// Preserves the user's clipboard across our synthetic ⌘C.
-    static func snapshotPasteboard(_ pb: NSPasteboard) -> [NSPasteboard.PasteboardType: Data] {
-        var saved: [NSPasteboard.PasteboardType: Data] = [:]
-        for type in pb.types ?? [] {
-            if let data = pb.data(forType: type) { saved[type] = data }
-        }
-        return saved
+    ///
+    /// Types are kept in order and *with* their data optional, because the markers
+    /// that matter most here carry none. `org.nspasteboard.ConcealedType` is a
+    /// zero-length flag meaning "this is a secret"; a dictionary keyed on types with
+    /// data dropped it on the floor, so the clipboard came back from a save-selection
+    /// stripped of the one thing telling every clipboard manager to ignore it.
+    static func snapshotPasteboard(_ pb: NSPasteboard) -> [(NSPasteboard.PasteboardType, Data?)] {
+        (pb.types ?? []).map { ($0, pb.data(forType: $0)) }
     }
 
-    static func restorePasteboard(_ pb: NSPasteboard, from saved: [NSPasteboard.PasteboardType: Data]) {
+    static func restorePasteboard(_ pb: NSPasteboard, from saved: [(NSPasteboard.PasteboardType, Data?)]) {
         guard !saved.isEmpty else { return }
         pb.clearContents()
-        pb.declareTypes(Array(saved.keys), owner: nil)
-        for (type, data) in saved { pb.setData(data, forType: type) }
+        // Declared whether or not there are bytes to follow, so marker types survive.
+        pb.declareTypes(saved.map(\.0), owner: nil)
+        for (type, data) in saved {
+            if let data { pb.setData(data, forType: type) }
+        }
     }
 }

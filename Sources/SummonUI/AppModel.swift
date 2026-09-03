@@ -330,8 +330,10 @@ public final class AppModel {
         vault.autoLockMinutes = settings.autoLockMinutes
         intelligence.isEnabled = settings.intelligenceEnabled
         clipboard.maxEntries = settings.clipboardLimit
-        clipboard.persistBetweenLaunches = settings.clipboardPersists
         clipboard.isEnabled = settings.clipboardHistoryEnabled
+        // Persistence is only meaningful while history is being kept at all: keeping a
+        // file that nothing is allowed to add to is just an old log left lying around.
+        clipboard.applyPersistence(settings.clipboardHistoryEnabled && settings.clipboardPersists)
         if settings.clipboardHistoryEnabled { clipboard.start() } else { clipboard.stop() }
     }
 
@@ -1171,11 +1173,13 @@ public final class AppModel {
         }
     }
 
+    /// The Settings button. Deliberately the same call as everywhere else.
+    ///
+    /// This used to be its own three lines, which drifted: it dropped the key but left
+    /// the decrypted scratch copies on disk and the decoded thumbnails in memory. The
+    /// one lock a person asks for explicitly was the one that protected least.
     public func lockVaultNow() {
-        vault.lock()
-        store.refresh()
-        runSearch()
-        show(Toast(text: "Locked", symbol: "lock.fill", tone: .neutral))
+        lockVault()
     }
 
 
@@ -1215,7 +1219,9 @@ public final class AppModel {
 
     public func quickSaveSelection() {
         Task {
-            let capture = SelectionCapture(inserter: inserter)
+            let capture = SelectionCapture(inserter: inserter) { [weak self] in
+                self?.clipboard.ignoreNextChange()
+            }
             let selection = await capture.capture()
             let created = await importer.importSelection(selection)
             runSearch()

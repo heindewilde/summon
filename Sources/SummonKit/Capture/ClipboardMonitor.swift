@@ -40,7 +40,7 @@ public final class ClipboardMonitor {
 
     public private(set) var entries: [Entry] = []
     public var isEnabled: Bool = true { didSet { isEnabled ? start() : stop() } }
-    public var persistBetweenLaunches: Bool = false
+    public private(set) var persistBetweenLaunches: Bool = false
     public var maxEntries: Int = 40
 
     /// Apps whose copies are never recorded. Password managers are excluded by their
@@ -66,7 +66,27 @@ public final class ClipboardMonitor {
 
     public init(paths: LibraryPaths) {
         self.paths = paths
-        loadIfPersisted()
+        // Nothing is read from disk here. History used to be loaded unconditionally in
+        // `init`, before any setting had been applied, so a history captured while
+        // persistence was on came back at every later launch — including launches with
+        // persistence off, and with clipboard history switched off altogether.
+        // `applyPersistence` is now the only thing that touches the file.
+    }
+
+    /// Applies the setting, and makes the disk agree with it.
+    ///
+    /// Turning persistence off deletes the file rather than merely stopping writes to
+    /// it. "Off" has to mean the log is gone, or the promise in Settings — that a
+    /// clipboard log surviving reboots is not something switched on for you — only
+    /// holds for people who never switched it on in the first place.
+    public func applyPersistence(_ enabled: Bool) {
+        persistBetweenLaunches = enabled
+        if enabled {
+            loadPersistedHistory()
+            persistIfNeeded()
+        } else {
+            discardPersistedHistory()
+        }
     }
 
     public func start() {
@@ -178,7 +198,12 @@ public final class ClipboardMonitor {
         }
     }
 
-    private func loadIfPersisted() {
+    private func discardPersistedHistory() {
+        try? FileManager.default.removeItem(at: historyURL)
+    }
+
+    private func loadPersistedHistory() {
+        guard entries.isEmpty else { return }
         guard let data = try? Data(contentsOf: historyURL),
               let stored = try? JSONDecoder().decode([StoredEntry].self, from: data) else { return }
         entries = stored.map {

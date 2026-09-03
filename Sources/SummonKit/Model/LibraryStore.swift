@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import Observation
+import SQLite3
 import SwiftData
 import UniformTypeIdentifiers
 
@@ -400,9 +401,31 @@ public final class LibraryStore {
         item.sortIndex = (folder?.items ?? []).map(\.sortIndex).max().map { $0 + 1 } ?? 0
         item.updatedAt = Date()
         // Moving into or out of a sensitive folder changes how the bytes must be stored.
-        reconcileSensitivity(item, wasSensitive: wasSensitive)
+        reconcileAfterMove(item, wasSensitive: wasSensitive, revertTo: origin,
+                           while: "Moving “\(item.title)”")
         renumberItems(in: origin)
         save(); refresh()
+    }
+
+    /// Reconciles after a move, and puts the item back if its bytes could not follow.
+    ///
+    /// A move into a sensitive folder *is* a seal. Leaving the item there when the
+    /// seal failed would show a lock on something whose bytes are still plaintext,
+    /// so the move is undone instead — a drag that visibly springs back, with a toast
+    /// saying why, rather than a silent lie about what is protected.
+    private func reconcileAfterMove(
+        _ item: SummonItem,
+        wasSensitive: Bool,
+        revertTo origin: SummonFolder?,
+        while action: String
+    ) {
+        do {
+            try reconcileSensitivity(item, wasSensitive: wasSensitive)
+        } catch {
+            item.folder = origin
+            item.sortIndex = nextSortIndex(in: origin)
+            report(error, while: action)
+        }
     }
 
     /// Places `item` immediately before or after `sibling`, adopting its folder.
@@ -427,7 +450,8 @@ public final class LibraryStore {
 
         if movedFolder {
             item.updatedAt = Date()
-            reconcileSensitivity(item, wasSensitive: wasSensitive)
+            reconcileAfterMove(item, wasSensitive: wasSensitive, revertTo: origin,
+                               while: "Moving “\(item.title)”")
             renumberItems(in: origin)
         }
         save(); refresh()
@@ -467,7 +491,7 @@ public final class LibraryStore {
         for item in allItems() where item.isSensitive || item.sealedBody != nil || item.blobSealed {
             try setSensitive(item, false)
         }
-        save(); refresh()
+        save(); compactStore(); refresh()
         return affected
     }
 
@@ -478,8 +502,8 @@ public final class LibraryStore {
         let wasSensitive = item.isEffectivelySensitive
         item.isSensitive = sensitive
         item.updatedAt = Date()
-        reconcileSensitivity(item, wasSensitive: wasSensitive)
-        save(); refresh()
+        try reconcileSensitivity(item, wasSensitive: wasSensitive)
+        save(); compactStore(); refresh()
     }
 
     public func setFolderSensitive(_ folder: SummonFolder, _ sensitive: Bool) throws {
@@ -488,37 +512,47 @@ public final class LibraryStore {
         let before = affected.map { $0.isEffectivelySensitive }
         folder.isSensitive = sensitive
         for (item, was) in zip(affected, before) {
-            reconcileSensitivity(item, wasSensitive: was)
+            try reconcileSensitivity(item, wasSensitive: was)
         }
-        save(); refresh()
+        save(); compactStore(); refresh()
     }
 
     /// Brings an item's stored bytes in line with whether it is now sensitive.
-    private func reconcileSensitivity(_ item: SummonItem, wasSensitive: Bool) {
+    ///
+    /// Throwing, and every step inside it throwing, because the failures here are the
+    /// dangerous kind. `try?` on the blob meant a failed `files.seal` left the item
+    /// marked sensitive with `blobSealed` false and its plaintext still in `Blobs/` —
+    /// a lock in the UI and none on disk. `try?` on the body was worse: the plaintext
+    /// was already cleared by then, so a failed seal destroyed the content outright.
+    ///
+    /// Nothing is cleared until the sealed replacement exists.
+    private func reconcileSensitivity(_ item: SummonItem, wasSensitive: Bool) throws {
         let isNow = item.isEffectivelySensitive
-        guard isNow != wasSensitive, let key = vault.currentKey else { return }
+        guard isNow != wasSensitive else { return }
+        guard let key = vault.currentKey else { throw VaultError.locked }
 
         if isNow {
             if let plain = item.bodyText ?? item.bodyRTF.map({ String(decoding: $0, as: UTF8.self) }) {
                 let payload = item.bodyRTF ?? Data(plain.utf8)
-                item.sealedBody = try? key.seal(payload, itemID: item.id)
+                item.sealedBody = try key.seal(payload, itemID: item.id)
                 item.bodyText = nil
                 item.bodyRTF = nil
             }
             if let extracted = item.extractedText {
-                item.sealedExtractedText = try? key.seal(extracted, itemID: item.id)
+                item.sealedExtractedText = try key.seal(extracted, itemID: item.id)
                 item.extractedText = nil
             }
             if let summary = item.summary {
-                item.sealedSummary = try? key.seal(summary, itemID: item.id)
+                item.sealedSummary = try key.seal(summary, itemID: item.id)
                 item.summary = nil
             }
-            if let blob = item.storedBlob, let sealed = try? files.seal(blob, itemID: item.id, key: key) {
-                item.apply(sealed)
+            if let blob = item.storedBlob {
+                item.apply(try files.seal(blob, itemID: item.id, key: key))
             }
             files.deleteThumbnail(itemID: item.id)
         } else {
-            if let sealed = item.sealedBody, let data = try? key.open(sealed, itemID: item.id) {
+            if let sealed = item.sealedBody {
+                let data = try key.open(sealed, itemID: item.id)
                 if item.kind == .richText {
                     item.bodyRTF = data
                     item.bodyText = LibraryStore.plainText(fromRTF: data)
@@ -528,16 +562,49 @@ public final class LibraryStore {
                 item.sealedBody = nil
             }
             if let sealed = item.sealedExtractedText {
-                item.extractedText = try? key.openText(sealed, itemID: item.id)
+                item.extractedText = try key.openText(sealed, itemID: item.id)
                 item.sealedExtractedText = nil
             }
             if let sealed = item.sealedSummary {
-                item.summary = try? key.openText(sealed, itemID: item.id)
+                item.summary = try key.openText(sealed, itemID: item.id)
                 item.sealedSummary = nil
             }
-            if let blob = item.storedBlob, let plain = try? files.unseal(blob, itemID: item.id, key: key) {
-                item.apply(plain)
+            if let blob = item.storedBlob {
+                item.apply(try files.unseal(blob, itemID: item.id, key: key))
             }
+        }
+    }
+
+    /// Rebuilds the store file so the pages a seal freed are actually gone.
+    ///
+    /// SQLite does not zero what it frees. Nilling `bodyText` when an item is sealed
+    /// leaves that plaintext sitting in the database's free list, where a plain
+    /// `strings Library.store` finds it — and marking something sensitive is exactly
+    /// the moment a person believes they have just protected it. So the transition is
+    /// the one that has to scrub, not some later tidy-up.
+    ///
+    /// VACUUM rather than `PRAGMA secure_delete`: that pragma applies to a connection,
+    /// and SwiftData does not hand out the connection doing the writing, so it could
+    /// never be set on the one that matters. VACUUM rebuilds the file and drops the
+    /// free list wholesale, which needs no cooperation from SwiftData at all.
+    ///
+    /// Best-effort by design. Failing to compact loses no data and breaks nothing —
+    /// it only leaves the residue — so it warns rather than throwing into a save path.
+    public func compactStore() {
+        var handle: OpaquePointer?
+        guard sqlite3_open(paths.storeURL.path, &handle) == SQLITE_OK, let handle else {
+            if handle != nil { sqlite3_close(handle) }
+            Log.store.warning("Could not open the store to compact it.")
+            return
+        }
+        defer { sqlite3_close(handle) }
+
+        // Checkpointed first: under WAL the freed pages can still be in the log, and
+        // vacuuming the main file alone would leave them there.
+        sqlite3_exec(handle, "PRAGMA wal_checkpoint(TRUNCATE)", nil, nil, nil)
+        if sqlite3_exec(handle, "VACUUM", nil, nil, nil) != SQLITE_OK {
+            let message = String(cString: sqlite3_errmsg(handle))
+            Log.store.warning("Could not compact the store: \(message, privacy: .public)")
         }
     }
 

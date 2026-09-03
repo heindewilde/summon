@@ -522,3 +522,69 @@ struct PassphraseTests {
         #expect(vault.secretKind == .passphrase)
     }
 }
+
+@Suite("Sealing leaves nothing behind")
+@MainActor
+struct SealResidueTests {
+
+    /// The transition is the dangerous moment: the item was legitimately plaintext,
+    /// and SQLite does not zero the pages it frees when that plaintext is nilled.
+    @Test("Plaintext is gone from the store file after an item is sealed")
+    func sealingScrubsTheStoreFile() throws {
+        let paths = LibraryPaths.temporary()
+        defer { paths.destroy() }
+        let vault = Vault(paths: paths)
+        let store = try LibraryStore(paths: paths, vault: vault)
+        try vault.setUpPIN("1379")
+
+        // Distinctive enough that finding it in the file cannot be a coincidence.
+        let secret = "ZmarkerQ Passport NLD1234567 ZmarkerQ"
+        let item = store.createSnippet(title: "Passport", body: secret)
+        store.save()
+
+        // Present while it is an ordinary item — otherwise the test proves nothing.
+        #expect(try fileContains(paths.storeURL, secret))
+
+        try store.setSensitive(item, true)
+        #expect(item.sealedBody != nil)
+        #expect(item.bodyText == nil)
+        #expect(try !fileContains(paths.storeURL, secret))
+    }
+
+    @Test("Turning protection off and on again leaves no earlier copy")
+    func repeatedTransitionsScrub() throws {
+        let paths = LibraryPaths.temporary()
+        defer { paths.destroy() }
+        let vault = Vault(paths: paths)
+        let store = try LibraryStore(paths: paths, vault: vault)
+        try vault.setUpPIN("1379")
+
+        let secret = "ZmarkerR IBAN NL00 BANK 0123 ZmarkerR"
+        let item = store.createSnippet(title: "Bank", body: secret, sensitive: true)
+        store.save()
+        #expect(try !fileContains(paths.storeURL, secret))
+
+        // Decrypted back to plaintext on purpose, then sealed again.
+        _ = try store.clearAllSensitivity()
+        #expect(try fileContains(paths.storeURL, secret))
+
+        try vault.setUpPIN("1379")
+        try store.setSensitive(item, true)
+        #expect(try !fileContains(paths.storeURL, secret))
+    }
+
+    /// Scans the store and both its SQLite sidecars for the bytes.
+    ///
+    /// The WAL matters as much as the main file: a fresh write lands in
+    /// `Library.store-wal` first, so checking only `Library.store` would report a
+    /// scrub that had not happened and pass whatever we did.
+    private func fileContains(_ storeURL: URL, _ needle: String) throws -> Bool {
+        let bytes = Data(needle.utf8)
+        guard !bytes.isEmpty else { return false }
+        for path in [storeURL.path, storeURL.path + "-wal", storeURL.path + "-shm"] {
+            guard let haystack = try? Data(contentsOf: URL(fileURLWithPath: path)) else { continue }
+            if haystack.range(of: bytes) != nil { return true }
+        }
+        return false
+    }
+}

@@ -44,9 +44,13 @@ openssl req -x509 -newkey rsa:2048 -sha256 -days 3650 -nodes \
 echo "==> Importing into the login keychain"
 # Key and certificate are imported separately. A PKCS#12 bundle from OpenSSL 3
 # uses a MAC algorithm the macOS Security framework refuses to read.
-# -A lets codesign use the key without prompting on every build.
-security import "$WORK/key.pem" -k "$KEYCHAIN" -A -T /usr/bin/codesign
-security import "$WORK/cert.pem" -k "$KEYCHAIN" -A -T /usr/bin/codesign
+#
+# `-T /usr/bin/codesign` is what stops the password prompt on every build. There is
+# no `-A` here on purpose: `-A` authorises *every* application on the Mac to use this
+# private key with no prompt, and since the certificate below is trusted for code
+# signing, that would let anything running as you sign code this Mac then trusts.
+security import "$WORK/key.pem" -k "$KEYCHAIN" -T /usr/bin/codesign
+security import "$WORK/cert.pem" -k "$KEYCHAIN" -T /usr/bin/codesign
 
 echo "==> Trusting it for code signing (macOS will ask for your password)"
 security add-trusted-cert -r trustRoot -p codeSign -k "$KEYCHAIN" "$WORK/cert.pem"

@@ -127,21 +127,45 @@ printf 'APPL????' > "$CONTENTS/PkgInfo"
 # with a certificate keeps the grant across rebuilds.
 # Create one with Scripts/create-signing-identity.sh.
 SIGN_IDENTITY="${SUMMON_SIGN_IDENTITY:-Summon Local Dev}"
+
+# `-o runtime` is not optional for this app. Without the Hardened Runtime there is
+# no library validation and no restriction on task_for_pid, so any process running
+# as the same user can attach a debugger and read the vault's master key straight
+# out of memory while it is unlocked — which walks past the PIN entirely. It is also
+# required for notarisation, so it has to be here before this ships anywhere.
+#
+# `--deep` is deliberately absent: Apple deprecated it, and there is no nested code
+# in this bundle for it to reach.
+sign() {
+  codesign --force --options runtime --timestamp=none --sign "$1" \
+    --entitlements "$DIST/Summon.entitlements" \
+    --identifier "$BUNDLE_ID" \
+    "$APP"
+}
+
 if security find-identity -v -p codesigning 2>/dev/null | grep -q "\"$SIGN_IDENTITY\""; then
-  echo "==> Signing as '$SIGN_IDENTITY'"
-  codesign --force --deep --sign "$SIGN_IDENTITY" \
-    --entitlements "$DIST/Summon.entitlements" \
-    --identifier "$BUNDLE_ID" \
-    "$APP"
+  echo "==> Signing as '$SIGN_IDENTITY' (hardened runtime)"
+  sign "$SIGN_IDENTITY"
 else
-  echo "==> Signing (ad-hoc — Accessibility will need re-granting after each build)"
+  echo "==> Signing (ad-hoc, hardened runtime — Accessibility needs re-granting each build)"
   echo "    Run Scripts/create-signing-identity.sh once to avoid that."
-  codesign --force --deep --sign - \
-    --entitlements "$DIST/Summon.entitlements" \
-    --identifier "$BUNDLE_ID" \
-    "$APP"
+  sign -
 fi
 codesign --verify --verbose=1 "$APP" 2>&1 | sed 's/^/    /'
+
+# Asserted rather than assumed: a signature without the runtime flag looks fine to
+# --verify, and the whole point of the flag is that nothing visibly breaks without it.
+#
+# Captured to a variable rather than piped into `grep -q`: under `pipefail` grep
+# exits on the first match, codesign takes SIGPIPE, and the pipeline reports failure
+# on success — which is exactly the false alarm this check exists to avoid.
+SIGNATURE="$(codesign --display --verbose=2 "$APP" 2>&1)"
+if [[ "$SIGNATURE" == *"(runtime)"* ]]; then
+  echo "    hardened runtime: on"
+else
+  echo "    ERROR: hardened runtime flag is missing from the signature" >&2
+  exit 1
+fi
 
 # Nudge Launch Services so the new bundle is registered.
 /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister \

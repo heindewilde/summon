@@ -26,7 +26,7 @@ public struct FillFieldsPane: View {
         HStack(spacing: 0) {
             fields
                 .frame(width: PanelView.width * 0.55)
-            Divider().overlay(Theme.hairline)
+            Rule()
             preview
         }
         .onAppear(perform: load)
@@ -39,13 +39,13 @@ public struct FillFieldsPane: View {
                     Image(systemName: "square.dashed.inset.filled")
                         .foregroundStyle(Theme.primaryText)
                     Text(snapshot?.title ?? "Fill in")
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(Theme.Typography.title.weight(.semibold))
                 }
 
                 ForEach(template?.fields ?? [], id: \.name) { field in
                     VStack(alignment: .leading, spacing: Theme.Space.xxs) {
                         Text(field.label)
-                            .font(.system(size: 10.5, weight: .medium))
+                            .font(Theme.Typography.micro.weight(.medium))
                             .foregroundStyle(Theme.secondaryText)
                         TextField(
                             field.defaultValue ?? "",
@@ -55,22 +55,24 @@ public struct FillFieldsPane: View {
                             )
                         )
                         .textFieldStyle(.plain)
-                        .font(.system(size: 13))
-                        .padding(.horizontal, Theme.Space.s)
-                        .padding(.vertical, Theme.Space.xs)
-                        .cardBackground(radius: Theme.Radius.small, raised: true)
+                        .font(Theme.Typography.title)
+                        .summonField(focused: focusedField == field.name)
                         .focused($focusedField, equals: field.name)
                         .onSubmit(insert)
                     }
                 }
 
                 HStack(spacing: Theme.Space.xs) {
+                    // Were `.borderedProminent` tinted with `primaryText` and `.bordered`
+                    // — AppKit's capsules, with AppKit's hover chrome, sitting inside a
+                    // panel that draws everything else itself. The tint was a workaround
+                    // for the system accent being the only saturated colour available;
+                    // the app has its own now.
                     Button("Insert", action: insert)
-                        .buttonStyle(.borderedProminent)
-                        .tint(Theme.primaryText)
+                        .buttonStyle(.summonPrimary)
                         .keyboardShortcut(.defaultAction)
                     Button("Back") { model.mode = .search }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.summonQuiet)
                         .keyboardShortcut(.cancelAction)
                 }
                 .padding(.top, Theme.Space.xxs)
@@ -82,16 +84,13 @@ public struct FillFieldsPane: View {
     private var preview: some View {
         SnapshotSafeScrollView {
             Text(rendered)
-                .font(.system(size: 12))
+                .font(Theme.Typography.body)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(Theme.Space.m)
         }
         .overlay(alignment: .topTrailing) {
-            Text("PREVIEW")
-                .font(.system(size: 9, weight: .semibold))
-                .tracking(0.6)
-                .foregroundStyle(Theme.tertiaryText)
+            SectionHeader("Preview")
                 .padding(Theme.Space.xs)
         }
     }

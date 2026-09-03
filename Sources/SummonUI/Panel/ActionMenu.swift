@@ -18,7 +18,7 @@ public struct ActionMenu: View {
     public var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
-            Divider().overlay(Theme.hairline)
+            Rule()
 
             switch model.overlay {
             case .actions: actionList
@@ -29,22 +29,17 @@ public struct ActionMenu: View {
             }
         }
         .frame(width: Self.width)
-        .background(Theme.raised, in: .rect(cornerRadius: Theme.Radius.large, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous)
-                .strokeBorder(Theme.hairline, lineWidth: 1)
-        )
-        .shadow(color: .black.opacity(0.28), radius: 22, y: 8)
+        .cardBackground(radius: Theme.Radius.large, raised: true)
+        // Was a flat `.black.opacity(0.28)`, which is a dark-mode shadow being asked to
+        // work over a near-white ground as well.
+        .elevation(Theme.Elevation.popover)
         .padding(.trailing, Theme.Space.m)
         .padding(.bottom, 48)
     }
 
     private var header: some View {
         HStack(spacing: Theme.Space.s) {
-            Text(model.overlayTitle)
-                .font(Theme.Typography.section)
-                .foregroundStyle(Theme.tertiaryText)
-                .tracking(0.5)
+            SectionHeader(model.overlayTitle)
             Spacer()
             if let title = model.selectedResult?.item.title {
                 Text(title)
@@ -86,7 +81,7 @@ public struct ActionMenu: View {
                 .onAppear { scroll(proxy, to: model.actionSelectedIndex) }
             }
 
-            Divider().overlay(Theme.hairline)
+            Rule()
             searchField(placeholder: "Search actions…", text: $model.actionQuery)
         }
     }
@@ -99,9 +94,9 @@ public struct ActionMenu: View {
     private func actionRow(_ action: PanelActionID, isSelected: Bool) -> some View {
         HStack(spacing: Theme.Space.s) {
             Image(systemName: action.symbolName)
-                .font(.system(size: 12))
+                .font(Theme.Icon.regular)
                 .foregroundStyle(action.isDestructive ? Theme.danger : Theme.secondaryText)
-                .frame(width: 16)
+                .frame(width: Theme.Icon.slotCompact)
                 .accessibilityHidden(true)
 
             Text(action.title)
@@ -119,11 +114,8 @@ public struct ActionMenu: View {
             }
         }
         .padding(.horizontal, Theme.Space.s)
-        .frame(height: 32)
-        .background {
-            RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous)
-                .fill(isSelected ? Theme.selection : .clear)
-        }
+        .frame(height: Theme.rowMenu)
+        .rowSurface(isSelected ? .selected : .idle)
         .contentShape(.rect)
         .onTapGesture { model.run(action) }
         .accessibilityElement(children: .ignore)
@@ -138,7 +130,7 @@ public struct ActionMenu: View {
     private func promptField(_ kind: PromptKind) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             searchField(placeholder: kind.placeholder, text: $model.promptText)
-            Divider().overlay(Theme.hairline)
+            Rule()
             HStack {
                 KeyHint("↩", kind == .rename ? "Rename" : "Add")
                 Spacer()
@@ -159,9 +151,9 @@ public struct ActionMenu: View {
                     ForEach(Array(model.folderChoices.enumerated()), id: \.element.id) { index, choice in
                         HStack(spacing: Theme.Space.s) {
                             Image(systemName: choice.id == nil ? "tray" : "folder")
-                                .font(.system(size: 12))
+                                .font(Theme.Icon.regular)
                                 .foregroundStyle(Theme.secondaryText)
-                                .frame(width: 16)
+                                .frame(width: Theme.Icon.slotCompact)
                                 .accessibilityHidden(true)
                             Text(choice.label)
                                 .font(Theme.Typography.title)
@@ -170,11 +162,8 @@ public struct ActionMenu: View {
                             Spacer(minLength: 0)
                         }
                         .padding(.horizontal, Theme.Space.s)
-                        .frame(height: 32)
-                        .background {
-                            RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous)
-                                .fill(index == model.folderChoiceIndex ? Theme.selection : .clear)
-                        }
+                        .frame(height: Theme.rowMenu)
+                        .rowSurface(index == model.folderChoiceIndex ? .selected : .idle)
                         .contentShape(.rect)
                         .id(choice.id)
                         .onTapGesture {

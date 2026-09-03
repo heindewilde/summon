@@ -87,10 +87,9 @@ public struct SidebarView: View {
         // Also the top-level drop target: without somewhere to drop *outside* every
         // folder, a nested folder could be nested deeper but never dragged back out,
         // and a filed item could never be unfiled.
-        .background {
-            RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous)
-                .fill(rootTargeted ? Theme.selection : .clear)
-        }
+        // A drop target, so a ring — not `Theme.selection`, which would say this row is
+        // the one you are on. Same fix as the folder rows a few screens down.
+        .rowSurface(rootTargeted ? .dropTarget : .idle)
         .onDrop(of: SummonDragType.all,
                 delegate: RootFolderDropDelegate(model: model, isTargeted: $rootTargeted))
         .help("Drag a folder or an item here to take it out of its folder")

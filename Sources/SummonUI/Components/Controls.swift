@@ -84,15 +84,17 @@ public extension View {
 /// A hairline. `Divider()` paints the system separator, which is a different grey from
 /// this app's hairline — so most of the codebase wrote `Divider().overlay(Theme.hairline)`
 /// and thirteen places forgot, leaving two rule colours in one window.
+///
+/// Built *on* `Divider` rather than as a `Rectangle` of its own. The first version was a
+/// fixed 1pt-high rectangle, which silently turned the vertical rule between the fill
+/// pane and its preview into a horizontal one and let the preview column collapse.
+/// `Divider` takes its axis from the stack it is in, and thirty call sites already
+/// depend on that.
 public struct Rule: View {
-    public var axis: Axis = .horizontal
-    public init(_ axis: Axis = .horizontal) { self.axis = axis }
+    public init() {}
 
     public var body: some View {
-        Rectangle()
-            .fill(Theme.hairline)
-            .frame(width: axis == .vertical ? 1 : nil,
-                   height: axis == .horizontal ? 1 : nil)
+        Divider().overlay(Theme.hairline)
     }
 }
 

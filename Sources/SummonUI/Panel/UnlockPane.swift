@@ -19,18 +19,20 @@ public struct UnlockPane: View {
 
             ZStack {
                 Circle()
-                    .fill(Theme.selection)
+                    // `Theme.selection` until the accent landed, at which point the
+                    // unlock prompt started wearing the colour that means "you are here".
+                    .fill(Theme.surface)
                     .frame(width: 58, height: 58)
                 Image(systemName: "lock.fill")
-                    .font(.system(size: 22, weight: .medium))
+                    .font(Theme.Icon.hero.weight(.medium))
                     .foregroundStyle(Theme.secondaryText)
             }
 
             VStack(spacing: Theme.Space.xxs) {
                 Text(headline)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(Theme.Typography.heading.weight(.semibold))
                 Text(subhead)
-                    .font(.system(size: 11.5))
+                    .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.secondaryText)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 380)
@@ -43,10 +45,7 @@ public struct UnlockPane: View {
                         onComplete: { model.submitSecret() })
 
             if let error = model.secretError {
-                Label(error, systemImage: "exclamationmark.triangle.fill")
-                    .font(.system(size: 11))
-                    .foregroundStyle(Theme.danger)
-                    .labelStyle(.titleAndIcon)
+                StatusBadge(error, tone: .danger)
             }
 
             HStack(spacing: Theme.Space.xs) {
@@ -56,11 +55,11 @@ public struct UnlockPane: View {
                     } label: {
                         Label("Touch ID", systemImage: "touchid")
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.summonQuiet)
                 }
 
                 Button("Cancel") { model.mode = .search }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.summonQuiet)
                     .keyboardShortcut(.cancelAction)
             }
 

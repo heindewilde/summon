@@ -33,7 +33,7 @@ public struct PanelView: View {
     public var body: some View {
         VStack(spacing: 0) {
             header
-            Divider().overlay(Theme.hairline)
+            Rule()
 
             Group {
                 switch model.mode {
@@ -44,7 +44,7 @@ public struct PanelView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            Divider().overlay(Theme.hairline)
+            Rule()
             footer
         }
         .frame(width: Self.width, height: Self.height)
@@ -118,7 +118,7 @@ public struct PanelView: View {
     private var header: some View {
         HStack(spacing: Theme.Space.m) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 15, weight: .regular))
+                .font(Theme.Icon.large)
                 .foregroundStyle(Theme.tertiaryText)
                 .accessibilityHidden(true)
 
@@ -137,7 +137,7 @@ public struct PanelView: View {
                     .font(Theme.Typography.meta)
                     .foregroundStyle(Theme.secondaryText)
                     .padding(.horizontal, Theme.Space.s)
-                    .padding(.vertical, 3)
+                    .padding(.vertical, Theme.Space.xxs)
                     .background(Theme.surface, in: .capsule)
             }
 
@@ -161,7 +161,7 @@ public struct PanelView: View {
                 model.toggleLock()
             } label: {
                 Image(systemName: model.vault.isUnlocked ? "lock.open" : "lock.fill")
-                    .font(.system(size: 12))
+                    .font(Theme.Icon.regular)
                     .foregroundStyle(model.vault.isUnlocked ? Theme.tertiaryText : Theme.secondaryText)
             }
             .buttonStyle(.plain)
@@ -189,7 +189,7 @@ public struct PanelView: View {
                 .frame(maxWidth: showPreview ? Self.width * Self.listFraction : .infinity)
 
             if showPreview, let selected = model.selectedResult {
-                Divider().overlay(Theme.hairline)
+                Rule()
                 PanelPreview(
                     snapshot: selected.item,
                     bodyText: preview?.body,
@@ -248,10 +248,7 @@ public struct PanelView: View {
     }
 
     private func sectionHeader(_ title: String) -> some View {
-        Text(title.uppercased())
-            .font(Theme.Typography.section)
-            .foregroundStyle(Theme.tertiaryText)
-            .tracking(0.5)
+        SectionHeader(title)
             .padding(.horizontal, Theme.Space.m)
             .padding(.top, Theme.Space.m)
             .padding(.bottom, Theme.Space.xs)

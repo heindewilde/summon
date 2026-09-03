@@ -31,7 +31,7 @@ public struct PanelPreview: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
 
             if hasMetadata {
-                Divider().overlay(Theme.hairline)
+                Rule()
                 metadata
             }
         }

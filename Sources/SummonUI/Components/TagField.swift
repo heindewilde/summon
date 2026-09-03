@@ -283,7 +283,9 @@ private struct RemovableTagChip: View {
         .padding(.leading, Theme.Space.xs)
         .padding(.trailing, 3)
         .padding(.vertical, 2)
-        .background(hovering ? Theme.selection : Theme.hairline, in: .capsule)
+        // Hover, so the neutral hover fill. `Theme.selection` here meant a tag chip lit
+        // up in the accent whenever the pointer crossed it.
+        .background(hovering ? Theme.rowHover : Theme.hairline, in: .capsule)
         .onHover { hovering = $0 }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Tag \(name)")

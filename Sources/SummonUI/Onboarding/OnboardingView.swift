@@ -8,10 +8,10 @@ public struct OnboardingView: View {
     @Bindable var model: AppModel
     @Environment(\.dismiss) private var dismiss
 
-    @State private var step = 0
+    @State private var step: Int
     @State private var pin = ""
     @State private var pinConfirm = ""
-    @State private var secretKind: VaultSecretKind = .pin
+    @State private var secretKind: VaultSecretKind
     /// Derivation is slow on purpose and no longer blocks the main thread, so the
     /// Set button stays clickable while it runs. This is what stops a second press.
     @State private var settingUp = false
@@ -22,7 +22,13 @@ public struct OnboardingView: View {
 
     private let lastStep = 3
 
-    public init(model: AppModel) { self.model = model }
+    /// `initialKind` preselects the PIN/passphrase picker, for the same reason
+    /// `LockSheet` takes one: a still frame cannot click a segmented control.
+    public init(model: AppModel, initialKind: VaultSecretKind = .pin, initialStep: Int = 0) {
+        self.model = model
+        _secretKind = State(initialValue: initialKind)
+        _step = State(initialValue: initialStep)
+    }
 
     public var body: some View {
         VStack(spacing: 0) {

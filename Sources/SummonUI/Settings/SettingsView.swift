@@ -261,17 +261,19 @@ struct PrivacySettings: View {
             // What it actually protects, so the section is not an abstraction.
             LabeledContent("Protecting", value: protectedSummary)
 
-            LabeledContent("Unlocking with", value: unlockDescription)
-
             if model.vault.secretKind == .pin {
                 // Said plainly rather than left implied. Four digits is 10,000
                 // combinations, and the cooldown that makes that reasonable only
                 // applies to someone typing into this app — not to someone who has
                 // copied the library folder and can guess offline as fast as they like.
-                Text("""
+                //
+                // A `Label` rather than bare `Text`, matching the Touch ID note above:
+                // in a grouped form a bare Text sits outside the row inset and breaks
+                // the card it appears to be part of.
+                Label("""
                 A PIN is quick, and enough to stop someone who wanders past your Mac. \
                 A passphrase is what holds up if someone ever has a copy of your disk.
-                """)
+                """, systemImage: "key")
                     .font(.system(size: 11))
                     .foregroundStyle(Theme.secondaryText)
             }
@@ -283,14 +285,6 @@ struct PrivacySettings: View {
                 Button("Change \(model.vault.secretKind.displayName)…") { sheet = .change }
                 Button("Turn Off…", role: .destructive) { sheet = .turnOff }
             }
-        }
-    }
-
-    /// Names both the method and what changing it costs, which is nothing.
-    private var unlockDescription: String {
-        switch model.vault.secretKind {
-        case .pin: "A 4-digit PIN"
-        case .passphrase: "A passphrase"
         }
     }
 

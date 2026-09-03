@@ -51,7 +51,11 @@ public struct LockSheet: View {
 
     private enum Step { case current, choose, confirm, confirmRemoval }
 
+    /// `initialKind` preselects the picker. Nil follows the rule below, which is what
+    /// every real caller wants; naming one is for reviewing the other state as an
+    /// image, since a picker cannot be clicked in a still frame.
     public init(model: AppModel, purpose: Purpose = .create,
+                initialKind: VaultSecretKind? = nil,
                 dismiss: @escaping () -> Void = {}) {
         self.model = model
         self.purpose = purpose
@@ -68,7 +72,8 @@ public struct LockSheet: View {
         _step = State(initialValue: start)
         // Changing the secret keeps its kind unless the picker is used; creating one
         // starts at a PIN, which is what most people want and what the panel is for.
-        _newKind = State(initialValue: purpose == .create ? .pin : model.vault.secretKind)
+        _newKind = State(initialValue: initialKind
+                         ?? (purpose == .create ? .pin : model.vault.secretKind))
     }
 
     /// The kind being asked for at this step: the vault's own, except when choosing.

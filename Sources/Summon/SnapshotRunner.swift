@@ -81,6 +81,8 @@ enum SnapshotRunner {
 
             render(SettingsView(model: model), name: "settings", scheme: scheme,
                    size: CGSize(width: 560, height: 420))
+
+            await renderLockSurfaces(model: model, scheme: scheme)
         }
 
         print("Intelligence status: \(model.intelligence.status)")
@@ -90,6 +92,53 @@ enum SnapshotRunner {
         }
         print("Snapshots written to \(directory.path)")
         NSApp.terminate(nil)
+    }
+
+    /// Everything the PIN-or-passphrase work touched.
+    ///
+    /// Both kinds of every surface, because the whole point of the change is that
+    /// there are now two shapes of the same question and only one of them existed
+    /// before. The vault is reconfigured between renders rather than faked: the views
+    /// read `vault.secretKind`, so a fake would review the wrong thing.
+    private static func renderLockSurfaces(model: AppModel, scheme: Appearance) async {
+        let sheetSize = CGSize(width: 400, height: 400)
+        let panelSize = CGSize(width: PanelView.width, height: PanelView.height)
+
+        // The setup sheet, in both shapes. `.create` opens on the choose step, which
+        // is the one that now carries the picker.
+        render(LockSheet(model: model, purpose: .create, initialKind: .pin),
+               name: "lock-sheet-pin", scheme: scheme, size: sheetSize)
+        render(LockSheet(model: model, purpose: .create, initialKind: .passphrase),
+               name: "lock-sheet-passphrase", scheme: scheme, size: sheetSize)
+
+        // Onboarding's row grows when the fields do, which is the layout most likely
+        // to be wrong — two 170pt fields where there were two 110pt ones.
+        render(OnboardingView(model: model, initialKind: .passphrase),
+               name: "onboarding-passphrase", scheme: scheme,
+               size: CGSize(width: 620, height: 470))
+
+        for kind in VaultSecretKind.allCases {
+            try? model.vault.removePIN()
+            let secret = kind == .pin ? "1379" : "correct horse battery"
+            try? await model.vault.setUpSecret(secret, kind: kind)
+            model.vault.lock()
+            model.store.refresh()
+            model.runSearch()
+
+            model.mode = .unlock(pendingItemID: nil)
+            render(PanelView(model: model), name: "panel-unlock-\(kind.rawValue)",
+                   scheme: scheme, size: panelSize)
+            model.mode = .search
+
+            render(SettingsView(model: model, tab: .privacy),
+                   name: "settings-lock-\(kind.rawValue)", scheme: scheme,
+                   size: CGSize(width: 560, height: 520))
+        }
+
+        // Left as it was found, so a later render in this run is not reading a vault
+        // this one happened to configure.
+        try? model.vault.removePIN()
+        model.store.refresh()
     }
 
     enum Appearance: String {

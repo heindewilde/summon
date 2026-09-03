@@ -109,11 +109,32 @@ enum LiveCapture {
                 size: CGSize(width: 330, height: 520)
             )
 
+        case "locksheet":
+            // The sheet's picker and the passphrase field are both AppKit-backed, so
+            // `ImageRenderer` draws them as an unavailable placeholder. They can only
+            // be reviewed in a real window.
+            let sheetKind = VaultSecretKind(rawValue: environment2["SUMMON_LIVE_SECRET"] ?? "")
+            window = present(
+                LockSheet(model: model, purpose: .create, initialKind: sheetKind ?? .pin)
+                    .background(Theme.chrome),
+                size: CGSize(width: 400, height: 420)
+            )
+
+        case "onboarding":
+            let onboardingKind = VaultSecretKind(rawValue: environment2["SUMMON_LIVE_SECRET"] ?? "")
+            // Step 2 is the privacy card, the one holding the lock fields.
+            let step = Int(environment2["SUMMON_LIVE_STEP"] ?? "") ?? 0
+            let view = OnboardingView(model: model, initialKind: onboardingKind ?? .pin,
+                                      initialStep: step)
+            window = present(view, size: CGSize(width: 620, height: 480))
+
         case "settings":
             // A PIN can be configured first, so the section that only exists once one
             // is set can actually be looked at.
             if environment2["SUMMON_LIVE_PIN"] == "1", !model.vault.isConfigured {
-                try? await model.vault.setUpPIN("1379")
+                let kind = VaultSecretKind(rawValue: environment2["SUMMON_LIVE_SECRET"] ?? "") ?? .pin
+                try? await model.vault.setUpSecret(
+                    kind == .pin ? "1379" : "correct horse battery", kind: kind)
             }
             let tab = SettingsView.Tab(rawValue: environment2["SUMMON_LIVE_TAB"] ?? "") ?? .general
             window = present(SettingsView(model: model, tab: tab),

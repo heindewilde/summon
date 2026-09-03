@@ -58,6 +58,20 @@ enum LiveCapture {
             if let row = environment["SUMMON_LIVE_SELECT"], let index = Int(row) {
                 model.selectedIndex = min(index, max(0, model.results.count - 1))
             }
+            // SUMMON_LIVE_SECRET puts the panel in its unlock state with a vault of
+            // that kind. Set after the query, before the panel is shown, so the mode
+            // is already right when the pane first lays out.
+            if let kind = VaultSecretKind(rawValue: environment["SUMMON_LIVE_SECRET"] ?? "") {
+                if !model.vault.isConfigured {
+                    try? await model.vault.setUpSecret(
+                        kind == .pin ? "1379" : "correct horse battery", kind: kind)
+                }
+                model.vault.lock()
+                model.store.refresh()
+                model.runSearch()
+                model.mode = .unlock(pendingItemID: nil)
+            }
+
             model.isPanelVisible = true
             // After isPanelVisible: openActionMenu() resolves its target through
             // actionTarget, which returns nil while the panel is not up.

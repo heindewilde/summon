@@ -684,6 +684,36 @@ enum SelfTest {
             info("sidebar rows (after a change)", String(format: "%.2f ms", cold))
         }
 
+        // MARK: The unlock pane takes focus, in both shapes
+        //
+        // A screenshot cannot answer this. An AppKit focus ring only draws while the
+        // window is key, so a passphrase field that never took focus and one that did
+        // look identical in a still frame — and a field nobody can type into is a
+        // vault nobody can open.
+        for kind in VaultSecretKind.allCases {
+            model.removeVaultProtection()
+            let secret = kind == .pin ? "1379" : "correct horse battery"
+            try? await model.vault.setUpSecret(secret, kind: kind)
+            model.vault.lock()
+
+            NSApp.activate()
+            model.summon()
+            model.mode = .unlock(pendingItemID: nil)
+            // The field focuses itself a beat after appearing, on purpose: a panel is
+            // not in the responder chain on its first pass.
+            try? await Task.sleep(for: .milliseconds(600))
+
+            let responder = controller.debugPanel?.firstResponder
+            let editing = responder is NSTextView
+            check("The \(kind.noun) field takes focus in the panel", editing,
+                  detail: "first responder: \(responder.map { "\(type(of: $0))" } ?? "none")")
+
+            model.mode = .search
+            model.dismissPanel()
+            try? await Task.sleep(for: .milliseconds(200))
+        }
+        model.removeVaultProtection()
+
         check("Panel hides on dismiss", !controller.isVisible)
 
         print("=== \(checks - failures)/\(checks) checks passed ===\n")

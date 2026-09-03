@@ -22,7 +22,7 @@ public struct HotKeyRecorder: View {
         } label: {
             HStack(spacing: Theme.Space.xs) {
                 Image(systemName: recording ? "record.circle" : "keyboard")
-                    .font(.system(size: 11))
+                    .font(Theme.Icon.small)
                     .foregroundStyle(recording ? Theme.danger : Theme.secondaryText)
                 Text(recording ? "Press keys…" : combo.displayString)
                     .font(.system(size: 12, weight: .medium, design: recording ? .default : .rounded))

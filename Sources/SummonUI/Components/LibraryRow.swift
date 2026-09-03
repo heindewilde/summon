@@ -18,6 +18,16 @@ public struct LibraryRow: View {
     /// flag, because the flag let a caller hand hover in as selection — which the menu
     /// bar did, invisibly, until selection started meaning something.
     public var state: RowState = .idle
+    /// How much room the row takes. The panel stays dense because it is a launcher
+    /// and fitting results on screen is its job; the library window is a place you
+    /// sit, so it gets air and a larger title.
+    public var density: Density = .compact
+
+    public enum Density: Sendable {
+        case compact, roomy
+        var height: CGFloat { self == .compact ? Theme.rowHeight : Theme.rowRoomy }
+        var title: Font { self == .compact ? Theme.Typography.title : Theme.Typography.heading }
+    }
     /// The ⌘-number, when this surface binds one. Nil draws nothing — a badge with
     /// no handler behind it is a promise the app does not keep.
     public var shortcutIndex: Int?
@@ -29,12 +39,14 @@ public struct LibraryRow: View {
     public init(item: ItemSnapshot,
                 titlePositions: [Int] = [],
                 state: RowState = .idle,
+                density: Density = .compact,
                 shortcutIndex: Int? = nil,
                 trailingText: String? = nil,
                 onCopy: (() -> Void)? = nil) {
         self.item = item
         self.titlePositions = titlePositions
         self.state = state
+        self.density = density
         self.shortcutIndex = shortcutIndex
         self.trailingText = trailingText
         self.onCopy = onCopy
@@ -61,7 +73,7 @@ public struct LibraryRow: View {
         HStack(spacing: Theme.Space.s) {
             KindGlyph(kind: item.kind, isLocked: item.isLocked)
 
-            HighlightedTitle(text: item.title, positions: titlePositions)
+            HighlightedTitle(text: item.title, positions: titlePositions, font: density.title)
                 .layoutPriority(2)
 
             if item.isPinned {
@@ -131,7 +143,7 @@ public struct LibraryRow: View {
             }
         }
         .padding(.horizontal, Theme.Space.m)
-        .frame(height: Theme.rowHeight)
+        .frame(height: density.height)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         .onHover { hovering = $0 }
         .rowSurface(resolved)

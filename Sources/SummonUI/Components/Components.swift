@@ -122,7 +122,7 @@ public struct HighlightedTitle: View {
             guard !buffer.isEmpty else { return }
             var run = AttributedString(buffer)
             run.foregroundColor = bufferMatched ? Theme.primaryText : Theme.secondaryText
-            run.font = bufferMatched ? Theme.Typography.titleMatch : Theme.Typography.title
+            run.font = bufferMatched ? font.weight(.semibold) : font
             result.append(run)
             buffer = ""
         }
@@ -172,13 +172,13 @@ public struct KeyHint: View {
     public var body: some View {
         HStack(spacing: Theme.Space.xxs) {
             Text(keys)
-                .font(.system(size: 10, weight: .semibold))
+                .font(Theme.Typography.micro.weight(.semibold))
                 .foregroundStyle(Theme.secondaryText)
                 .padding(.horizontal, 5)
                 .padding(.vertical, 1.5)
                 .background(Theme.hairline, in: .rect(cornerRadius: 4))
             Text(label)
-                .font(.system(size: 10.5))
+                .font(Theme.Typography.micro)
                 .foregroundStyle(Theme.tertiaryText)
         }
         .accessibilityElement(children: .combine)
@@ -193,14 +193,14 @@ public struct ToastView: View {
     public var body: some View {
         HStack(spacing: Theme.Space.s) {
             Image(systemName: toast.symbol)
-                .font(.system(size: 13, weight: .semibold))
+                .font(Theme.Icon.regular.weight(.semibold))
                 .foregroundStyle(tint)
             VStack(alignment: .leading, spacing: 1) {
                 Text(toast.text)
-                    .font(.system(size: 12.5, weight: .medium))
+                    .font(Theme.Typography.body.weight(.medium))
                 if let detail = toast.detail {
                     Text(detail)
-                        .font(.system(size: 11))
+                        .font(Theme.Typography.caption)
                         .foregroundStyle(Theme.secondaryText)
                 }
             }
@@ -246,13 +246,13 @@ public struct EmptyStateView: View {
     public var body: some View {
         VStack(spacing: Theme.Space.s) {
             Image(systemName: symbol)
-                .font(.system(size: 26, weight: .light))
+                .font(Theme.Icon.hero.weight(.light))
                 .foregroundStyle(Theme.primaryText.opacity(0.7))
                 .padding(.bottom, 2)
             Text(title)
-                .font(.system(size: 14, weight: .semibold))
+                .font(Theme.Typography.heading.weight(.semibold))
             Text(message)
-                .font(.system(size: 12))
+                .font(Theme.Typography.body)
                 .foregroundStyle(Theme.secondaryText)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 320)
@@ -320,8 +320,8 @@ public struct LockPill: View {
 
     public var body: some View {
         HStack(spacing: 3) {
-            Image(systemName: "lock.fill").font(.system(size: 8.5, weight: .bold))
-            Text(text).font(.system(size: 10, weight: .medium))
+            Image(systemName: "lock.fill").font(Theme.Icon.micro.weight(.bold))
+            Text(text).font(Theme.Icon.small.weight(.medium))
         }
         .foregroundStyle(Theme.secondaryText)
         .padding(.horizontal, 5)

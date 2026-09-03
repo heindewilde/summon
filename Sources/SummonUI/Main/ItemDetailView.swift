@@ -89,7 +89,7 @@ public struct ItemDetailView: View {
 
             TextField("Untitled", text: $title)
                 .textFieldStyle(.plain)
-                .font(.system(size: 15, weight: .semibold))
+                .font(Theme.Typography.heading.weight(.semibold))
                 .foregroundStyle(Theme.primaryText)
                 .focused($titleFocused)
                 .onSubmit(commit)
@@ -100,7 +100,7 @@ public struct ItemDetailView: View {
                 model.togglePin(itemID)
             } label: {
                 Image(systemName: snapshot?.isPinned == true ? "pin.fill" : "pin")
-                    .font(.system(size: 12))
+                    .font(Theme.Icon.regular)
                     .foregroundStyle(snapshot?.isPinned == true ? Theme.primaryText : Theme.tertiaryText)
             }
             .buttonStyle(.plain)
@@ -123,7 +123,7 @@ public struct ItemDetailView: View {
                 }
             } label: {
                 Image(systemName: "ellipsis")
-                    .font(.system(size: 12))
+                    .font(Theme.Icon.regular)
                     .foregroundStyle(Theme.tertiaryText)
             }
             .menuStyle(.borderlessButton)
@@ -151,7 +151,7 @@ public struct ItemDetailView: View {
                             .onChange(of: attributed) { _, _ in scheduleCommit() }
                     } else {
                         TextEditor(text: $body_)
-                            .font(.system(size: 13))
+                            .font(Theme.Typography.title)
                             .scrollContentBackground(.hidden)
                             .onChange(of: body_) { _, _ in scheduleCommit() }
                     }
@@ -219,7 +219,7 @@ public struct ItemDetailView: View {
     private var lockedNotice: some View {
         VStack(spacing: Theme.Space.s) {
             Image(systemName: "lock.fill")
-                .font(.system(size: 20))
+                .font(Theme.Icon.hero)
                 .foregroundStyle(Theme.tertiaryText)
             Text("Contents are encrypted")
                 .font(Theme.Typography.title)
@@ -273,10 +273,17 @@ public struct ItemDetailView: View {
 
     // MARK: - Properties
     //
-    // A real `Form`, so the label column, the row separators and the control sizing
-    // are Apple's rather than three numbers chosen by eye. It replaces a collapsing
-    // summary bar that wrapped onto three lines in a narrow pane and repeated what
-    // the preview above it was already showing.
+    // This once read "a real `Form`, so the label column, the row separators and the
+    // control sizing are Apple's rather than three numbers chosen by eye" — and the
+    // code had already walked half of that back, because a `Form` row aligns its label
+    // to the first text baseline and the tag well has none.
+    //
+    // What survives is the layout argument: one shared label column, each row centred,
+    // sizing that is not three numbers chosen by eye. What does not is the conclusion
+    // that the controls should look borrowed. The pane draws its own fields now, and
+    // the pop-up and the switch stay Apple's because a hand-built one loses keyboard
+    // traversal and VoiceOver for nothing — they simply wear the app's accent, which
+    // was not available to them when this was written.
 
     private var properties: some View {
         // A `Grid`, not a `Form`. A form row aligns its label to the *first text
@@ -319,7 +326,8 @@ public struct ItemDetailView: View {
                 label("Notes")
                 TextField("", text: $notes,
                           prompt: Text("Anything worth remembering"), axis: .vertical)
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(.plain)
+                    .summonField()
                     .lineLimit(1...3)
                     .multilineTextAlignment(.leading)
                     .onSubmit(commit)
@@ -335,16 +343,16 @@ public struct ItemDetailView: View {
                     .labelsHidden()
                     .toggleStyle(.switch)
                     .controlSize(.small)
-                    // The system accent was the only saturated colour in the pane, on
-                    // the one control that is not trying to be noticed.
-                    .tint(Theme.primaryText)
+                    // Tinted `primaryText` while the system accent was the only
+                    // saturated colour on hand. The app has its own now.
+                    .tint(Theme.accent)
                     .disabled(inheritsSensitivity)
 
                     // The switch says on or off; the padlock says what "on" means, in
                     // the glyph the sidebar and the panel already use for it.
                     if snapshot?.isSensitive == true {
                         Image(systemName: "lock.fill")
-                            .font(.system(size: 10))
+                            .font(Theme.Icon.small)
                             .foregroundStyle(Theme.tertiaryText)
                             .transition(.opacity)
                             .accessibilityLabel("Encrypted")

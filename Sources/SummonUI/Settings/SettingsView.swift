@@ -97,13 +97,13 @@ struct GeneralSettings: View {
     private var accessibilityStatus: some View {
         if Inserter.hasAccessibility {
             Label("Accessibility allowed — Summon can paste for you.", systemImage: "checkmark.circle.fill")
-                .font(.system(size: 11))
+                .font(Theme.Typography.caption)
                 .foregroundStyle(Theme.success)
         } else {
             HStack(alignment: .top) {
                 Label("Summon will copy instead of pasting until Accessibility is allowed.",
                       systemImage: "info.circle")
-                    .font(.system(size: 11))
+                    .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.secondaryText)
                 Spacer()
                 Button("Open Settings…") { Inserter.openAccessibilitySettings() }
@@ -137,7 +137,7 @@ struct LibrarySettings: View {
                 .disabled(!model.settings.clipboardHistoryEnabled)
 
                 Text("Copies marked concealed by the source app — password managers, mostly — are never recorded. Off by default between launches, because a clipboard log that survives reboots is not something to switch on for you.")
-                    .font(.system(size: 11))
+                    .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.secondaryText)
 
                 Button("Clear history now") { model.clipboard.clear() }
@@ -158,7 +158,7 @@ struct LibrarySettings: View {
                     .truncationMode(.middle)
                 }
                 Text("Files you add are copied here, so moving or deleting the originals later never breaks an item.")
-                    .font(.system(size: 11))
+                    .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.secondaryText)
             }
         }
@@ -186,7 +186,7 @@ struct PrivacySettings: View {
 
                 Summon never makes a network request. There are no accounts and no sync.
                 """)
-                .font(.system(size: 11))
+                .font(Theme.Typography.caption)
                 .foregroundStyle(Theme.secondaryText)
             }
         }
@@ -249,7 +249,7 @@ struct PrivacySettings: View {
                 can’t store a key behind the biometric sensor, so this Mac asks for \
                 your \(model.vault.secretKind.noun).
                 """, systemImage: "touchid")
-                    .font(.system(size: 11))
+                    .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.secondaryText)
             }
         }
@@ -271,7 +271,7 @@ struct PrivacySettings: View {
                 A PIN is quick, and enough to stop someone who wanders past your Mac. \
                 A passphrase is what holds up if someone ever has a copy of your disk.
                 """, systemImage: "key")
-                    .font(.system(size: 11))
+                    .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.secondaryText)
             }
 
@@ -294,7 +294,7 @@ struct PrivacySettings: View {
                 Button("Set a PIN or passphrase…") { sheet = .create }
             }
             Text("Nothing is encrypted until you set one. Marking an item or a folder sensitive will ask for it.")
-                .font(.system(size: 11))
+                .font(Theme.Typography.caption)
                 .foregroundStyle(Theme.secondaryText)
         }
     }
@@ -337,11 +337,11 @@ struct IntelligenceSettings: View {
                 SettingsRow("Status") {
                     Label(statusText, systemImage: statusSymbol)
                         .foregroundStyle(statusColor)
-                        .font(.system(size: 11.5))
+                        .font(Theme.Typography.caption)
                 }
 
                 Text(model.intelligence.status.explanation)
-                    .font(.system(size: 11))
+                    .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.secondaryText)
             }
 
@@ -351,7 +351,7 @@ struct IntelligenceSettings: View {
                     row("wand.and.sparkles", "Rewrites a snippet in a different register, from the item editor.")
                     row("doc.text.viewfinder", "Reads text out of images and PDFs with Vision, so their contents are searchable.")
                 }
-                .font(.system(size: 11.5))
+                .font(Theme.Typography.caption)
             }
 
             SettingsSection("Always true") {
@@ -360,7 +360,7 @@ struct IntelligenceSettings: View {
                 model, even locally. When the model is unavailable, Summon falls back to \
                 built-in rules — you lose the suggestions, not the feature.
                 """)
-                .font(.system(size: 11))
+                .font(Theme.Typography.caption)
                 .foregroundStyle(Theme.secondaryText)
             }
         }

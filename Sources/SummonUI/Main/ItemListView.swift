@@ -166,7 +166,7 @@ struct ItemRow: View {
     /// The row height `LibraryRow` draws, which the drop delegate needs in order to
     /// turn a pointer position into "above" or "below". Read from the token rather
     /// than retyped, so a density change cannot silently break drop hit-testing.
-    static let height: CGFloat = Theme.rowHeight
+    static let height: CGFloat = Theme.rowRoomy
 
     private var dropEdge: VerticalAlignment? {
         guard let target = model.itemDropTarget, target.itemID == item.id else { return nil }
@@ -178,6 +178,7 @@ struct ItemRow: View {
         // grown three heights and three type scales; now there is one component.
         LibraryRow(item: item,
                    state: model.mainSelection == item.id ? .selected : .idle,
+                   density: .roomy,
                    onCopy: { model.use(item.id, style: .copy) })
             .contentShape(.rect)
             // Double-click copies. Registered before the single tap so the single

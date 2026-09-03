@@ -33,8 +33,9 @@ public struct SecretField: View {
         case .passphrase:
             VStack(spacing: Theme.Space.xxs) {
                 SecureField("Passphrase", text: $secret)
-                    .textFieldStyle(.roundedBorder)
-                    .font(.system(size: 14))
+                    .textFieldStyle(.plain)
+                .summonField()
+                    .font(Theme.Typography.heading)
                     .focused($focused)
                     .frame(width: 260)
                     .onSubmit(onComplete)

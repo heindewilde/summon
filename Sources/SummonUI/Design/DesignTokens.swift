@@ -172,6 +172,9 @@ public enum Theme {
     public static let rowCompact: CGFloat = 26
     /// Action-menu and popover rows: between a list row and a sidebar row.
     public static let rowMenu: CGFloat = 32
+    /// The library's row. Roomier than the panel's on purpose: a launcher is passed
+    /// through and wants results on screen, a library is sat in and wants air.
+    public static let rowRoomy: CGFloat = 48
 
     // MARK: - Typography
     //

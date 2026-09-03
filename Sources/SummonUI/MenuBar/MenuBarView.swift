@@ -29,7 +29,7 @@ public struct MenuBarView: View {
     public var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
-            Divider().overlay(Theme.hairline)
+            Rule()
 
             SnapshotSafeScrollView {
                 VStack(alignment: .leading, spacing: Theme.Space.xs) {
@@ -53,20 +53,31 @@ public struct MenuBarView: View {
             .frame(maxHeight: 420)
             .fixedSize(horizontal: false, vertical: true)
 
-            Divider().overlay(Theme.hairline)
+            Rule()
             footer
         }
         .frame(width: 330)
+        // Its own ground, like every other surface. The popover opens directly beneath
+        // the mark in the menu bar and was the last place still showing the system's.
+        .background(GlassBackground(material: .popover, bloom: 1.0))
     }
 
     // MARK: - Header
 
     private var header: some View {
         HStack(spacing: Theme.Space.xs) {
-            Image(systemName: "sparkles")
-                .foregroundStyle(Theme.primaryText)
+            // The app's own mark. A sparkle stood here through every stage of this
+            // work, on the surface that opens directly under the spiral in the menu bar.
+            SummonMarkShape()
+                .fill(
+                    LinearGradient(colors: [Theme.Brand.violetBright, Theme.accent],
+                                   startPoint: .topLeading, endPoint: .bottomTrailing)
+                )
+                .frame(width: 14, height: 14)
+                .glow(Theme.accent, radius: 6, strength: 0.7)
+                .accessibilityHidden(true)
             Text("Summon")
-                .font(.system(size: 13, weight: .semibold))
+                .font(Theme.Typography.title.weight(.semibold))
 
             Spacer()
 
@@ -81,12 +92,7 @@ public struct MenuBarView: View {
                 .help(model.vault.isUnlocked ? "Lock sensitive items" : "Unlock sensitive items")
             }
 
-            Text(model.settings.summonHotKey.displayString)
-                .font(.system(size: 10.5, weight: .medium))
-                .foregroundStyle(Theme.secondaryText)
-                .padding(.horizontal, 5)
-                .padding(.vertical, 2)
-                .background(Theme.hairline, in: .rect(cornerRadius: 4))
+            KeyCap(model.settings.summonHotKey.displayString)
         }
         .padding(.horizontal, Theme.Space.s)
         .padding(.vertical, Theme.Space.xs + 1)
@@ -95,9 +101,9 @@ public struct MenuBarView: View {
     private var emptyHint: some View {
         VStack(alignment: .leading, spacing: Theme.Space.xxs) {
             Text("Nothing saved yet")
-                .font(.system(size: 12, weight: .medium))
+                .font(Theme.Typography.body.weight(.medium))
             Text("Copy something and press \(model.settings.quickSaveHotKey.displayString), or open Summon and drop files in.")
-                .font(.system(size: 11))
+                .font(Theme.Typography.caption)
                 .foregroundStyle(Theme.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -126,7 +132,7 @@ public struct MenuBarView: View {
                 Spacer()
                 Button("Clear") { model.clipboard.clear() }
                     .buttonStyle(.plain)
-                    .font(.system(size: 10))
+                    .font(Theme.Typography.micro)
                     .foregroundStyle(Theme.tertiaryText)
                     .padding(.trailing, Theme.Space.s)
             }
@@ -140,7 +146,7 @@ public struct MenuBarView: View {
 
     private func sectionHeader(_ title: String) -> some View {
         Text(title.uppercased())
-            .font(.system(size: 9.5, weight: .semibold))
+            .font(Theme.Typography.micro.weight(.semibold))
             .tracking(0.6)
             .foregroundStyle(Theme.tertiaryText)
             .padding(.horizontal, Theme.Space.s)
@@ -161,7 +167,7 @@ public struct MenuBarView: View {
             }
             MenuAction(title: "Library…", symbol: "square.grid.2x2", action: openMainWindow)
             MenuAction(title: "Settings…", symbol: "gearshape", shortcut: "⌘,", action: openSettings)
-            Divider().overlay(Theme.hairline).padding(.vertical, 2)
+            Rule().padding(.vertical, 2)
             MenuAction(title: "Quit Summon", symbol: "power", shortcut: "⌘Q") {
                 NSApp.terminate(nil)
             }
@@ -193,7 +199,7 @@ struct ClipboardRow: View {
         HStack(spacing: Theme.Space.xs) {
             KindBadge(kind: entry.kind, size: 20)
             Text(entry.preview)
-                .font(.system(size: 11.5))
+                .font(Theme.Typography.caption)
                 .lineLimit(1)
                 .truncationMode(.tail)
             Spacer(minLength: Theme.Space.xxs)
@@ -225,14 +231,14 @@ struct MenuAction: View {
         Button(action: action) {
             HStack(spacing: Theme.Space.xs) {
                 Image(systemName: symbol)
-                    .font(.system(size: 11))
+                    .font(Theme.Icon.small)
                     .frame(width: 16)
                     .foregroundStyle(Theme.secondaryText)
-                Text(title).font(.system(size: 12))
+                Text(title).font(Theme.Typography.body)
                 Spacer()
                 if let shortcut {
                     Text(shortcut)
-                        .font(.system(size: 10.5))
+                        .font(Theme.Typography.micro)
                         .foregroundStyle(Theme.tertiaryText)
                 }
             }

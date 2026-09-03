@@ -38,7 +38,7 @@ public struct FolderIconPicker: View {
             // magnifier and the inset well are what say "this is a field".
             HStack(spacing: Theme.Space.s) {
                 Image(systemName: "magnifyingglass")
-                    .font(.system(size: 12))
+                    .font(Theme.Icon.regular)
                     .foregroundStyle(Theme.tertiaryText)
                     .accessibilityHidden(true)
 
@@ -54,7 +54,7 @@ public struct FolderIconPicker: View {
                         searchFocused = true
                     } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 12))
+                            .font(Theme.Icon.regular)
                             .foregroundStyle(Theme.tertiaryText)
                     }
                     .buttonStyle(.plain)
@@ -120,7 +120,7 @@ public struct FolderIconPicker: View {
                         apply()
                     } label: {
                         Image(systemName: entry.name)
-                            .font(.system(size: 14))
+                            .font(Theme.Icon.large)
                             .foregroundStyle(entry.name == symbol
                                              ? Theme.folderColor(colour) : Theme.secondaryText)
                             .frame(width: 30, height: 26)

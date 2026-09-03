@@ -264,7 +264,7 @@ private struct RemovableTagChip: View {
     var body: some View {
         HStack(spacing: 2) {
             Text("#\(name)")
-                .font(.system(size: 10.5, weight: .medium))
+                .font(Theme.Typography.micro.weight(.medium))
                 .foregroundStyle(Theme.secondaryText)
             // Only the cross removes it — a chip that deletes itself on any click is
             // one slip away from losing a tag you meant to read. The hit area is

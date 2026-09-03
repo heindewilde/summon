@@ -87,13 +87,13 @@ public struct LockSheet: View {
     public var body: some View {
         VStack(spacing: Theme.Space.m) {
             Image(systemName: step == .confirmRemoval ? "lock.open" : "lock")
-                .font(.system(size: 26, weight: .light))
+                .font(Theme.Icon.hero.weight(.light))
                 .foregroundStyle(step == .confirmRemoval ? Theme.danger : Theme.secondaryText)
                 .padding(.top, Theme.Space.s)
 
             VStack(spacing: Theme.Space.xxs) {
                 Text(title)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(Theme.Typography.heading.weight(.semibold))
                     .foregroundStyle(Theme.primaryText)
                 Text(subtitle)
                     .font(Theme.Typography.meta)

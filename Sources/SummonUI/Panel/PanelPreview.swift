@@ -62,12 +62,12 @@ public struct PanelPreview: View {
     private var lockedState: some View {
         VStack(spacing: Theme.Space.s) {
             Image(systemName: "lock.fill")
-                .font(.system(size: 22, weight: .light))
+                .font(Theme.Icon.hero.weight(.light))
                 .foregroundStyle(Theme.secondaryText)
             Text("Contents are locked")
-                .font(.system(size: 12.5, weight: .medium))
+                .font(Theme.Typography.body.weight(.medium))
             Text("Press ↩ to unlock with Touch ID, a PIN or a passphrase.")
-                .font(.system(size: 11))
+                .font(Theme.Typography.caption)
                 .foregroundStyle(Theme.secondaryText)
                 .multilineTextAlignment(.center)
         }
@@ -105,7 +105,7 @@ public struct PanelPreview: View {
             } else if let text = bodyText ?? snapshot.summary, !text.isEmpty {
                 SnapshotSafeScrollView {
                     Text(text)
-                        .font(.system(size: 12))
+                        .font(Theme.Typography.body)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(Theme.Space.m)
                 }
@@ -122,7 +122,7 @@ public struct PanelPreview: View {
                     .resizable()
                     .frame(width: 64, height: 64)
                 Text(url.lastPathComponent)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(Theme.Typography.body.weight(.medium))
                     .lineLimit(2)
                     .multilineTextAlignment(.center)
             } else {
@@ -153,7 +153,7 @@ public struct PanelPreview: View {
             VStack(alignment: .leading, spacing: Theme.Space.xs) {
                 if !summary.isEmpty {
                     Text(summary)
-                        .font(.system(size: 11))
+                        .font(Theme.Typography.caption)
                         .foregroundStyle(Theme.secondaryText)
                         .lineLimit(3)
                         .fixedSize(horizontal: false, vertical: true)

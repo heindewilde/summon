@@ -10,7 +10,7 @@ let package = Package(
         .library(name: "SummonUI", targets: ["SummonUI"]),
     ],
     targets: [
-        // Pure logic. No SwiftUI, no AppKit views. This is the entire test surface.
+        // Pure logic. No SwiftUI, no AppKit views.
         .target(name: "SummonKit"),
 
         // Shared SwiftUI views + the design system.
@@ -20,5 +20,12 @@ let package = Package(
         .executableTarget(name: "Summon", dependencies: ["SummonKit", "SummonUI"]),
 
         .testTarget(name: "SummonKitTests", dependencies: ["SummonKit"]),
+
+        // The design system's own tests. This target exists so contrast can be
+        // asserted against `Theme` itself: the assertions used to live in
+        // SummonKitTests, which cannot import SummonUI, so they hand-copied every
+        // alpha as a raw number — and a token could then change without failing
+        // anything. Views still are not unit-tested; colour now is.
+        .testTarget(name: "SummonUITests", dependencies: ["SummonUI"]),
     ]
 )

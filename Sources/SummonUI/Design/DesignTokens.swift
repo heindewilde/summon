@@ -60,9 +60,13 @@ public enum Theme {
 
     public static let danger = Color(nsColor: .dyn(light: .srgb(0.78, 0.18, 0.18),
                                                    dark: .srgb(1.00, 0.42, 0.40)))
-    public static let success = Color(nsColor: .dyn(light: .srgb(0.10, 0.55, 0.30),
+    // The two light values are darker than they look like they should be. They were
+    // 0.10/0.55/0.30 and 0.72/0.47/0.04, which measure 3.93:1 and 3.38:1 on the light
+    // ground — both under the 4.5:1 bar, both shipped, and neither catchable by the old
+    // contrast test, which only ever knew about the four text tiers.
+    public static let success = Color(nsColor: .dyn(light: .srgb(0.091, 0.503, 0.275),
                                                     dark: .srgb(0.36, 0.85, 0.55)))
-    public static let warning = Color(nsColor: .dyn(light: .srgb(0.72, 0.47, 0.04),
+    public static let warning = Color(nsColor: .dyn(light: .srgb(0.605, 0.395, 0.034),
                                                     dark: .srgb(1.00, 0.72, 0.28)))
 
     // MARK: - Rhythm

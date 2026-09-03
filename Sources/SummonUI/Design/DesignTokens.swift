@@ -166,10 +166,10 @@ public enum Theme {
     /// One row height, shared by the panel, the main window and the menu bar, so the
     /// three surfaces cannot drift apart.
     public static let rowHeight: CGFloat = 40
-    /// The sidebar's denser row. Named here because `SidebarView.rowHeight`,
-    /// `ItemRow.height` and a bare `32` in the action menu were three independent
-    /// constants for the same idea, and drop hit-testing reads them.
-    public static let rowCompact: CGFloat = 26
+    /// The sidebar's row. Denser than a content row but not cramped: it sits beside
+    /// the library list, and once that went roomy a 26pt row next to a 48pt one read
+    /// as squeezed rather than as compact.
+    public static let rowCompact: CGFloat = 32
     /// Action-menu and popover rows: between a list row and a sidebar row.
     public static let rowMenu: CGFloat = 32
     /// The library's row. Roomier than the panel's on purpose: a launcher is passed

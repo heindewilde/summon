@@ -293,7 +293,7 @@ public struct ItemDetailView: View {
         // one shared label column, which is what the eye was looking for.
         Grid(alignment: .leading,
              horizontalSpacing: Theme.Space.m,
-             verticalSpacing: 10) {
+             verticalSpacing: Theme.Space.m) {
             GridRow {
                 label("Folder")
                 Picker("", selection: folderBinding) {

@@ -29,7 +29,7 @@ public struct SidebarView: View {
         let counts = model.sidebarCounts
 
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 0) {
+            LazyVStack(alignment: .leading, spacing: 1) {
                 header("Library")
                 row(.all, "All Items", "square.grid.2x2", count: counts.all)
                 row(.recents, "Recents", "clock", count: counts.recents)
@@ -80,7 +80,7 @@ public struct SidebarView: View {
                 Text("New Folder")
                 Spacer(minLength: 0)
             }
-            .font(Theme.Typography.body)
+            .font(Theme.Typography.title)
             .foregroundStyle(Theme.secondaryText)
             .padding(.horizontal, Theme.Space.xs)
             .frame(height: Self.rowHeight)
@@ -103,8 +103,10 @@ public struct SidebarView: View {
     private func header(_ title: String) -> some View {
         SectionHeader(title)
             .padding(.horizontal, Theme.Space.xs)
-            .padding(.top, Theme.Space.m)
-            .padding(.bottom, Theme.Space.xxs)
+            // Groups need more air between them than rows do within one, or the
+            // headers read as another row rather than as a break.
+            .padding(.top, Theme.Space.l)
+            .padding(.bottom, Theme.Space.xs)
     }
 
     private func row(_ selection: SidebarSelection, _ title: String, _ symbol: String,
@@ -116,7 +118,7 @@ public struct SidebarView: View {
                 .foregroundStyle(tint)
                 .frame(width: Theme.Icon.slotCompact)
             Text(title)
-                .font(Theme.Typography.body)
+                .font(Theme.Typography.title)
                 .foregroundStyle(Theme.primaryText)
                 .lineLimit(1)
             Spacer(minLength: Theme.Space.xs)
@@ -166,7 +168,7 @@ struct TagRow: View {
             if isRenaming {
                 TextField("Name", text: $renameText)
                     .textFieldStyle(.plain)
-                    .font(Theme.Typography.body)
+                    .font(Theme.Typography.title)
                     .focused($nameFocused)
                     .onSubmit(commitRename)
                     .onExitCommand { model.renamingTagID = nil }
@@ -175,7 +177,7 @@ struct TagRow: View {
             } else {
                 // The name only: the icon column already carries the "#".
                 Text(tag.name)
-                    .font(Theme.Typography.body)
+                    .font(Theme.Typography.title)
                     .foregroundStyle(Theme.primaryText)
                     .lineLimit(1)
             }
@@ -275,7 +277,7 @@ struct FolderRow: View {
             if isRenaming {
                 TextField("Name", text: $renameText)
                     .textFieldStyle(.plain)
-                    .font(Theme.Typography.body)
+                    .font(Theme.Typography.title)
                     .focused($nameFocused)
                     .onSubmit(commitRename)
                     .onExitCommand { model.renamingFolderID = nil }
@@ -283,7 +285,7 @@ struct FolderRow: View {
                     .onChange(of: nameFocused) { _, focused in if !focused { commitRename() } }
             } else {
                 Text(entry.name)
-                    .font(Theme.Typography.body)
+                    .font(Theme.Typography.title)
                     .foregroundStyle(Theme.primaryText)
                     .lineLimit(1)
             }

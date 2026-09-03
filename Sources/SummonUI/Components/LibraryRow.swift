@@ -27,6 +27,9 @@ public struct LibraryRow: View {
         case compact, roomy
         var height: CGFloat { self == .compact ? Theme.rowHeight : Theme.rowRoomy }
         var title: Font { self == .compact ? Theme.Typography.title : Theme.Typography.heading }
+        /// A 15pt glyph beside a 15pt title in a 48pt row reads as undersized; the
+        /// glyph is the row's only coloured element and should hold its own.
+        var glyph: CGFloat { self == .compact ? 15 : 17 }
     }
     /// The ⌘-number, when this surface binds one. Nil draws nothing — a badge with
     /// no handler behind it is a promise the app does not keep.
@@ -71,7 +74,7 @@ public struct LibraryRow: View {
 
     public var body: some View {
         HStack(spacing: Theme.Space.s) {
-            KindGlyph(kind: item.kind, isLocked: item.isLocked)
+            KindGlyph(kind: item.kind, isLocked: item.isLocked, size: density.glyph)
 
             HighlightedTitle(text: item.title, positions: titlePositions, font: density.title)
                 .layoutPriority(2)

@@ -151,7 +151,7 @@ public struct ItemListView: View {
         switch model.sidebarSelection {
         case .pinned: "Pin the handful of things you reach for daily and they’ll be first in the panel, before you type anything."
         case .recents: "Once you start summoning items, the ones you use most will collect here."
-        case .locked: "Mark an item or a folder as sensitive to encrypt it behind your PIN and Touch ID."
+        case .locked: "Mark an item or a folder as sensitive to encrypt it behind your PIN, passphrase or Touch ID."
         default: "Drop files here, paste from the clipboard tray, or press \(model.settings.quickSaveHotKey.displayString) anywhere to save what’s selected."
         }
     }

@@ -148,8 +148,8 @@ public final class AppModel {
     public var mode: PanelMode = .search
     public var isPanelVisible: Bool = false
     public var fieldValues: [String: String] = [:]
-    public var pinEntry: String = ""
-    public var pinError: String?
+    public var secretEntry: String = ""
+    public var secretError: String?
 
     // MARK: - ⌘K overlay
 
@@ -686,8 +686,8 @@ public final class AppModel {
         folderScope = nil
         overlay = .none
         fieldValues = [:]
-        pinEntry = ""
-        pinError = nil
+        secretEntry = ""
+        secretError = nil
         // No store.refresh() here: every mutating method and both vault transitions
         // already refresh, so the snapshots are current. Refreshing again cost a full
         // fetch plus a decrypt of every sealed item before the window appeared.
@@ -714,8 +714,8 @@ public final class AppModel {
 
         if snapshot.isLocked {
             mode = .unlock(pendingItemID: id)
-            pinEntry = ""
-            pinError = nil
+            secretEntry = ""
+            secretError = nil
             Task { await tryBiometricUnlock() }
             return
         }
@@ -857,42 +857,42 @@ public final class AppModel {
             try await vault.unlockWithBiometrics()
             afterUnlock()
         } catch {
-            // Silent: the PIN field is already on screen as the fallback.
+            // Silent: the entry field is already on screen as the fallback.
             Log.vault.info("Biometric unlock declined or failed.")
         }
     }
 
-    /// Unlocks from the library, where there is no panel to put a PIN field in.
-    /// Returns false and leaves an explanation in `pinError` when the PIN is wrong.
+    /// Unlocks from the library, where there is no panel to put the field in.
+    /// Returns false and leaves an explanation in `secretError` when it is wrong.
     @discardableResult
-    public func unlockInPlace(pin: String) -> Bool {
+    public func unlockInPlace(secret: String) -> Bool {
         do {
-            try vault.unlock(pin: pin)
-            pinError = nil
+            try vault.unlock(secret: secret)
+            secretError = nil
             store.refresh()
             runSearch()
             show(Toast(text: "Unlocked", symbol: "lock.open", tone: .success))
             resumeAfterUnlock()
             return true
         } catch {
-            pinError = (error as? VaultError)?.errorDescription ?? error.localizedDescription
+            secretError = (error as? VaultError)?.errorDescription ?? error.localizedDescription
             return false
         }
     }
 
-    public func submitPIN() {
+    public func submitSecret() {
         do {
-            try vault.unlock(pin: pinEntry)
+            try vault.unlock(secret: secretEntry)
             afterUnlock()
         } catch {
-            pinError = (error as? VaultError)?.errorDescription ?? error.localizedDescription
-            pinEntry = ""
+            secretError = (error as? VaultError)?.errorDescription ?? error.localizedDescription
+            secretEntry = ""
         }
     }
 
     private func afterUnlock() {
-        pinEntry = ""
-        pinError = nil
+        secretEntry = ""
+        secretError = nil
         store.refresh()
         runSearch()
         if case .unlock(let pending) = mode {
@@ -1035,7 +1035,7 @@ public final class AppModel {
         if !vault.isConfigured {
             // No key exists yet, so there is nothing to unlock — the question is what
             // the PIN should be.
-            presentPINSheet(.create)
+            presentLockSheet(.create)
             return false
         }
 
@@ -1044,13 +1044,13 @@ public final class AppModel {
         if isPanelVisible {
             mode = .unlock(pendingItemID: nil)
         } else {
-            presentPINSheet(.unlock(reason: reason))
+            presentLockSheet(.unlock(reason: reason))
         }
         return false
     }
 
     /// Which PIN question the library window is asking, if any.
-    public private(set) var pinSheet: PINSheet.Purpose?
+    public private(set) var lockSheet: LockSheet.Purpose?
 
     /// What to run once there is a key. Not observed: it is a continuation, not state
     /// anything on screen depends on.
@@ -1058,33 +1058,33 @@ public final class AppModel {
 
     public func beginPINSetup(thenRetry retry: (() -> Void)? = nil) {
         afterUnlockAction = retry
-        presentPINSheet(.create)
+        presentLockSheet(.create)
     }
 
     /// Brings the library forward and asks there. The panel is a transient surface
     /// that closes the moment you look away, which is the wrong place to be typing a
     /// PIN — and a panel arriving unbidden over the window you are working in is
     /// startling regardless of what it wants.
-    private func presentPINSheet(_ purpose: PINSheet.Purpose) {
+    private func presentLockSheet(_ purpose: LockSheet.Purpose) {
         dismissPanel()
         showMainWindowHandler?()
-        pinSheet = purpose
+        lockSheet = purpose
     }
 
     /// Closes the sheet without discarding a pending action — the action has either
     /// already run or is about to.
-    public func finishPINSheet() {
-        pinSheet = nil
+    public func finishLockSheet() {
+        lockSheet = nil
     }
 
     /// Opens the turn-off flow on the library window. Settings drives its own copy;
     /// this exists so the screenshot harness can hold the sheet open for review.
     public func beginTurnOffPINForCapture() {
-        pinSheet = .turnOff
+        lockSheet = .turnOff
     }
 
-    public func cancelPINSheet() {
-        pinSheet = nil
+    public func cancelLockSheet() {
+        lockSheet = nil
         afterUnlockAction = nil
     }
 
@@ -1103,33 +1103,46 @@ public final class AppModel {
     /// Checks a PIN without changing the lock state, for the "current PIN" step.
     ///
     /// Deliberately routed through the vault's own attempt counter: this is a guess
-    /// at the PIN like any other, and a verification path that skipped the cooldown
-    /// would be a way around it.
-    public func verifyPIN(_ pin: String) -> Bool {
+    /// like any other, and a verification path that skipped the cooldown would be a
+    /// way around it.
+    public func verifySecret(_ secret: String) -> Bool {
         let wasLocked = !vault.isUnlocked
         do {
-            try vault.unlock(pin: pin)
+            try vault.unlock(secret: secret)
             if wasLocked { vault.lock() }
-            pinError = nil
+            secretError = nil
             return true
         } catch {
-            pinError = (error as? VaultError)?.errorDescription ?? error.localizedDescription
+            secretError = (error as? VaultError)?.errorDescription ?? error.localizedDescription
             return false
         }
     }
 
     /// Re-keys the vault. Content stays encrypted throughout — the master key is
-    /// unwrapped with the old PIN and re-wrapped with the new one, so nothing is
+    /// unwrapped with the old secret and re-wrapped with the new one, so nothing is
     /// decrypted and rewritten.
-    public func changePIN(current: String, new: String, onError: (String) -> Void) {
+    ///
+    /// Switching between a PIN and a passphrase is the same operation, which is why
+    /// there is no separate "convert" path to get wrong.
+    public func changeSecret(
+        current: String,
+        new: String,
+        kind: VaultSecretKind,
+        onError: (String) -> Void
+    ) {
+        let wasKind = vault.secretKind
         do {
-            try vault.changePIN(current: current, new: new)
+            try vault.changeSecret(current: current, new: new, kind: kind)
         } catch {
             onError((error as? VaultError)?.errorDescription ?? error.localizedDescription)
             return
         }
         store.refresh()
-        show(Toast(text: "PIN changed", symbol: "lock.rotation", tone: .success))
+        show(Toast(
+            text: kind == wasKind ? "\(kind.displayName) changed" : "Now using a \(kind.noun)",
+            symbol: "lock.rotation",
+            tone: .success
+        ))
     }
 
     /// Turns protection off: everything sensitive is decrypted back to plaintext
@@ -1138,7 +1151,7 @@ public final class AppModel {
     ///
     /// Returns the number of items it decrypted, or nil if it could not proceed.
     @discardableResult
-    public func removePINProtection() -> Int? {
+    public func removeVaultProtection() -> Int? {
         guard vault.isUnlocked else {
             show(Toast(text: "Unlock first", symbol: "lock", tone: .warning))
             return nil
@@ -1148,11 +1161,11 @@ public final class AppModel {
             try vault.removePIN()
             store.refresh()
             runSearch()
-            show(Toast(text: count == 0 ? "PIN removed" : "PIN removed — \(count) items decrypted",
+            show(Toast(text: count == 0 ? "Lock removed" : "Lock removed — \(count) items decrypted",
                        symbol: "lock.open", tone: .success))
             return count
         } catch {
-            show(Toast(text: "Couldn’t remove the PIN", symbol: "exclamationmark.triangle",
+            show(Toast(text: "Couldn’t remove the lock", symbol: "exclamationmark.triangle",
                        tone: .danger, detail: error.localizedDescription))
             return nil
         }
@@ -1166,19 +1179,23 @@ public final class AppModel {
     }
 
 
-    /// Sets the PIN and resumes whatever was interrupted. Reports back rather than
+    /// Sets the secret and resumes whatever was interrupted. Reports back rather than
     /// throwing, so the sheet can show the reason next to the field.
-    public func completePINSetup(pin: String, onError: (String) -> Void) {
+    public func completeSecretSetup(
+        secret: String,
+        kind: VaultSecretKind = .pin,
+        onError: (String) -> Void
+    ) {
         do {
-            try vault.setUpPIN(pin)
+            try vault.setUpSecret(secret, kind: kind)
         } catch {
             onError((error as? VaultError)?.errorDescription ?? error.localizedDescription)
             return
         }
-        pinSheet = nil
+        lockSheet = nil
         store.refresh()
         runSearch()
-        show(Toast(text: "PIN set", symbol: "lock.fill", tone: .success,
+        show(Toast(text: "\(kind.displayName) set", symbol: "lock.fill", tone: .success,
                    detail: "Sensitive items are encrypted with it."))
         let resume = afterUnlockAction
         afterUnlockAction = nil

@@ -37,7 +37,7 @@
 
 **One keystroke, wherever you are.** Press ⌥Space in any app, type a few characters, press ↩, and the thing lands in the app you were already using. No window to find, no tab to switch to, no clipboard to babysit. The panel appears over your work and disappears again.
 
-**Private because it never leaves.** There is no account, no sync, no telemetry, and no networking code — the app makes no outbound requests at all. Anything you mark sensitive is encrypted with AES-GCM under a key wrapped by your PIN, so a locked item stays findable by name while revealing nothing of its contents, its file, or even its OCR'd text.
+**Private because it never leaves.** There is no account, no sync, no telemetry, and no networking code — the app makes no outbound requests at all. Anything you mark sensitive is encrypted with AES-GCM under a key wrapped by your PIN — or by a passphrase, if you want something that holds up against someone who has your disk — so a locked item stays findable by name while revealing nothing of its contents, its file, or even its OCR'd text.
 
 **Fast, and measured rather than claimed.** A keystroke re-ranks 2,000 items in **0.55 ms**. Those numbers are asserted by the test suite against budgets that fail the build — because the first time performance was "fixed" here, the benchmark and the app disagreed about what was being measured, and nobody noticed for a whole commit.
 
@@ -76,7 +76,7 @@ Nested folders you drag to rearrange, each with its own icon and colour. Plus ta
 <td width="33%" valign="top">
 
 ### 🔒 Lock what's private
-Mark anything sensitive and it's encrypted at rest. Titles stay searchable; contents don't. Unlock with a PIN, auto-lock on a timer.
+Mark anything sensitive and it's encrypted at rest. Titles stay searchable; contents don't. Unlock with a PIN or a passphrase, auto-lock on a timer.
 
 </td>
 <td width="33%" valign="top">
@@ -160,9 +160,11 @@ It exists in the panel and only in the panel. A window has room to show its acti
 Mark an item or a whole folder sensitive and its contents are encrypted at rest:
 
 - A random 256-bit master key is generated once. Per-item keys derive from it via HKDF using the item's own UUID, so no key is ever reused across two items.
-- That master key is wrapped **twice** — under your PIN with PBKDF2-SHA256 at 600,000 iterations, and separately in the Keychain behind Touch ID. Changing your PIN re-wraps one small key, so it is instant rather than a re-encryption of everything.
+- That master key is wrapped **twice** — under your PIN or passphrase with PBKDF2-SHA256 at 600,000 iterations, and separately in the Keychain behind Touch ID. Changing it re-wraps one small key, so it is instant rather than a re-encryption of everything. Switching between a PIN and a passphrase is that same re-wrap: nothing is decrypted.
 - Unlocked, the key exists only in memory. It is discarded on lock, on a timeout you choose, and on sleep. Decrypted scratch copies go at the same moment.
-- Five wrong PINs start an escalating cooldown that survives a relaunch.
+- Five wrong guesses start an escalating cooldown that survives a relaunch, on every path that takes a guess — unlocking and changing it both.
+
+**A PIN and a passphrase defend against different people.** Four digits is 10,000 combinations, and the cooldown that makes that reasonable only applies to someone typing into this app. It cannot apply to someone who has copied the library folder, because `vault.wrap` is just a file and they can guess against it offline as fast as their hardware allows — at which point 10,000 is not a wait. A PIN is the right default for the summon moment and enough to stop someone who wanders past an unlocked Mac. Choose a passphrase if the threat you have in mind is someone walking off with the disk.
 
 **Titles stay visible; contents do not.** A locked item is still findable by name and tag, but matches nothing in its body, its file, or its OCR'd text — that last one is what stops a locked passport scan being found by searching its own contents. Sensitive content is never handed to the language model either, local though it is.
 
@@ -279,7 +281,7 @@ The certificate is local only. No other Mac trusts it, and deleting it from Keyc
 ├── Blobs/            managed copies of imported files
 ├── Vault/            AES-GCM sealed blobs
 ├── Thumbnails/
-└── vault.wrap        the PIN-wrapped master key, its salt, and lockout state
+└── vault.wrap        the wrapped master key, its salt, kind, and lockout state
 ```
 
 Files you add are **copied** into `Blobs/` rather than referenced, so moving or deleting the original never breaks an item — and content hashing means adding the same file twice dedupes instead of piling up.
@@ -296,7 +298,7 @@ Stated plainly, because an app that asks for Accessibility and holds your bank d
 
 **Launch it with `open`, not by running the binary directly.** macOS attributes a permission to the *responsible process*, so a binary exec'd from a terminal inherits the terminal and reports Accessibility as denied even when the grant is in place.
 
-**Touch ID unlock is unavailable in a locally-signed build.** A key guarded by `SecAccessControl` lives in the data-protection keychain, which requires a `keychain-access-groups` entitlement prefixed with an Apple Team ID. A local build has no team, and adding the entitlement unprefixed makes the app fail to launch outright. Summon probes for this at runtime and hides the option rather than offering something that throws. PIN unlock is unaffected — the master key is wrapped twice, independently, for exactly this reason.
+**Touch ID unlock is unavailable in a locally-signed build.** A key guarded by `SecAccessControl` lives in the data-protection keychain, which requires a `keychain-access-groups` entitlement prefixed with an Apple Team ID. A local build has no team, and adding the entitlement unprefixed makes the app fail to launch outright. Summon probes for this at runtime and hides the option rather than offering something that throws. PIN and passphrase unlock are unaffected — the master key is wrapped twice, independently, for exactly this reason.
 
 **Apple Intelligence is optional.** Every feature that uses it falls back to deterministic heuristics when it is off, ineligible, or still downloading.
 
@@ -314,7 +316,7 @@ Stated plainly, because an app that asks for Accessibility and holds your bank d
 Sources/
   SummonKit/       Pure logic. No views. The entire test surface.
     Model/         SwiftData models, LibraryStore, folder icons, starter library
-    Vault/         AES-GCM sealing, PIN wrapping, Touch ID, lock lifecycle
+    Vault/         AES-GCM sealing, PIN/passphrase wrapping, Touch ID, lock lifecycle
     Storage/       Managed blob store, content hashing, scratch materialisation
     Search/        Fuzzy scorer, frecency, app affinity, query parser, index cache
     Keyboard/      PanelKeyMap — every binding, as pure data
@@ -405,8 +407,11 @@ No. There is no networking code in the app at all — no account, no sync, no an
 **Do I have to grant Accessibility?**
 No. Without it Summon copies and tells you to press ⌘V. The global shortcut works either way.
 
-**What happens if I forget my PIN?**
+**What happens if I forget my PIN or passphrase?**
 The encrypted contents are unrecoverable — that is what encryption means. Titles, tags and folders stay readable, so you will still see what you have lost.
+
+**Which should I pick?**
+A PIN unless you have a reason not to: it is four boxes that fill themselves, which is what makes unlocking feel like no step at all. Switch to a passphrase in Settings → Lock if you are protecting something that would matter to a person holding your disk rather than to a person passing your desk. Switching either way is instant and decrypts nothing.
 
 **Do I need Apple Intelligence?**
 No. It improves suggested titles and tags when available and falls back to plain rules when it is not.

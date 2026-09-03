@@ -232,14 +232,17 @@ public struct ItemDetailView: View {
             // Hidden while a sheet is already asking: two PIN prompts on screen at
             // once, one of them inert behind the other, is not a question anyone can
             // answer confidently.
-            if model.pinSheet == nil {
-                PINField(digits: $pin, isError: model.pinError != nil, onComplete: submitPIN)
-                    .onChange(of: pin) { _, _ in model.pinError = nil }
+            if model.lockSheet == nil {
+                SecretField(kind: model.vault.secretKind,
+                            secret: $pin,
+                            isError: model.secretError != nil,
+                            onComplete: submitSecret)
+                    .onChange(of: pin) { _, _ in model.secretError = nil }
             }
 
-            if model.pinSheet != nil {
+            if model.lockSheet != nil {
                 EmptyView()
-            } else if let error = model.pinError {
+            } else if let error = model.secretError {
                 Text(error)
                     .font(Theme.Typography.meta)
                     .foregroundStyle(Theme.danger)
@@ -258,8 +261,8 @@ public struct ItemDetailView: View {
         }
     }
 
-    private func submitPIN() {
-        if model.unlockInPlace(pin: pin) {
+    private func submitSecret() {
+        if model.unlockInPlace(secret: pin) {
             pin = ""
             load()
         }
@@ -348,7 +351,7 @@ public struct ItemDetailView: View {
                 .animation(Theme.panelIn, value: snapshot?.isSensitive)
                 .help(inheritsSensitivity
                       ? "Its folder is sensitive, so everything inside it is encrypted."
-                      : "Encrypt this item’s contents behind your PIN.")
+                      : "Encrypt this item’s contents behind your \(model.vault.secretKind.noun).")
             }
 
             // Only where it means something. A snippet's byte count is noise; a file's

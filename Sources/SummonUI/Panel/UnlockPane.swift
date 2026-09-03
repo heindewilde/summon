@@ -2,7 +2,8 @@ import AppKit
 import SwiftUI
 import SummonKit
 
-/// PIN and Touch ID, inline in the panel. Unlocking should not mean going somewhere else.
+/// The secret and Touch ID, inline in the panel. Unlocking should not mean going
+/// somewhere else.
 public struct UnlockPane: View {
     @Bindable var model: AppModel
     let pendingItemID: UUID?
@@ -35,12 +36,13 @@ public struct UnlockPane: View {
                     .frame(maxWidth: 380)
             }
 
-            // The same four boxes as everywhere else, resolving on the fourth digit.
-            PINField(digits: $model.pinEntry,
-                     isError: model.pinError != nil,
-                     onComplete: { model.submitPIN() })
+            // The same field as everywhere else, in whichever shape this vault uses.
+            SecretField(kind: model.vault.secretKind,
+                        secret: $model.secretEntry,
+                        isError: model.secretError != nil,
+                        onComplete: { model.submitSecret() })
 
-            if let error = model.pinError {
+            if let error = model.secretError {
                 Label(error, systemImage: "exclamationmark.triangle.fill")
                     .font(.system(size: 11))
                     .foregroundStyle(Theme.danger)
@@ -77,9 +79,10 @@ public struct UnlockPane: View {
             let seconds = max(1, Int(until.timeIntervalSinceNow.rounded(.up)))
             return "Too many attempts. Try again in \(seconds)s."
         }
+        let noun = model.vault.secretKind.noun
         if model.vault.biometricsEnabled {
-            return "Use Touch ID, or enter your PIN. Contents stay encrypted on this Mac until you do."
+            return "Use Touch ID, or enter your \(noun). Contents stay encrypted on this Mac until you do."
         }
-        return "Enter your PIN. Contents stay encrypted on this Mac until you do."
+        return "Enter your \(noun). Contents stay encrypted on this Mac until you do."
     }
 }

@@ -166,7 +166,7 @@ enum SelfTest {
         // switch on one item. The window asks, and it asks about that item.
         if !model.vault.isConfigured,
            let subject = model.store.snapshots.first(where: { $0.kind.isTextual }) {
-            model.completePINSetup(pin: "1379") { _ in }
+            model.completeSecretSetup(secret: "1379") { _ in }
             model.setItemSensitive(subject.id, true)
             model.vault.lock()
             model.store.refresh()
@@ -175,9 +175,9 @@ enum SelfTest {
             // Now ask to decrypt it, with the vault shut.
             model.setItemSensitive(subject.id, false)
             check("A locked vault asks in the window, not the panel",
-                  model.pinSheet != nil && !controller.isVisible,
-                  detail: "sheet: \(model.pinSheet.map(\.id) ?? "none"), panel: \(controller.isVisible)")
-            if case .unlock(let reason) = model.pinSheet {
+                  model.lockSheet != nil && !controller.isVisible,
+                  detail: "sheet: \(model.lockSheet.map(\.id) ?? "none"), panel: \(controller.isVisible)")
+            if case .unlock(let reason) = model.lockSheet {
                 check("The prompt names what you asked for, not the whole vault",
                       reason.contains("decrypt") && !reason.lowercased().contains("everything"),
                       detail: reason)
@@ -188,20 +188,20 @@ enum SelfTest {
 
             // Entering the PIN finishes the interrupted action.
             check("Unlocking from the sheet completes the action",
-                  model.unlockInPlace(pin: "1379")
+                  model.unlockInPlace(secret: "1379")
                       && model.store.item(id: subject.id)?.isSensitive == false)
-            model.finishPINSheet()
+            model.finishLockSheet()
 
             // And the way back out, from a locked vault, asks for the PIN first.
             model.vault.lock()
             check("Turning the PIN off while locked starts by asking for it",
                   !model.vault.isUnlocked)
-            model.removePINProtection()
+            model.removeVaultProtection()
             check("It refuses to discard the key while it cannot decrypt",
                   model.vault.isConfigured)
 
             try? model.vault.unlock(pin: "1379")
-            model.removePINProtection()
+            model.removeVaultProtection()
             model.store.refresh()
         }
 
@@ -212,7 +212,7 @@ enum SelfTest {
         // blank until you clicked away and back, which re-selected it. The data was
         // always there — this checks the half the view depends on.
         if let image = model.store.snapshots.first(where: { $0.kind == .image }) {
-            if !model.vault.isConfigured { model.completePINSetup(pin: "1379") { _ in } }
+            if !model.vault.isConfigured { model.completeSecretSetup(secret: "1379") { _ in } }
             model.setItemSensitive(image.id, true)
             check("An image can be encrypted", model.store.item(id: image.id)?.blobSealed == true)
 
@@ -231,7 +231,7 @@ enum SelfTest {
                   model.store.snapshots.first { $0.id == image.id }?.isLocked == false)
 
             model.setItemSensitive(image.id, false)
-            model.removePINProtection()
+            model.removeVaultProtection()
             model.store.refresh()
         }
 
@@ -272,12 +272,12 @@ enum SelfTest {
         // the confirmation can say what it is about to do.
         if !model.vault.isConfigured,
            let victim = model.store.snapshots.first(where: { $0.kind.isTextual }) {
-            model.completePINSetup(pin: "2468") { _ in }
+            model.completeSecretSetup(secret: "2468") { _ in }
             model.setItemSensitive(victim.id, true)
             let sealed = model.store.item(id: victim.id)?.sealedBody != nil
             check("An item can be encrypted once a PIN exists", sealed)
 
-            let decrypted = model.removePINProtection()
+            let decrypted = model.removeVaultProtection()
             check("Turning off the PIN reports what it decrypted", decrypted == 1,
                   detail: "\(decrypted.map(String.init) ?? "nil") items")
             check("Turning off the PIN leaves no vault", !model.vault.isConfigured)
@@ -314,16 +314,16 @@ enum SelfTest {
            let subject = model.store.snapshots.first(where: { $0.kind.isTextual && !$0.isSensitive }) {
             model.setItemSensitive(subject.id, true)
             check("Marking an item sensitive with no PIN asks for one",
-                  model.pinSheet == .create,
-                  detail: "sheet: \(model.pinSheet.map(\.id) ?? "none")")
+                  model.lockSheet == .create,
+                  detail: "sheet: \(model.lockSheet.map(\.id) ?? "none")")
             check("It does not silently mark the item first",
                   model.store.item(id: subject.id)?.isSensitive == false)
 
-            model.completePINSetup(pin: "1379") { message in
+            model.completeSecretSetup(secret: "1379") { message in
                 check("Setting the PIN succeeded", false, detail: message)
             }
             try? await Task.sleep(for: .milliseconds(120))
-            check("Setting the PIN closes the sheet", model.pinSheet == nil)
+            check("Setting the PIN closes the sheet", model.lockSheet == nil)
             check("Setting the PIN finishes what you asked for",
                   model.store.item(id: subject.id)?.isSensitive == true,
                   detail: "sensitive: \(model.store.item(id: subject.id)?.isSensitive == true)")
@@ -345,9 +345,9 @@ enum SelfTest {
         if !model.vault.isConfigured,
            let subject = model.store.snapshots.first(where: { $0.kind.isTextual }) {
             model.setItemSensitive(subject.id, true)
-            model.cancelPINSheet()
+            model.cancelLockSheet()
             check("Cancelling the PIN sheet leaves the item alone",
-                  model.pinSheet == nil && model.store.item(id: subject.id)?.isSensitive == false)
+                  model.lockSheet == nil && model.store.item(id: subject.id)?.isSensitive == false)
         }
 
         // MARK: Vault, end to end

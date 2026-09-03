@@ -2,14 +2,14 @@ import AppKit
 import SwiftUI
 import SummonKit
 
-/// Every PIN question, in one sheet.
+/// Every lock question, in one sheet.
 ///
 /// There used to be four surfaces: a setup sheet, three cramped fields in Settings, a
 /// confirmation alert, and — worst — the summon panel flying in over the library to
 /// ask for a PIN you only wanted in order to tick one checkbox. They disagreed about
 /// wording, about whether return was needed, and about where they appeared. This is
 /// one sheet with one set of steps, shown on whichever window you are already using.
-public struct PINSheet: View {
+public struct LockSheet: View {
     @Bindable var model: AppModel
 
     public enum Purpose: Equatable, Identifiable {
@@ -43,6 +43,9 @@ public struct PINSheet: View {
     @State private var step: Step
     @State private var error: String?
     @State private var shake = 0
+    /// What the vault will use once this sheet is done. Only the choose step can move
+    /// it; `current` is always proved against whatever the vault uses *now*.
+    @State private var newKind: VaultSecretKind
 
     private enum Step { case current, choose, confirm, confirmRemoval }
 
@@ -53,14 +56,25 @@ public struct PINSheet: View {
         self.dismiss = dismiss
         // Computed here rather than in `body`: a locked vault needs the PIN first,
         // an open one goes straight to the question being asked.
-        let needsPIN = !model.vault.isUnlocked
+        let needsSecret = !model.vault.isUnlocked
         let start: Step
         switch purpose {
         case .create: start = .choose
         case .change, .unlock: start = .current
-        case .turnOff: start = needsPIN ? .current : .confirmRemoval
+        case .turnOff: start = needsSecret ? .current : .confirmRemoval
         }
         _step = State(initialValue: start)
+        // Changing the secret keeps its kind unless the picker is used; creating one
+        // starts at a PIN, which is what most people want and what the panel is for.
+        _newKind = State(initialValue: purpose == .create ? .pin : model.vault.secretKind)
+    }
+
+    /// The kind being asked for at this step: the vault's own, except when choosing.
+    private var askingFor: VaultSecretKind {
+        switch step {
+        case .current: model.vault.secretKind
+        case .choose, .confirm, .confirmRemoval: newKind
+        }
     }
 
     public var body: some View {
@@ -82,11 +96,32 @@ public struct PINSheet: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
+            if step == .choose, purpose == .create || purpose == .change {
+                Picker("", selection: $newKind) {
+                    ForEach(VaultSecretKind.allCases, id: \.self) { kind in
+                        Text(kind.displayName).tag(kind)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(width: 240)
+                // Switching kind mid-choice must not carry four digits into a
+                // passphrase, or the length check would pass on the wrong thing.
+                .onChange(of: newKind) { _, _ in
+                    first = ""
+                    confirmation = ""
+                    error = nil
+                }
+            }
+
             if step != .confirmRemoval {
-                // Rebuilt per step — a fresh field, so the caret starts at the first
-                // box and the boxes animate in rather than appearing already full.
-                PINField(digits: binding(for: step), isError: error != nil, onComplete: advance)
-                    .id(step)
+                // Rebuilt per step and per kind — a fresh field, so the caret starts
+                // at the first box and the boxes animate in rather than appearing full.
+                SecretField(kind: askingFor,
+                            secret: binding(for: step),
+                            isError: error != nil,
+                            onComplete: advance)
+                    .id("\(step)-\(askingFor.rawValue)")
                     .modifier(Shake(animatableData: CGFloat(shake)))
             }
 
@@ -117,8 +152,8 @@ public struct PINSheet: View {
                 Button("Cancel", role: .cancel) { cancel() }
                     .keyboardShortcut(.cancelAction)
                 if step == .confirmRemoval {
-                    Button("Turn Off PIN", role: .destructive) {
-                        model.removePINProtection()
+                    Button("Turn Off \(model.vault.secretKind.displayName)", role: .destructive) {
+                        model.removeVaultProtection()
                         dismiss()
                     }
                     .keyboardShortcut(.defaultAction)
@@ -146,14 +181,15 @@ public struct PINSheet: View {
     private var title: String {
         switch step {
         case .current:
-            if case .unlock = purpose { return "Enter your PIN" }
-            return purpose == .change ? "Enter your current PIN" : "Enter your PIN"
+            let noun = model.vault.secretKind.noun
+            if case .unlock = purpose { return "Enter your \(noun)" }
+            return purpose == .change ? "Enter your current \(noun)" : "Enter your \(noun)"
         case .choose:
-            return purpose == .change ? "Choose a new PIN" : "Choose a PIN"
+            return purpose == .change ? "Choose a new \(newKind.noun)" : "Choose a \(newKind.noun)"
         case .confirm:
             return "Enter it again"
         case .confirmRemoval:
-            return "Turn off the PIN?"
+            return "Turn off the \(model.vault.secretKind.noun)?"
         }
     }
 
@@ -164,7 +200,14 @@ public struct PINSheet: View {
             if purpose == .turnOff { return "Turning protection off means decrypting what it protects." }
             return "So nobody who wanders past an unlocked Mac can change it."
         case .choose:
-            return "Anything you mark sensitive is encrypted with a key only this PIN opens."
+            switch newKind {
+            case .pin:
+                return "Four digits, so summoning something locked is barely a pause. "
+                     + "Anything you mark sensitive is encrypted with a key only it opens."
+            case .passphrase:
+                return "Slower to type, and far harder to guess if someone ever gets hold "
+                     + "of your disk. Anything sensitive is encrypted with a key only it opens."
+            }
         case .confirm:
             return "So a slip of the finger cannot lock you out of your own things."
         case .confirmRemoval:
@@ -177,9 +220,17 @@ public struct PINSheet: View {
         case .current: nil
         case .choose, .confirm:
             purpose == .change
-                ? "Four digits. Everything sensitive is re-keyed to the new PIN."
-                : "Four digits. There is no way to recover it, and no account to reset it from."
-        case .confirmRemoval: "Nothing is deleted. You can set a new PIN at any time."
+                ? "\(shape). Everything sensitive is re-keyed to it — nothing is decrypted."
+                : "\(shape). There is no way to recover it, and no account to reset it from."
+        case .confirmRemoval: "Nothing is deleted. You can set a new one at any time."
+        }
+    }
+
+    /// How long the thing being chosen has to be, in the same words as the validator.
+    private var shape: String {
+        switch newKind {
+        case .pin: "Four digits"
+        case .passphrase: "At least \(PassphrasePolicy.minimumLength) characters"
         }
     }
 
@@ -211,8 +262,8 @@ public struct PINSheet: View {
             // The PIN opens the vault here rather than being checked and discarded:
             // every purpose that asks for it needs the key next — to re-wrap it, to
             // decrypt with it, or to do the thing that was interrupted.
-            guard model.unlockInPlace(pin: current) else {
-                error = model.pinError
+            guard model.unlockInPlace(secret: current) else {
+                error = model.secretError
                 wrongEntry { current = "" }
                 return
             }
@@ -224,8 +275,8 @@ public struct PINSheet: View {
             }
 
         case .choose:
-            guard PINPolicy.isValid(first) else {
-                error = VaultError.pinNotFourDigits.errorDescription
+            guard VaultSecretPolicy.isValid(first, kind: newKind) else {
+                error = VaultSecretPolicy.violation(for: newKind).errorDescription
                 return
             }
             settle { step = .confirm }
@@ -241,8 +292,10 @@ public struct PINSheet: View {
                 return
             }
             switch purpose {
-            case .create: model.completePINSetup(pin: first) { error = $0 }
-            case .change: model.changePIN(current: current, new: first) { error = $0 }
+            case .create:
+                model.completeSecretSetup(secret: first, kind: newKind) { error = $0 }
+            case .change:
+                model.changeSecret(current: current, new: first, kind: newKind) { error = $0 }
             case .unlock, .turnOff: break
             }
             if error == nil { dismiss() }
@@ -284,7 +337,7 @@ public struct PINSheet: View {
     }
 
     private func cancel() {
-        model.cancelPINSheet()
+        model.cancelLockSheet()
         dismiss()
     }
 }

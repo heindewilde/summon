@@ -170,7 +170,7 @@ struct LibrarySettings: View {
 
 struct PrivacySettings: View {
     @Bindable var model: AppModel
-    @State private var sheet: PINSheet.Purpose?
+    @State private var sheet: LockSheet.Purpose?
 
     var body: some View {
         Form {
@@ -194,7 +194,7 @@ struct PrivacySettings: View {
         }
         .formStyle(.grouped)
         .sheet(item: $sheet) { purpose in
-            PINSheet(model: model, purpose: purpose) { sheet = nil }
+            LockSheet(model: model, purpose: purpose) { sheet = nil }
         }
     }
 
@@ -249,25 +249,48 @@ struct PrivacySettings: View {
             } else if Vault.biometricsAvailable {
                 Label("""
                 Touch ID unlock needs an Apple Developer ID. A locally-signed build \
-                can’t store a key behind the biometric sensor, so this Mac uses the PIN.
+                can’t store a key behind the biometric sensor, so this Mac asks for \
+                your \(model.vault.secretKind.noun).
                 """, systemImage: "touchid")
                     .font(.system(size: 11))
                     .foregroundStyle(Theme.secondaryText)
             }
         }
 
-        Section("PIN") {
-            // What the PIN actually protects, so the section is not an abstraction.
+        Section(model.vault.secretKind.displayName) {
+            // What it actually protects, so the section is not an abstraction.
             LabeledContent("Protecting", value: protectedSummary)
 
-            // Unlabelled: these are two actions on the PIN, and inventing a noun for
-            // the left column ("Four digits", "Protection") only made the rows read
-            // like settings that they are not.
+            LabeledContent("Unlocking with", value: unlockDescription)
+
+            if model.vault.secretKind == .pin {
+                // Said plainly rather than left implied. Four digits is 10,000
+                // combinations, and the cooldown that makes that reasonable only
+                // applies to someone typing into this app — not to someone who has
+                // copied the library folder and can guess offline as fast as they like.
+                Text("""
+                A PIN is quick, and enough to stop someone who wanders past your Mac. \
+                A passphrase is what holds up if someone ever has a copy of your disk.
+                """)
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.secondaryText)
+            }
+
+            // Unlabelled: these are actions, and inventing a noun for the left column
+            // ("Four digits", "Protection") only made the rows read like settings.
             HStack {
                 Spacer()
-                Button("Change PIN…") { sheet = .change }
-                Button("Turn Off PIN…", role: .destructive) { sheet = .turnOff }
+                Button("Change \(model.vault.secretKind.displayName)…") { sheet = .change }
+                Button("Turn Off…", role: .destructive) { sheet = .turnOff }
             }
+        }
+    }
+
+    /// Names both the method and what changing it costs, which is nothing.
+    private var unlockDescription: String {
+        switch model.vault.secretKind {
+        case .pin: "A 4-digit PIN"
+        case .passphrase: "A passphrase"
         }
     }
 
@@ -276,8 +299,8 @@ struct PrivacySettings: View {
     @ViewBuilder
     private var notConfigured: some View {
         Section("Sensitive items") {
-            LabeledContent("PIN") {
-                Button("Set a PIN…") { sheet = .create }
+            LabeledContent("Lock") {
+                Button("Set a PIN or passphrase…") { sheet = .create }
             }
             Text("Nothing is encrypted until you set one. Marking an item or a folder sensitive will ask for it.")
                 .font(.system(size: 11))

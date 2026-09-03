@@ -11,7 +11,8 @@ public struct OnboardingView: View {
     @State private var step = 0
     @State private var pin = ""
     @State private var pinConfirm = ""
-    @State private var pinError: String?
+    @State private var secretKind: VaultSecretKind = .pin
+    @State private var secretError: String?
     @State private var enableTouchID = true
     @State private var seeding = false
     @State private var seeded = false
@@ -133,9 +134,9 @@ public struct OnboardingView: View {
                             .foregroundStyle(Theme.secondaryText)
                             .frame(width: 20)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("Set a PIN for sensitive items")
+                            Text("Set a PIN or passphrase for sensitive items")
                                 .font(.system(size: 12.5, weight: .medium))
-                            Text("Encrypts anything you mark sensitive with AES-GCM on this Mac. Titles stay visible so you can still find them; contents don’t open without the PIN.")
+                            Text("Encrypts anything you mark sensitive with AES-GCM on this Mac. Titles stay visible so you can still find them; contents don’t open without it. A PIN is quicker; a passphrase holds up if someone has your disk.")
                                 .font(.system(size: 11))
                                 .foregroundStyle(Theme.secondaryText)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -143,28 +144,42 @@ public struct OnboardingView: View {
                     }
 
                     if model.vault.isConfigured {
-                        Label("PIN set", systemImage: "checkmark.circle.fill")
+                        Label("\(model.vault.secretKind.displayName) set",
+                              systemImage: "checkmark.circle.fill")
                             .font(.system(size: 11))
                             .foregroundStyle(Theme.success)
                     } else {
+                        Picker("", selection: $secretKind) {
+                            ForEach(VaultSecretKind.allCases, id: \.self) { kind in
+                                Text(kind.displayName).tag(kind)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                        .frame(width: 200)
+                        .onChange(of: secretKind) { _, _ in
+                            pin = ""; pinConfirm = ""; secretError = nil
+                        }
+
                         HStack(spacing: Theme.Space.xs) {
-                            SecureField("PIN", text: $pin)
+                            SecureField(secretKind.displayName, text: $pin)
                                 .textFieldStyle(.roundedBorder)
-                                .frame(width: 110)
+                                .frame(width: secretKind == .pin ? 110 : 170)
                             SecureField("Confirm", text: $pinConfirm)
                                 .textFieldStyle(.roundedBorder)
-                                .frame(width: 110)
+                                .frame(width: secretKind == .pin ? 110 : 170)
                             Button("Set") { setPIN() }
                                 .buttonStyle(.bordered)
-                                .disabled(pin.count < 4 || pin != pinConfirm)
+                                .disabled(!VaultSecretPolicy.isValid(pin, kind: secretKind)
+                                          || pin != pinConfirm)
                             if Vault.biometricStorageAvailable {
                                 Toggle("Touch ID", isOn: $enableTouchID)
                                     .toggleStyle(.checkbox)
                                     .font(.system(size: 11))
                             }
                         }
-                        if let pinError {
-                            Text(pinError)
+                        if let secretError {
+                            Text(secretError)
                                 .font(.system(size: 11))
                                 .foregroundStyle(Theme.danger)
                         }
@@ -300,14 +315,14 @@ public struct OnboardingView: View {
 
     private func setPIN() {
         do {
-            try model.vault.setUpPIN(pin)
+            try model.vault.setUpSecret(pin, kind: secretKind)
             if enableTouchID, Vault.biometricStorageAvailable {
                 try? model.vault.enableBiometricUnlock()
             }
-            pinError = nil
+            secretError = nil
             pin = ""; pinConfirm = ""
         } catch {
-            pinError = (error as? VaultError)?.errorDescription ?? error.localizedDescription
+            secretError = (error as? VaultError)?.errorDescription ?? error.localizedDescription
         }
     }
 

@@ -38,9 +38,9 @@ public struct MainWindowView: View {
             }
         }
         .animation(Theme.panelIn, value: model.toast)
-        .sheet(item: Binding(get: { model.pinSheet },
-                             set: { if $0 == nil { model.cancelPINSheet() } })) { purpose in
-            PINSheet(model: model, purpose: purpose) { model.finishPINSheet() }
+        .sheet(item: Binding(get: { model.lockSheet },
+                             set: { if $0 == nil { model.cancelLockSheet() } })) { purpose in
+            LockSheet(model: model, purpose: purpose) { model.finishLockSheet() }
         }
         .alert("Delete “\(model.pendingDeleteTitle)”?",
                isPresented: Binding(get: { model.pendingDeleteID != nil },

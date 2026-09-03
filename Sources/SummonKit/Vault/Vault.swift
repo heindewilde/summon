@@ -59,10 +59,15 @@ public final class Vault {
 
     // MARK: - Setup
 
-    public func setUpPIN(_ pin: String) throws {
-        guard VaultCrypto.isValidPIN(pin) else { throw VaultError.pinNotFourDigits }
+    /// Whether this vault is opened by a PIN or a passphrase.
+    public var secretKind: VaultSecretKind { wrapper?.kind ?? .pin }
+
+    public func setUpSecret(_ secret: String, kind: VaultSecretKind) throws {
+        guard VaultSecretPolicy.isValid(secret, kind: kind) else {
+            throw VaultSecretPolicy.violation(for: kind)
+        }
         let master = VaultKey.generate()
-        let w = try VaultCrypto.wrap(master: master, pin: pin)
+        let w = try VaultCrypto.wrap(master: master, secret: secret, kind: kind)
         try persist(w)
         wrapper = w
         key = master
@@ -70,16 +75,32 @@ public final class Vault {
         lastActivity = Date()
     }
 
-    public func changePIN(current: String, new: String) throws {
-        guard VaultCrypto.isValidPIN(new) else { throw VaultError.pinNotFourDigits }
+    public func setUpPIN(_ pin: String) throws {
+        try setUpSecret(pin, kind: .pin)
+    }
+
+    /// Re-wraps the one master key under a new secret, optionally of a different kind.
+    ///
+    /// Switching between a PIN and a passphrase is this same operation: nothing is
+    /// decrypted and nothing is rewritten, because the key sealing the content never
+    /// changes — only the key sealing *it* does.
+    public func changeSecret(current: String, new: String, kind: VaultSecretKind? = nil) throws {
         guard let w = wrapper else { throw VaultError.notConfigured }
-        let master = try VaultCrypto.unwrap(w, pin: current)
-        let fresh = try VaultCrypto.wrap(master: master, pin: new)
+        let newKind = kind ?? w.kind
+        guard VaultSecretPolicy.isValid(new, kind: newKind) else {
+            throw VaultSecretPolicy.violation(for: newKind)
+        }
+        let master = try unwrapCounting(w, secret: current)
+        let fresh = try VaultCrypto.wrap(master: master, secret: new, kind: newKind)
         try persist(fresh)
         wrapper = fresh
         key = master
         state = .unlocked
         lastActivity = Date()
+    }
+
+    public func changePIN(current: String, new: String) throws {
+        try changeSecret(current: current, new: new, kind: .pin)
     }
 
     /// Removes PIN protection entirely. Callers must decrypt content back to
@@ -94,26 +115,40 @@ public final class Vault {
 
     // MARK: - Unlock / lock
 
+    public func unlock(secret: String) throws {
+        guard let w = wrapper else { throw VaultError.notConfigured }
+        key = try unwrapCounting(w, secret: secret)
+        state = .unlocked
+        lastActivity = Date()
+        lastError = nil
+    }
+
     public func unlock(pin: String) throws {
-        guard var w = wrapper else { throw VaultError.notConfigured }
+        try unlock(secret: pin)
+    }
+
+    /// Unwraps a guess, and holds the cooldown to it.
+    ///
+    /// Every path that takes a guess at the secret comes through here, so no caller
+    /// can win a free attempt by choosing the other one. `changeSecret` used to unwrap
+    /// directly, which made "change my PIN" an unthrottled oracle for the current one.
+    private func unwrapCounting(_ existing: VaultWrapper, secret: String) throws -> VaultKey {
+        var w = existing
 
         if let until = w.lockedUntil, until > Date() {
             throw VaultError.throttled(retryAfter: until.timeIntervalSinceNow)
         }
 
         do {
-            let master = try VaultCrypto.unwrap(w, pin: pin)
+            let master = try VaultCrypto.unwrap(w, secret: secret)
             w.failedAttempts = 0
             w.lockedUntil = nil
             try? persist(w)
             wrapper = w
-            key = master
-            state = .unlocked
-            lastActivity = Date()
-            lastError = nil
+            return master
         } catch {
             w.failedAttempts += 1
-            // Escalating cooldown after five wrong PINs: 30s, 60s, 120s, capped at 5m.
+            // Escalating cooldown after five wrong guesses: 30s, 60s, 120s, capped at 5m.
             if w.failedAttempts >= 5 {
                 let over = w.failedAttempts - 4
                 let delay = min(300, 30 * pow(2, Double(over - 1)))

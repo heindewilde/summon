@@ -10,28 +10,28 @@ struct VaultCryptoTests {
     @Test("Master key round-trips through a PIN wrap")
     func wrapUnwrapRoundTrip() throws {
         let master = VaultKey.generate()
-        let wrapper = try VaultCrypto.wrap(master: master, pin: "4829", iterations: iters)
-        let recovered = try VaultCrypto.unwrap(wrapper, pin: "4829")
+        let wrapper = try VaultCrypto.wrap(master: master, secret: "4829", iterations: iters)
+        let recovered = try VaultCrypto.unwrap(wrapper, secret: "4829")
         #expect(recovered == master)
     }
 
     @Test("A wrong PIN is rejected, not silently mis-decrypted")
     func wrongPINRejected() throws {
-        let wrapper = try VaultCrypto.wrap(master: .generate(), pin: "1234", iterations: iters)
+        let wrapper = try VaultCrypto.wrap(master: .generate(), secret: "1234", iterations: iters)
         #expect(throws: VaultError.wrongPIN) {
-            _ = try VaultCrypto.unwrap(wrapper, pin: "1235")
+            _ = try VaultCrypto.unwrap(wrapper, secret: "1235")
         }
     }
 
     @Test("Each wrap uses a fresh salt, so the same PIN yields different ciphertext")
     func saltsAreUnique() throws {
         let master = VaultKey.generate()
-        let a = try VaultCrypto.wrap(master: master, pin: "1234", iterations: iters)
-        let b = try VaultCrypto.wrap(master: master, pin: "1234", iterations: iters)
+        let a = try VaultCrypto.wrap(master: master, secret: "1234", iterations: iters)
+        let b = try VaultCrypto.wrap(master: master, secret: "1234", iterations: iters)
         #expect(a.salt != b.salt)
         #expect(a.sealedMaster != b.sealedMaster)
-        let ua = try VaultCrypto.unwrap(a, pin: "1234")
-        let ub = try VaultCrypto.unwrap(b, pin: "1234")
+        let ua = try VaultCrypto.unwrap(a, secret: "1234")
+        let ub = try VaultCrypto.unwrap(b, secret: "1234")
         #expect(ua == ub)
     }
 
@@ -81,7 +81,49 @@ struct VaultCryptoTests {
           arguments: [("1234", true), ("0000", true), ("123", false),
                       ("12345", false), ("482913", false), ("12a4", false), ("", false)])
     func pinPolicy(pin: String, valid: Bool) {
-        #expect(VaultCrypto.isValidPIN(pin) == valid)
+        #expect(VaultSecretPolicy.isValid(pin, kind: .pin) == valid)
+    }
+
+    @Test("Passphrase policy holds the minimum length",
+          arguments: [("correct horse battery", true), ("twelvechars!", true),
+                      ("short", false), ("elevenchar", false), ("", false)])
+    func passphrasePolicy(passphrase: String, valid: Bool) {
+        #expect(VaultSecretPolicy.isValid(passphrase, kind: .passphrase) == valid)
+    }
+
+    @Test("A four-digit PIN is not accepted as a passphrase, and vice versa")
+    func policiesDoNotOverlap() {
+        #expect(!VaultSecretPolicy.isValid("4829", kind: .passphrase))
+        #expect(!VaultSecretPolicy.isValid("correct horse battery", kind: .pin))
+    }
+
+    @Test("The wrapper records which kind of secret opens it")
+    func wrapperCarriesKind() throws {
+        let pinned = try VaultCrypto.wrap(master: .generate(), secret: "4829",
+                                          kind: .pin, iterations: iters)
+        let phrased = try VaultCrypto.wrap(master: .generate(), secret: "correct horse battery",
+                                           kind: .passphrase, iterations: iters)
+        #expect(pinned.kind == .pin)
+        #expect(phrased.kind == .passphrase)
+    }
+
+    /// The compatibility case that matters: every vault written before passphrases
+    /// existed has no `kindRaw` at all, and has to keep opening as a PIN.
+    @Test("A wrapper written before passphrases existed still decodes, as a PIN")
+    func legacyWrapperDecodesAsPIN() throws {
+        let wrapper = try VaultCrypto.wrap(master: .generate(), secret: "4829",
+                                           kind: .pin, iterations: iters)
+        var fields = try #require(
+            try JSONSerialization.jsonObject(with: JSONEncoder().encode(wrapper))
+                as? [String: Any]
+        )
+        fields.removeValue(forKey: "kindRaw")
+        let legacy = try JSONDecoder().decode(
+            VaultWrapper.self,
+            from: try JSONSerialization.data(withJSONObject: fields)
+        )
+        #expect(legacy.kind == .pin)
+        #expect(legacy.sealedMaster == wrapper.sealedMaster)
     }
 }
 
@@ -356,5 +398,127 @@ struct SealedSummaryTests {
         #expect(snapshot.isLocked)
         #expect(snapshot.summary == nil)
         #expect(snapshot.title == "Passport")
+    }
+}
+
+@Suite("Passphrase option")
+@MainActor
+struct PassphraseTests {
+    private let phrase = "correct horse battery"
+
+    @Test("A vault can be set up with a passphrase instead of a PIN")
+    func setUpWithPassphrase() throws {
+        let paths = LibraryPaths.temporary()
+        defer { paths.destroy() }
+        let vault = Vault(paths: paths)
+
+        try vault.setUpSecret(phrase, kind: .passphrase)
+        #expect(vault.secretKind == .passphrase)
+        #expect(vault.isUnlocked)
+
+        vault.lock()
+        #expect(throws: VaultError.wrongPIN) { try vault.unlock(secret: "4829") }
+        try vault.unlock(secret: phrase)
+        #expect(vault.isUnlocked)
+    }
+
+    @Test("Each kind holds its own length rule at setup")
+    func setupEnforcesTheRightPolicy() throws {
+        let paths = LibraryPaths.temporary()
+        defer { paths.destroy() }
+        let vault = Vault(paths: paths)
+
+        #expect(throws: VaultError.passphraseTooShort) {
+            try vault.setUpSecret("tooshort", kind: .passphrase)
+        }
+        #expect(throws: VaultError.pinNotFourDigits) {
+            try vault.setUpSecret(phrase, kind: .pin)
+        }
+        #expect(!vault.isConfigured)
+    }
+
+    /// The point of the switch being a re-wrap: content is sealed under the master
+    /// key, which never changes, so nothing has to be decrypted and rewritten.
+    @Test("Switching from a PIN to a passphrase leaves content sealed and readable")
+    func switchingKindKeepsContent() throws {
+        let paths = LibraryPaths.temporary()
+        defer { paths.destroy() }
+        let vault = Vault(paths: paths)
+        let store = try LibraryStore(paths: paths, vault: vault)
+        try vault.setUpPIN("4829")
+
+        let item = store.createSnippet(title: "Passport", body: "NLD1234567", sensitive: true)
+        let sealedBefore = item.sealedBody
+        #expect(sealedBefore != nil)
+
+        try vault.changeSecret(current: "4829", new: phrase, kind: .passphrase)
+        #expect(vault.secretKind == .passphrase)
+        // The very same ciphertext — this was a re-wrap, not a re-encrypt.
+        #expect(item.sealedBody == sealedBefore)
+
+        vault.lock()
+        try vault.unlock(secret: phrase)
+        #expect(store.resolveBodyText(item, key: vault.currentKey) == "NLD1234567")
+    }
+
+    @Test("Switching back to a PIN works the same way")
+    func switchingBackToPIN() throws {
+        let paths = LibraryPaths.temporary()
+        defer { paths.destroy() }
+        let vault = Vault(paths: paths)
+        try vault.setUpSecret(phrase, kind: .passphrase)
+
+        try vault.changeSecret(current: phrase, new: "1379", kind: .pin)
+        #expect(vault.secretKind == .pin)
+        vault.lock()
+        try vault.unlock(secret: "1379")
+        #expect(vault.isUnlocked)
+    }
+
+    @Test("A wrong current secret cannot re-key the vault")
+    func changeNeedsTheCurrentSecret() throws {
+        let paths = LibraryPaths.temporary()
+        defer { paths.destroy() }
+        let vault = Vault(paths: paths)
+        try vault.setUpPIN("4829")
+
+        #expect(throws: VaultError.wrongPIN) {
+            try vault.changeSecret(current: "0000", new: phrase, kind: .passphrase)
+        }
+        #expect(vault.secretKind == .pin)
+    }
+
+    /// `changeSecret` used to unwrap directly, with no counter and no cooldown, which
+    /// made "change my PIN" an unthrottled oracle for the current one.
+    @Test("Changing the secret is throttled like any other guess")
+    func changeIsThrottled() throws {
+        let paths = LibraryPaths.temporary()
+        defer { paths.destroy() }
+        let vault = Vault(paths: paths)
+        try vault.setUpPIN("4829")
+
+        for _ in 0..<5 {
+            #expect(throws: VaultError.wrongPIN) {
+                try vault.changeSecret(current: "0000", new: "1111", kind: .pin)
+            }
+        }
+        #expect(vault.failedAttempts == 5)
+        #expect(vault.throttledUntil != nil)
+
+        // And the cooldown applies to the change path, not only to unlocking.
+        #expect(throws: (any Error).self) {
+            try vault.changeSecret(current: "4829", new: "1111", kind: .pin)
+        }
+    }
+
+    @Test("Changing without naming a kind keeps the one already in use")
+    func changeKeepsKindByDefault() throws {
+        let paths = LibraryPaths.temporary()
+        defer { paths.destroy() }
+        let vault = Vault(paths: paths)
+        try vault.setUpSecret(phrase, kind: .passphrase)
+
+        try vault.changeSecret(current: phrase, new: "a longer passphrase")
+        #expect(vault.secretKind == .passphrase)
     }
 }

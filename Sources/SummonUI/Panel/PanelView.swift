@@ -286,6 +286,14 @@ public struct PanelView: View {
                         .labelStyle(.titleAndIcon)
                     KeyHint("⌫", "Back")
                 } else {
+                    SummonMarkShape()
+                        .fill(
+                            LinearGradient(colors: [Theme.Brand.violetBright, Theme.accent],
+                                           startPoint: .topLeading, endPoint: .bottomTrailing)
+                        )
+                        .frame(width: 13, height: 13)
+                        .glow(Theme.accent, radius: 6, strength: 0.7)
+                        .accessibilityHidden(true)
                     Text("Summon")
                         .font(Theme.Typography.meta)
                         .foregroundStyle(Theme.tertiaryText)

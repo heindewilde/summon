@@ -34,6 +34,10 @@ public struct KindIcon: View {
             .font(.system(size: style == .tile ? size * 0.44 : size,
                           weight: style == .tile ? .medium : .regular))
             .foregroundStyle(isLocked ? Theme.tertiaryText : Theme.color(for: kind))
+            // The one coloured thing in a row, so it is the one thing allowed to emit.
+            // A flat coloured glyph on a dark ground reads as ink; a lit one reads as
+            // an object, which is the difference the icon trades on.
+            .glow(isLocked ? .clear : Theme.color(for: kind), radius: 5, strength: 0.45)
     }
 
     public var body: some View {
@@ -334,7 +338,10 @@ public struct PanelBackground: View {
     public var body: some View {
         ZStack {
             VisualEffectBackground(material: .hudWindow, blending: .behindWindow)
-            Theme.chrome
+            // Graded, not flat. A single fill is a rectangle of colour; a surface that
+            // is fractionally lighter at the top has a direction and therefore a form.
+            LinearGradient(colors: [Theme.chrome.opacity(0.88), Theme.chrome],
+                           startPoint: .top, endPoint: .bottom)
             // The bloom. A gradient used to sit here and was removed for saying nothing
             // — it was a decorative wash that made the top of the list a different
             // colour from the bottom. This one is not that: it is the light the mark is

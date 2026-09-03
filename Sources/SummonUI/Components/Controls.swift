@@ -45,18 +45,37 @@ public enum RowState: Sendable {
 
 public extension View {
     /// The background every selectable row shares.
+    ///
+    /// A selected row is a pane of glass laid on the surface, and a pane of glass is
+    /// three things: a fill that is lighter where the light hits it, a bright specular
+    /// line along its top edge, and a coloured glow it casts on what is underneath.
+    /// A flat translucent fill has none of those, which is why the first version of
+    /// this looked like a tinted rectangle.
     func rowSurface(_ state: RowState, radius: CGFloat = Theme.Radius.small) -> some View {
-        background {
+        let lit = state == .selected || state == .navActive
+        return background {
             RoundedRectangle(cornerRadius: radius, style: .continuous)
-                .fill(state.fill)
+                .fill(
+                    LinearGradient(colors: lit ? [state.fill, state.fill.opacity(0.45)]
+                                               : [state.fill, state.fill],
+                                   startPoint: .top, endPoint: .bottom)
+                )
+                .shadow(color: lit ? Theme.accent.opacity(0.45) : .clear, radius: 10, y: 2)
         }
         .overlay {
-            // Glass has an edge. Without it a translucent fill on a translucent ground
-            // is just a slightly different colour, which is not what "selected" should
-            // look like when everything around it is already tinted.
-            if state == .selected || state == .navActive {
+            if lit {
                 RoundedRectangle(cornerRadius: radius, style: .continuous)
                     .strokeBorder(Theme.selectionEdge, lineWidth: 1)
+            }
+        }
+        .overlay(alignment: .top) {
+            // The specular line. One pixel, and it is most of the effect.
+            if lit {
+                Capsule()
+                    .fill(LinearGradient(colors: [.clear, Theme.glassSheen, .clear],
+                                         startPoint: .leading, endPoint: .trailing))
+                    .frame(height: 1)
+                    .padding(.horizontal, radius)
             }
         }
         .overlay {
@@ -86,6 +105,12 @@ public extension View {
     func elevation(_ shadow: Theme.Shadow) -> some View {
         self.shadow(color: shadow.color, radius: shadow.radius, y: shadow.y)
     }
+
+    /// Makes a thing emit light rather than merely be coloured. The icon's mark is lit
+    /// this way and it is the whole difference between a violet glyph and a glowing one.
+    func glow(_ colour: Color, radius: CGFloat = 8, strength: Double = 0.55) -> some View {
+        shadow(color: colour.opacity(strength), radius: radius)
+    }
 }
 
 // MARK: - Bloom
@@ -104,12 +129,17 @@ public struct Bloom: View {
         GeometryReader { geo in
             let d = max(geo.size.width, geo.size.height)
             ZStack {
-                RadialGradient(colors: [Theme.bloom.opacity(intensity), .clear],
-                               center: .init(x: 0.12, y: 0.02),
-                               startRadius: 0, endRadius: d * 0.95)
-                RadialGradient(colors: [Theme.bloom.opacity(intensity * 0.55), .clear],
-                               center: .init(x: 0.92, y: 1.04),
-                               startRadius: 0, endRadius: d * 0.8)
+                // Tight and strong rather than wide and faint. A wash across a whole
+                // surface reads as "this rectangle is slightly purple"; a pool with a
+                // steep falloff reads as a light with something behind it.
+                RadialGradient(colors: [Theme.bloom.opacity(intensity),
+                                        Theme.bloom.opacity(intensity * 0.28), .clear],
+                               center: .init(x: 0.08, y: -0.04),
+                               startRadius: 0, endRadius: d * 0.55)
+                RadialGradient(colors: [Theme.bloom.opacity(intensity * 0.7),
+                                        Theme.bloom.opacity(intensity * 0.16), .clear],
+                               center: .init(x: 1.02, y: 1.06),
+                               startRadius: 0, endRadius: d * 0.45)
             }
         }
         .allowsHitTesting(false)

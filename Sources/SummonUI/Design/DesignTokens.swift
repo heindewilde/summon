@@ -85,8 +85,14 @@ public enum Theme {
     /// behind one object. This is the single biggest reason the onboarding looks like
     /// the icon and the rest of the app did not — the accent said where you were, but
     /// the ground it said it on was the same neutral grey any utility ships with.
-    public static let bloom = Color(nsColor: .dyn(light: .srgb(0.42, 0.30, 0.92, 0.11),
-                                                  dark: .srgb(0.46, 0.34, 0.96, 0.20)))
+    public static let bloom = Color(nsColor: .dyn(light: .srgb(0.42, 0.30, 0.92, 0.20),
+                                                  dark: .srgb(0.52, 0.40, 1.00, 0.52)))
+
+    /// The specular edge of glass: the thin bright line along a lit top edge. Without
+    /// it a translucent fill is a flat tint, which is most of why the first pass at
+    /// this read as "plain" — glass is edges and highlights, not transparency.
+    public static let glassSheen = Color(nsColor: .dyn(light: .srgb(1, 1, 1, 0.90),
+                                                       dark: .srgb(1, 0.99, 1, 0.24)))
 
     /// A drop lands here. Its own token because a drop target drawn with `selection`
     /// says "this folder is selected" instead — the same pixel, two meanings.

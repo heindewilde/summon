@@ -182,3 +182,50 @@ struct PayloadMigrationTests {
         #expect(try key.open(payload.bytes, itemID: id) == Data("passport scan".utf8))
     }
 }
+
+/// The ceiling on what leaves this device.
+@Suite("Payload tiering")
+@MainActor
+struct PayloadTieringTests {
+
+    private func library() throws -> (LibraryStore, LibraryPaths) {
+        let paths = LibraryPaths.temporary()
+        return (try LibraryStore(paths: paths, vault: Vault(paths: paths)), paths)
+    }
+
+    @Test("An ordinary file syncs")
+    func smallStaysShared() throws {
+        let (store, paths) = try library()
+        defer { paths.destroy() }
+
+        let item = try #require(store.importData(Data("a short document".utf8), title: "Note.pdf",
+                                                 kind: .document, fileExtension: "pdf"))
+        _ = store.migratePayloads()
+
+        #expect(try store.context.fetch(FetchDescriptor<SummonPayload>()).count == 1)
+        #expect(!store.staysOnThisDevice(item.id))
+    }
+
+    /// The one that matters: CloudKit mirrors eagerly and totally, so without this a
+    /// large file would try to land on a phone in full.
+    @Test("A file over the ceiling stays on this device, and still reads")
+    func largeStaysLocal() throws {
+        let (store, paths) = try library()
+        defer { paths.destroy() }
+
+        let big = Data(repeating: 0x41, count: LibraryStore.cloudPayloadLimit + 1024)
+        let item = try #require(store.importData(big, title: "Scan.pdf",
+                                                 kind: .document, fileExtension: "pdf"))
+        _ = store.migratePayloads()
+
+        #expect(try store.context.fetch(FetchDescriptor<SummonPayload>()).isEmpty,
+                "nothing this large may go to the syncing store")
+        #expect(try store.context.fetch(FetchDescriptor<SummonLocalPayload>()).count == 1)
+        #expect(store.staysOnThisDevice(item.id))
+
+        // Reading does not care which tier it landed in.
+        let blob = try #require(store.item(id: item.id)?.storedBlob)
+        try FileManager.default.removeItem(at: store.files.location(of: blob))
+        #expect(try store.read(blob, itemID: item.id, key: nil) == big)
+    }
+}

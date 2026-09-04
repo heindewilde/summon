@@ -62,7 +62,7 @@ public final class LibraryStore {
         // what should never leave the device it was learned on.
         let shared = Schema([SummonItem.self, SummonFolder.self, SummonTag.self,
                              AppAffinity.self, SummonPayload.self])
-        let local = Schema([UsageStat.self])
+        let local = Schema([UsageStat.self, SummonLocalPayload.self])
 
         let sharedConfig = ModelConfiguration("shared", schema: shared,
                                               url: paths.storeURL, cloudKitDatabase: .none)
@@ -70,7 +70,7 @@ public final class LibraryStore {
                                              url: paths.localStoreURL, cloudKitDatabase: .none)
         self.container = try ModelContainer(
             for: SummonItem.self, SummonFolder.self, SummonTag.self,
-            AppAffinity.self, SummonPayload.self, UsageStat.self,
+            AppAffinity.self, SummonPayload.self, UsageStat.self, SummonLocalPayload.self,
             configurations: sharedConfig, localConfig)
 
         // Before the first refresh, so ranking never sees a half-moved library. Cheap
@@ -691,16 +691,26 @@ public final class LibraryStore {
     /// Brings an item's stored bytes into line with its sensitivity.
     private func resealPayload(for item: SummonItem, key: VaultKey, sealed: Bool) throws {
         let id = item.id
-        var descriptor = FetchDescriptor<SummonPayload>(
-            predicate: #Predicate { $0.itemID == id })
-        descriptor.fetchLimit = 1
-        guard let payload = (try? context.fetch(descriptor))?.first,
-              payload.isSealed != sealed else { return }
+        var shared = FetchDescriptor<SummonPayload>(predicate: #Predicate { $0.itemID == id })
+        shared.fetchLimit = 1
+        var local = FetchDescriptor<SummonLocalPayload>(predicate: #Predicate { $0.itemID == id })
+        local.fetchLimit = 1
 
-        payload.bytes = sealed
-            ? try key.seal(payload.bytes, itemID: item.id)
-            : try key.open(payload.bytes, itemID: item.id)
-        payload.isSealed = sealed
+        // Both tiers. A large item is exactly the kind that gets marked sensitive —
+        // the scanned passport, the signed contract — so missing this half would
+        // seal only the small ones.
+        if let payload = (try? context.fetch(shared))?.first, payload.isSealed != sealed {
+            payload.bytes = sealed
+                ? try key.seal(payload.bytes, itemID: id)
+                : try key.open(payload.bytes, itemID: id)
+            payload.isSealed = sealed
+        }
+        if let payload = (try? context.fetch(local))?.first, payload.isSealed != sealed {
+            payload.bytes = sealed
+                ? try key.seal(payload.bytes, itemID: id)
+                : try key.open(payload.bytes, itemID: id)
+            payload.isSealed = sealed
+        }
     }
 
     // MARK: - Reading payloads
@@ -710,7 +720,14 @@ public final class LibraryStore {
         var descriptor = FetchDescriptor<SummonPayload>(
             predicate: #Predicate { $0.itemID == itemID })
         descriptor.fetchLimit = 1
-        return (try? context.fetch(descriptor))?.first?.bytes
+        if let bytes = (try? context.fetch(descriptor))?.first?.bytes { return bytes }
+
+        // The other tier. Reads do not care which half a payload lives in; only the
+        // writer does.
+        var local = FetchDescriptor<SummonLocalPayload>(
+            predicate: #Predicate { $0.itemID == itemID })
+        local.fetchLimit = 1
+        return (try? context.fetch(local))?.first?.bytes
     }
 
     /// An item's content, decrypted if it needs to be.
@@ -792,6 +809,47 @@ public final class LibraryStore {
         return moved
     }
 
+    // MARK: - Payload tiering
+
+    /// The largest payload that will be sent to other devices.
+    ///
+    /// Ten megabytes covers what a companion is actually for — the canned reply, the
+    /// portfolio PDF, the headshot, the passport scan — while a scanned book or a
+    /// screen recording never tries to land on a phone. It is a ceiling on what syncs,
+    /// not on what Summon will hold; `FileStore.maximumImportBytes` is still the limit
+    /// on that.
+    public static let cloudPayloadLimit = 10 * 1024 * 1024
+
+    /// Stores an item's bytes in whichever half of the library they belong in.
+    ///
+    /// The one place that decision is made, so import and migration cannot disagree
+    /// about where something lives.
+    func writePayload(for itemID: UUID, blob: StoredBlob, bytes: Data, createdAt: Date) {
+        if bytes.count > LibraryStore.cloudPayloadLimit {
+            context.insert(SummonLocalPayload(itemID: itemID, bytes: bytes,
+                                              originalName: blob.originalName,
+                                              fileExtension: blob.fileExtension,
+                                              isSealed: blob.isSealed,
+                                              contentHash: blob.contentHash,
+                                              createdAt: createdAt))
+        } else {
+            context.insert(SummonPayload(itemID: itemID, bytes: bytes,
+                                         originalName: blob.originalName,
+                                         fileExtension: blob.fileExtension,
+                                         isSealed: blob.isSealed,
+                                         contentHash: blob.contentHash,
+                                         createdAt: createdAt))
+        }
+    }
+
+    /// Whether an item's bytes stay on this device.
+    public func staysOnThisDevice(_ itemID: UUID) -> Bool {
+        var descriptor = FetchDescriptor<SummonLocalPayload>(
+            predicate: #Predicate { $0.itemID == itemID })
+        descriptor.fetchLimit = 1
+        return ((try? context.fetch(descriptor))?.first) != nil
+    }
+
     // MARK: - Payload migration
 
     /// Moves blob bytes from `Blobs/` and `Vault/` into `SummonPayload`.
@@ -822,7 +880,10 @@ public final class LibraryStore {
         // every launch to discover there is nothing to do.
         var idsOnly = FetchDescriptor<SummonPayload>()
         idsOnly.propertiesToFetch = [\.itemID]
+        var localIDsOnly = FetchDescriptor<SummonLocalPayload>()
+        localIDsOnly.propertiesToFetch = [\.itemID]
         let alreadyMoved = Set(((try? context.fetch(idsOnly)) ?? []).map(\.itemID))
+            .union(((try? context.fetch(localIDsOnly)) ?? []).map(\.itemID))
 
         var moved = 0
         for item in allItems() {
@@ -835,13 +896,7 @@ public final class LibraryStore {
                 Log.store.warning("Payload migration skipped \(blob.filename, privacy: .public): unreadable")
                 continue
             }
-            context.insert(SummonPayload(itemID: item.id,
-                                         bytes: bytes,
-                                         originalName: blob.originalName,
-                                         fileExtension: blob.fileExtension,
-                                         isSealed: blob.isSealed,
-                                         contentHash: blob.contentHash,
-                                         createdAt: item.createdAt))
+            writePayload(for: item.id, blob: blob, bytes: bytes, createdAt: item.createdAt)
             do {
                 try context.save()
                 moved += 1

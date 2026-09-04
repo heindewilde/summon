@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import SummonKit
 
 /// A small, realistic starting library so the first summon shows what good looks like
 /// instead of an empty box. Generates real files, so image previews, PDF rendering

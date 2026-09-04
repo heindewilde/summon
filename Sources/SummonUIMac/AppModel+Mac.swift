@@ -1,5 +1,6 @@
 import AppKit
 import SummonKit
+import SummonKitMac
 import SummonUI
 
 /// The AppKit half of `AppModel`.
@@ -25,5 +26,10 @@ extension AppModel {
                                                 selectionIsFolder: selectionHasFolder) else { return false }
         perform(command)
         return true
+    }
+
+    public func seedStarterLibraryIfEmpty() async {
+        await StarterLibrary.seed(into: store, importer: importer)
+        runSearch()
     }
 }

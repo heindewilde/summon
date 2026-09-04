@@ -1550,11 +1550,6 @@ public final class AppModel {
         importDroppedFiles(panel.urls, into: folder)
     }
 
-    public func seedStarterLibraryIfEmpty() async {
-        await StarterLibrary.seed(into: store, importer: importer)
-        runSearch()
-    }
-
     // MARK: - Toasts
 
     public func show(_ toast: Toast) {

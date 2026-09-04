@@ -1,4 +1,3 @@
-import AppKit
 import Foundation
 
 /// Turns raw captures into library items, then enriches them in the background.

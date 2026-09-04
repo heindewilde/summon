@@ -1,5 +1,6 @@
-import AppKit
+import CoreGraphics
 import Foundation
+import ImageIO
 import PDFKit
 import UniformTypeIdentifiers
 import Vision
@@ -28,9 +29,7 @@ public struct TextExtractor: Sendable {
 
     public static func ocr(imageData: Data) async -> String {
         await Task.detached(priority: .utility) {
-            guard let image = NSImage(data: imageData),
-                  let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil)
-            else { return "" }
+            guard let cgImage = decode(imageData) else { return "" }
             return recognizeText(in: cgImage)
         }.value
     }
@@ -276,28 +275,65 @@ public struct TextExtractor: Sendable {
         await Task.detached(priority: .utility) {
             if url.pathExtension.lowercased() == "pdf",
                let document = PDFDocument(url: url), let page = document.page(at: 0) {
-                let bounds = page.bounds(for: .mediaBox)
-                let scale = min(maxPixel / max(bounds.width, bounds.height), 2)
-                let image = page.thumbnail(of: CGSize(width: bounds.width * scale,
-                                                      height: bounds.height * scale), for: .mediaBox)
-                return png(from: image, maxPixel: maxPixel)
+                guard let rendered = render(page, maxPixel: maxPixel) else { return nil }
+                return png(from: rendered, maxPixel: maxPixel)
             }
-            guard let image = NSImage(contentsOf: url) else { return nil }
-            return png(from: image, maxPixel: maxPixel)
+            guard let cgImage = decode(url) else { return nil }
+            return png(from: cgImage, maxPixel: maxPixel)
         }.value
     }
 
     public static func thumbnail(fromImageData data: Data, maxPixel: CGFloat = 512) async -> Data? {
         await Task.detached(priority: .utility) {
-            guard let image = NSImage(data: data) else { return nil }
-            return png(from: image, maxPixel: maxPixel)
+            guard let cgImage = decode(data) else { return nil }
+            return png(from: cgImage, maxPixel: maxPixel)
         }.value
     }
 
-    /// Deliberately avoids `NSImage.lockFocus`, which fails outside a window context —
-    /// thumbnails are generated on a background task with no window in sight.
-    private static func png(from image: NSImage, maxPixel: CGFloat) -> Data? {
-        guard var cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return nil }
+    /// Decoding through ImageIO rather than `NSImage`.
+    ///
+    /// This is not only for the platform: `NSImage` is an AppKit object with a
+    /// window-server dependency, and the reason the old encode path avoided
+    /// `lockFocus` is that it fails on a background task with no window in sight.
+    /// ImageIO has no such notion, and thumbnails are always generated off the main
+    /// actor.
+    private static func decode(_ data: Data) -> CGImage? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+        return CGImageSourceCreateImageAtIndex(source, 0, nil)
+    }
+
+    private static func decode(_ url: URL) -> CGImage? {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
+        return CGImageSourceCreateImageAtIndex(source, 0, nil)
+    }
+
+    /// The first page, drawn into a bitmap — the same thing `ocrPage` does, and the
+    /// portable half of what `PDFPage.thumbnail(of:for:)` used to do. That returns an
+    /// `NSImage` on macOS and a `UIImage` on iOS, which is precisely the kind of
+    /// platform-shaped return this target should not have in it.
+    private static func render(_ page: PDFPage, maxPixel: CGFloat) -> CGImage? {
+        let bounds = page.bounds(for: .mediaBox)
+        guard bounds.width > 1, bounds.height > 1 else { return nil }
+        let scale = min(maxPixel / max(bounds.width, bounds.height), 2)
+        let size = CGSize(width: (bounds.width * scale).rounded(),
+                          height: (bounds.height * scale).rounded())
+
+        guard let context = CGContext(
+            data: nil, width: Int(size.width), height: Int(size.height),
+            bitsPerComponent: 8, bytesPerRow: 0,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue
+        ) else { return nil }
+
+        context.setFillColor(CGColor(gray: 1, alpha: 1))
+        context.fill(CGRect(origin: .zero, size: size))
+        context.scaleBy(x: scale, y: scale)
+        page.draw(with: .mediaBox, to: context)
+        return context.makeImage()
+    }
+
+    private static func png(from source: CGImage, maxPixel: CGFloat) -> Data? {
+        var cgImage = source
 
         let width = CGFloat(cgImage.width), height = CGFloat(cgImage.height)
         guard width > 0, height > 0 else { return nil }
@@ -315,6 +351,11 @@ public struct TextExtractor: Sendable {
             guard let scaled = ctx.makeImage() else { return nil }
             cgImage = scaled
         }
-        return NSBitmapImageRep(cgImage: cgImage).representation(using: .png, properties: [:])
+        let out = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(
+            out, UTType.png.identifier as CFString, 1, nil) else { return nil }
+        CGImageDestinationAddImage(destination, cgImage, nil)
+        guard CGImageDestinationFinalize(destination) else { return nil }
+        return out as Data
     }
 }

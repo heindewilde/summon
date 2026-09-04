@@ -1,4 +1,9 @@
+import CoreGraphics
+#if canImport(AppKit)
 import AppKit
+#else
+import UIKit
+#endif
 import SummonKit
 import SwiftUI
 
@@ -21,10 +26,10 @@ private struct SendableCGImage: @unchecked Sendable {
 public final class ThumbnailCache {
     public static let shared = ThumbnailCache()
 
-    private let images = NSCache<NSUUID, NSImage>()
+    private let images = NSCache<NSUUID, CGImage>()
     /// Remembers absence too, so a missing thumbnail is not re-probed on every render.
     private var missing: Set<UUID> = []
-    private var inFlight: [UUID: Task<NSImage?, Never>] = [:]
+    private var inFlight: [UUID: Task<CGImage?, Never>] = [:]
 
     public init() {
         images.countLimit = 512
@@ -32,22 +37,26 @@ public final class ThumbnailCache {
 
     /// Synchronous and free of I/O. `nil` means "not in memory yet", never "no
     /// thumbnail" — that distinction is what lets a warm row paint without flicker.
-    public func cached(_ id: UUID) -> NSImage? {
+    public func cached(_ id: UUID) -> CGImage? {
         images.object(forKey: id as NSUUID)
     }
 
     public func isKnownMissing(_ id: UUID) -> Bool { missing.contains(id) }
 
     /// Decodes downsampled, off the main actor, coalescing concurrent requests.
-    public func image(for id: UUID, url: URL, pointSize: CGFloat) async -> NSImage? {
+    public func image(for id: UUID, url: URL, pointSize: CGFloat) async -> CGImage? {
         if let hit = cached(id) { return hit }
         if missing.contains(id) { return nil }
         if let existing = inFlight[id] { return await existing.value }
 
+                #if canImport(AppKit)
         let scale = NSScreen.main?.backingScaleFactor ?? 2
+        #else
+        let scale = UIScreen.main.scale
+        #endif
         let pixels = Int((pointSize * scale).rounded())
 
-        let task = Task<NSImage?, Never> { [weak self] in
+        let task = Task<CGImage?, Never> { [weak self] in
             let decoded = await Task.detached(priority: .utility) { () -> SendableCGImage? in
                 guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
                 let options: [CFString: Any] = [
@@ -65,8 +74,10 @@ public final class ThumbnailCache {
                 self.inFlight[id] = nil
                 return nil
             }
-            let image = NSImage(cgImage: decoded.image,
-                                size: NSSize(width: pointSize, height: pointSize))
+            // Cached as a CGImage rather than an NSImage: the decode already
+            // produced one, and wrapping it only added a platform type to a cache
+            // that has no reason to have one.
+            let image = decoded.image
             self.images.setObject(image, forKey: id as NSUUID)
             self.inFlight[id] = nil
             return image

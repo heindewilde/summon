@@ -1,4 +1,6 @@
+#if canImport(AppKit)
 import AppKit
+#endif
 import SwiftUI
 import SummonKit
 
@@ -286,12 +288,12 @@ public struct ThumbnailView: View {
 
     /// Seeded synchronously from the cache, so an already-decoded thumbnail paints on
     /// the first frame and never flickers through the glyph placeholder.
-    @State private var image: NSImage?
+    @State private var image: CGImage?
 
     public var body: some View {
         Group {
             if !isLocked, let image {
-                Image(nsImage: image)
+                Image(decorative: image, scale: 1)
                     .resizable()
                     .aspectRatio(contentMode: .fill)
                     .frame(width: size, height: size)
@@ -394,11 +396,19 @@ public struct VisualEffectBackground: View {
         if isSnapshotting {
             Color(nsColor: .dyn(light: .srgb(0.97, 0.97, 0.98), dark: .srgb(0.15, 0.15, 0.17)))
         } else {
+            #if canImport(AppKit)
             VisualEffectRepresentable(material: material, blending: blending)
+            #else
+            // UIKit has no NSVisualEffectView equivalent that takes a material and a
+            // blending mode; SwiftUI's own material is the closest thing and is what
+            // an iOS surface would reach for anyway.
+            Rectangle().fill(.ultraThinMaterial)
+            #endif
         }
     }
 }
 
+#if canImport(AppKit)
 struct VisualEffectRepresentable: NSViewRepresentable {
     var material: NSVisualEffectView.Material
     var blending: NSVisualEffectView.BlendingMode
@@ -415,7 +425,8 @@ struct VisualEffectRepresentable: NSViewRepresentable {
         view.material = material
         view.blendingMode = blending
     }
-}
+}#endif
+
 
 
 /// Renders snippet text with `{{placeholders}}` picked out, so it is obvious at a

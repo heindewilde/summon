@@ -242,8 +242,9 @@ Requires **macOS 26** and **Xcode 26** (Swift 6.1+). There are **no dependencies
 Scripts/run.sh              # debug build, then launch
 Scripts/run.sh --demo       # …against a throwaway library
 Scripts/selftest.sh         # 90 runtime checks on a fresh demo library
-swift test                  # 248 tests over the logic layer
-swift test -c release       # the same, plus the performance budgets
+swift test                  # 262 tests over the logic layer
+swift test -c release       # the same, in an optimised build
+Scripts/perf.sh             # the wall-clock budgets, on a quiet machine
 ```
 
 `SUMMON_DEMO=1` points the app at a separate library (`Summon-Demo`), so you can experiment without touching your real one.
@@ -356,9 +357,9 @@ Sources/
 
 | | |
 |---|---|
-| **248 tests** across 37 suites | The whole logic layer: vault round-trips and wrong-secret rejection, the cooldown holding against a clock set backwards, that extraction opens no socket and that a seal leaves no plaintext in the store file, ranking and frecency, placeholder parsing, folder trees and cycle refusal, every keyboard binding *and* the keys the panel deliberately declines, contrast ratios, and content edge cases from empty titles to right-to-left text |
+| **262 tests** across 39 suites | The whole logic layer: vault round-trips and wrong-secret rejection, the cooldown holding against a clock set backwards, that extraction opens no socket and that a seal leaves no plaintext in the store file, ranking and frecency, placeholder parsing, folder trees and cycle refusal, every keyboard binding *and* the keys the panel deliberately declines, contrast ratios, and content edge cases from empty titles to right-to-left text |
 | **90 runtime checks** | `Scripts/selftest.sh` drives the real app: hot key registration, panel window configuration, search reaching inside a PDF, the vault lifecycle end to end, and each keyboard binding actually reaching behaviour |
-| **Performance budgets** | Asserted in release builds, and they fail the build. The wall-clock ones run locally; CI keeps the structural assertions, because timing on a shared runner measures the runner |
+| **Performance budgets** | Structural ones — "typing never rebuilds the index" — run everywhere and fail the build. The wall-clock ones run only in `Scripts/perf.sh`, which refuses outright if the machine is busy, because a budget measured beside a running test suite or a busy editor measures the scheduler rather than the code |
 | **A paste round trip** | Opens a scratch document in TextEdit, summons a snippet into it, and reads the result back through the Accessibility API — refusing to run unless TextEdit is genuinely frontmost |
 
 | Budget | Measured | Limit |
@@ -369,6 +370,8 @@ Sources/
 | Typing rebuilds the index | never | asserted structurally |
 
 Budgets assert on the **fastest** of many runs, not the mean or the worst. Timing noise is one-sided — the scheduler only ever adds time — so the minimum is the honest estimator of what the code can do, and asserting the maximum produces a flaky suite whose usual fix is raising the budget until it means nothing.
+
+That estimator has a limit worth naming: it assumes *some* sample lands in a quiet slot. Under sustained load none does, and the floor itself moves — the index build reads 13.5 ms on an idle machine and 37 ms at load 24. So the wall-clock budgets do not run in the ordinary suite at all, and `Scripts/perf.sh` checks the load average and refuses rather than printing a number that is about the machine.
 
 ---
 
@@ -388,7 +391,8 @@ Issues and pull requests are welcome.
 
 ```bash
 swift test                  # start here — it is fast
-swift test -c release       # includes the performance budgets
+swift test -c release       # the same, optimised
+Scripts/perf.sh             # the wall-clock budgets, if the machine is quiet
 Scripts/selftest.sh         # drives the real app end to end
 ```
 

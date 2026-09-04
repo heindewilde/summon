@@ -70,25 +70,23 @@ struct FolderIconTests {
                 "“\(query)” should still reach \(expected)")
     }
 
-    @Test("Searching does not rebuild its tables on every call",
-          .enabled(if: !PerfBudget.isSharedRunner,
-                   "wall-clock is not measurable on a shared runner"))
+    @Test("Searching does not rebuild its tables on every call")
     func searchIsCheap() {
-        // 300 searches over 90 symbols; if Prepared were rebuilt per call this would
-        // be the same mistake the search index already had to be corrected for.
+        // This was a wall-clock test: 300 searches, budgeted at 500ms, best of three.
+        // It failed in a full run and passed on its own, and the best-of-three was the
+        // attempt to fix that. It does not work — the estimator assumes some run lands
+        // in a quiet slot, and on a loaded machine none does. It read 1.08s against a
+        // 500ms budget while nothing was wrong with the code.
         //
-        // Budgeted generously and measured as a best-of. The suite runs its tests in
-        // parallel, so a single timed run here is really "300 searches plus whatever
-        // else the machine was doing" — which is how this started failing in a full
-        // run and passing on its own. Three attempts, and the fastest is the one that
-        // says something about the code rather than about the scheduler.
-        var best = Duration.seconds(3600)
-        for _ in 0..<3 {
-            let start = ContinuousClock.now
-            for _ in 0..<300 { _ = FolderIcon.search("mny") }
-            best = min(best, ContinuousClock.now - start)
-        }
-        #expect(best < .milliseconds(500))
+        // The timing was never the point anyway. `prepared` is a `static let`, so
+        // building it once is a language guarantee, and no measurement can strengthen
+        // that. What a measurement *was* standing in for is the edit that revokes it:
+        // changing it to a computed `static var`. So assert that directly, and it holds
+        // on any machine at any load.
+        let before = FolderIcon.prepareCount
+        for _ in 0..<300 { _ = FolderIcon.search("mny") }
+        #expect(FolderIcon.prepareCount == before)
+        #expect(FolderIcon.prepareCount == 1, "prepared should be built exactly once, ever")
     }
 
     @Test("Every colour the picker offers resolves to a distinct choice")

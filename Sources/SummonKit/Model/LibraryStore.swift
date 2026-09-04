@@ -61,6 +61,11 @@ public final class LibraryStore {
                              AppAffinity.self, SummonPayload.self])
         let config = ModelConfiguration(schema: schema, url: paths.storeURL, cloudKitDatabase: .none)
         self.container = try ModelContainer(for: schema, configurations: [config])
+
+        // Before the first refresh, so ranking never sees a half-moved library. Cheap
+        // after the first run — one id-only fetch that finds nothing to do — and it
+        // needs no key, so it can happen at launch rather than waiting for an unlock.
+        migratePayloads()
         refresh()
     }
 
@@ -657,6 +662,68 @@ public final class LibraryStore {
             let container = try decoder.container(keyedBy: CodingKeys.self)
             scrubVersion = try container.decodeIfPresent(Int.self, forKey: .scrubVersion) ?? 0
         }
+    }
+
+    // MARK: - Payload migration
+
+    /// Moves blob bytes from `Blobs/` and `Vault/` into `SummonPayload`.
+    ///
+    /// Returns how many items it moved, so a caller can log a real number rather than
+    /// "done".
+    ///
+    /// **The marker is the data, not a counter.** An item is migrated when a payload
+    /// exists for its id, which makes this resumable for free: a crash halfway leaves
+    /// a library that simply has fewer payloads, and the next run picks up exactly
+    /// where it stopped. A version number in `migrations.json` would have to be
+    /// written after the last item and would be wrong for the entire run.
+    ///
+    /// **It never needs the vault.** Sealed blobs are copied as ciphertext, byte for
+    /// byte, so this runs at launch on a locked library and the same key still opens
+    /// the result. That also means it cannot leak: nothing is decrypted to move it.
+    ///
+    /// **The source files are left in place.** They are the orphan detector and the
+    /// way back if anything about the new path proves wrong, and deleting them is a
+    /// separate decision for a later release.
+    ///
+    /// One item per save rather than one batch: `importFile` caps a file at 256 MB and
+    /// reads it whole, so a batch would hold several of those in memory at once.
+    @discardableResult
+    public func migratePayloads() -> Int {
+        // Ids only. A plain fetch would fault in every payload's bytes to build a set
+        // of UUIDs, which on a library of any size is the whole thing read off disk on
+        // every launch to discover there is nothing to do.
+        var idsOnly = FetchDescriptor<SummonPayload>()
+        idsOnly.propertiesToFetch = [\.itemID]
+        let alreadyMoved = Set(((try? context.fetch(idsOnly)) ?? []).map(\.itemID))
+
+        var moved = 0
+        for item in allItems() {
+            guard let blob = item.storedBlob, !alreadyMoved.contains(item.id) else { continue }
+            let source = files.location(of: blob)
+            guard let bytes = try? Data(contentsOf: source) else {
+                // A row pointing at a file that is not there. Left alone deliberately:
+                // it is already broken, and inventing an empty payload for it would
+                // turn a visible missing file into a silently empty one.
+                Log.store.warning("Payload migration skipped \(blob.filename, privacy: .public): unreadable")
+                continue
+            }
+            context.insert(SummonPayload(itemID: item.id,
+                                         bytes: bytes,
+                                         originalName: blob.originalName,
+                                         fileExtension: blob.fileExtension,
+                                         isSealed: blob.isSealed,
+                                         contentHash: blob.contentHash,
+                                         createdAt: item.createdAt))
+            do {
+                try context.save()
+                moved += 1
+            } catch {
+                report(error, while: "Moving \(blob.originalName) into the library")
+                context.rollback()
+            }
+        }
+        if moved > 0 { Log.store.info("Moved \(moved, privacy: .public) payloads into the store") }
+        return moved
     }
 
     func loadMigrations() -> Migrations {

@@ -633,20 +633,39 @@ public final class LibraryStore {
     // MARK: - Repairs for libraries written by an earlier version
 
     /// What `scrubSensitiveContent` has already done to this library.
-    private struct Migrations: Codable {
+    ///
+    /// `init(from:)` is written out rather than synthesised, and that is not style.
+    /// Swift's synthesised `Decodable` emits `try container.decode` for every
+    /// non-optional stored property and **ignores the declared default** when the key
+    /// is absent. The loader below falls back to `Migrations()` on any decode failure,
+    /// so the moment a second field is added here, every existing `migrations.json`
+    /// fails to decode, silently reports `scrubVersion = 0`, and the whole scrub runs
+    /// again on the next unlock — a full re-seal pass and an unconditional VACUUM,
+    /// with nothing on screen to say why.
+    ///
+    /// It is idempotent, so nothing would corrupt. It would just be slow, once, for
+    /// reasons no one could find. `decodeIfPresent` is what makes adding a field safe.
+    struct Migrations: Codable {
         /// Bumped when a new repair is added. 1: seal plaintext summaries, re-seal
         /// anything a silently-swallowed failure left in the clear, and vacuum once.
         var scrubVersion = 0
+
+        init() {}
+
+        init(from decoder: any Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            scrubVersion = try container.decodeIfPresent(Int.self, forKey: .scrubVersion) ?? 0
+        }
     }
 
-    private func loadMigrations() -> Migrations {
+    func loadMigrations() -> Migrations {
         guard let data = try? Data(contentsOf: paths.migrationsFile),
               let decoded = try? JSONDecoder().decode(Migrations.self, from: data)
         else { return Migrations() }
         return decoded
     }
 
-    private func save(_ migrations: Migrations) {
+    func save(_ migrations: Migrations) {
         guard let data = try? JSONEncoder().encode(migrations) else { return }
         try? data.write(to: paths.migrationsFile, options: .atomic)
     }

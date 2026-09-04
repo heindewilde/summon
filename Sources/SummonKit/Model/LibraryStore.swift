@@ -57,7 +57,8 @@ public final class LibraryStore {
         self.vault = vault
         paths.createDirectories()
 
-        let schema = Schema([SummonItem.self, SummonFolder.self, SummonTag.self, AppAffinity.self])
+        let schema = Schema([SummonItem.self, SummonFolder.self, SummonTag.self,
+                             AppAffinity.self, SummonPayload.self])
         let config = ModelConfiguration(schema: schema, url: paths.storeURL, cloudKitDatabase: .none)
         self.container = try ModelContainer(for: schema, configurations: [config])
         refresh()

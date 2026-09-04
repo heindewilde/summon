@@ -45,14 +45,14 @@ struct GeneralSettings: View {
             SettingsSection("Shortcuts") {
                 SettingsRow("Summon panel") {
                     HotKeyRecorder(combo: Binding(
-                        get: { model.settings.summonHotKey },
-                        set: { model.settings.summonHotKey = $0 }
+                        get: { MacSettings.shared.summonHotKey },
+                        set: { MacSettings.shared.summonHotKey = $0 }
                     )) { _ in model.reregisterHotKeys() }
                 }
                 SettingsRow("Save selection") {
                     HotKeyRecorder(combo: Binding(
-                        get: { model.settings.quickSaveHotKey },
-                        set: { model.settings.quickSaveHotKey = $0 }
+                        get: { MacSettings.shared.quickSaveHotKey },
+                        set: { MacSettings.shared.quickSaveHotKey = $0 }
                     )) { _ in model.reregisterHotKeys() }
                 }
                 Toggle("Enable the save-selection shortcut", isOn: Binding(
@@ -88,10 +88,10 @@ struct GeneralSettings: View {
                     }
                 ))
                 Toggle("Launch at login", isOn: $launchAtLogin)
-                    .onChange(of: launchAtLogin) { _, new in model.settings.launchAtLogin = new }
+                    .onChange(of: launchAtLogin) { _, new in MacSettings.shared.launchAtLogin = new }
             }
         }
-        .onAppear { launchAtLogin = model.settings.launchAtLogin }
+        .onAppear { launchAtLogin = MacSettings.shared.launchAtLogin }
     }
 
     @ViewBuilder

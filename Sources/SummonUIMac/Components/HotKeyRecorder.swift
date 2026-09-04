@@ -2,6 +2,7 @@ import AppKit
 import SwiftUI
 import SummonKit
 import SummonUI
+import SummonKitMac
 
 /// Click, then press the combination you want. Escape cancels, Delete clears.
 public struct HotKeyRecorder: View {

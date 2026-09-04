@@ -303,6 +303,15 @@ public final class AppModel {
     /// body meant a TCC round trip twice per render.
     public let accessibility: AccessibilityStatus
 
+    /// How this platform says "summon" and "save what's selected", already rendered.
+    ///
+    /// Nil where there is no such gesture. The shortcut itself is a `HotKeyCombo`,
+    /// which is Carbon to its core and lives in the macOS target; only the string
+    /// crosses over, so an empty state can name the shortcut without this file
+    /// knowing what a virtual key code is.
+    public var summonShortcutLabel: String?
+    public var quickSaveShortcutLabel: String?
+
     /// Held modifiers, on their own observable object so that watching them redraws
     /// the footer and nothing else. See `PanelModifierState`.
     public let modifiers = PanelModifierState()
@@ -1277,7 +1286,7 @@ public final class AppModel {
             runSearch()
             if created.isEmpty {
                 show(Toast(text: "Nothing selected to save", symbol: "questionmark.circle", tone: .warning,
-                           detail: "Select text or files, then press \(settings.quickSaveHotKey.displayString)"))
+                           detail: quickSaveShortcutLabel.map { "Select text or files, then press \($0)" }))
             } else if created.count == 1 {
                 show(Toast(text: "Saved “\(created[0].title)”", symbol: "sparkles", tone: .success))
             } else {

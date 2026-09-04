@@ -45,10 +45,10 @@ enum SelfTest {
         info("On-device model", "\(model.intelligence.status)")
 
         // MARK: Hot keys — the thing the app is named for
-        let summonOK = HotKeyCenter.shared.register(.summon, combo: model.settings.summonHotKey) {}
-        check("Global summon hot key registers (\(model.settings.summonHotKey.displayString))", summonOK)
-        let saveOK = HotKeyCenter.shared.register(.quickSave, combo: model.settings.quickSaveHotKey) {}
-        check("Global save hot key registers (\(model.settings.quickSaveHotKey.displayString))", saveOK)
+        let summonOK = HotKeyCenter.shared.register(.summon, combo: MacSettings.shared.summonHotKey) {}
+        check("Global summon hot key registers (\(MacSettings.shared.summonHotKey.displayString))", summonOK)
+        let saveOK = HotKeyCenter.shared.register(.quickSave, combo: MacSettings.shared.quickSaveHotKey) {}
+        check("Global save hot key registers (\(MacSettings.shared.quickSaveHotKey.displayString))", saveOK)
 
         // MARK: Library
         await model.seedStarterLibraryIfEmpty()

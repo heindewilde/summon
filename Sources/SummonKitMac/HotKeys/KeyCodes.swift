@@ -1,6 +1,7 @@
 import AppKit
 import Carbon.HIToolbox
 import Foundation
+import SummonKit
 
 /// A system-wide shortcut, stored as Carbon key/modifier codes.
 public struct HotKeyCombo: Codable, Equatable, Sendable, Hashable {

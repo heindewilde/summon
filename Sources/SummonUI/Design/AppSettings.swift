@@ -1,7 +1,5 @@
-import AppKit
 import Foundation
 import Observation
-import ServiceManagement
 import SummonKit
 
 /// Which appearance the app draws in, regardless of the system's.
@@ -21,14 +19,6 @@ public enum AppearanceChoice: String, CaseIterable, Sendable {
         }
     }
 
-    /// Nil means "follow the system", which is what a nil `NSApp.appearance` does.
-    public var nsAppearance: NSAppearance? {
-        switch self {
-        case .system: nil
-        case .light: NSAppearance(named: .aqua)
-        case .dark: NSAppearance(named: .darkAqua)
-        }
-    }
 }
 
 /// User preferences, persisted in UserDefaults. Small enough to keep in one place.
@@ -37,12 +27,6 @@ public enum AppearanceChoice: String, CaseIterable, Sendable {
 public final class AppSettings {
     private let defaults = UserDefaults.standard
 
-    public var summonHotKey: HotKeyCombo {
-        didSet { store(summonHotKey, "hotkey.summon") }
-    }
-    public var quickSaveHotKey: HotKeyCombo {
-        didSet { store(quickSaveHotKey, "hotkey.quickSave") }
-    }
     public var quickSaveEnabled: Bool {
         didSet { defaults.set(quickSaveEnabled, forKey: "hotkey.quickSave.enabled") }
     }
@@ -93,8 +77,6 @@ public final class AppSettings {
             "app.appearance": AppearanceChoice.system.rawValue,
         ])
 
-        summonHotKey = AppSettings.load("hotkey.summon") ?? .defaultSummon
-        quickSaveHotKey = AppSettings.load("hotkey.quickSave") ?? .defaultQuickSave
         quickSaveEnabled = defaults.bool(forKey: "hotkey.quickSave.enabled")
         clipboardHistoryEnabled = defaults.bool(forKey: "clipboard.enabled")
         clipboardPersists = defaults.bool(forKey: "clipboard.persist")
@@ -109,37 +91,16 @@ public final class AppSettings {
         applyAppearance()
     }
 
-    /// Applied to the whole app rather than to a view tree: the panel is its own
+    /// Applies the chosen appearance. Set by whichever platform is running.
+    ///
+    /// This used to be `NSApp?.appearance = ...` inline, which is a single line and a
+    /// whole-target dependency: it is the only reason these preferences needed AppKit.
+    /// Applied app-wide rather than to a view tree because the panel is its own
     /// window, and a `.preferredColorScheme` on the library's view would leave it
     /// still drawing in the system's appearance.
+    @ObservationIgnored public var appearanceDidChange: ((AppearanceChoice) -> Void)?
+
     public func applyAppearance() {
-        NSApp?.appearance = appearance.nsAppearance
-    }
-
-    private func store(_ combo: HotKeyCombo, _ key: String) {
-        guard let data = try? JSONEncoder().encode(combo) else { return }
-        defaults.set(data, forKey: key)
-    }
-
-    private static func load(_ key: String) -> HotKeyCombo? {
-        guard let data = UserDefaults.standard.data(forKey: key) else { return nil }
-        return try? JSONDecoder().decode(HotKeyCombo.self, from: data)
-    }
-
-    // MARK: - Launch at login
-
-    public var launchAtLogin: Bool {
-        get { SMAppService.mainApp.status == .enabled }
-        set {
-            do {
-                if newValue {
-                    if SMAppService.mainApp.status != .enabled { try SMAppService.mainApp.register() }
-                } else {
-                    if SMAppService.mainApp.status == .enabled { try SMAppService.mainApp.unregister() }
-                }
-            } catch {
-                Log.app.warning("Launch at login change failed: \(error.localizedDescription, privacy: .public)")
-            }
-        }
+        appearanceDidChange?(appearance)
     }
 }

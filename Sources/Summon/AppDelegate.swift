@@ -23,9 +23,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSUpdateDynamicServices()
 
         applyActivationPolicy()
-        // Applied here as well as from Settings: `AppSettings` is constructed before
-        // `NSApp` exists, so the stored choice has nobody to tell at that point.
-        model.settings.applyAppearance()
+        // Also hands the model its shortcut labels and applies the stored appearance.
+        // Both have to happen here rather than at construction: `AppSettings` is built
+        // before `NSApp` exists, so the stored choice has nobody to tell at that point.
+        MacSettings.shared.bind(to: model)
 
         // Anything left in the scratch directory got there before this launch, which
         // means a crash or a force-quit took the exit paths away from it. Decrypted
@@ -93,12 +94,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let model = Services.model
         let center = HotKeyCenter.shared
 
-        let summonOK = center.register(.summon, combo: model.settings.summonHotKey) { [weak self] in
+        let summonOK = center.register(.summon, combo: MacSettings.shared.summonHotKey) { [weak self] in
             self?.panelController?.toggle()
         }
         if !summonOK {
             model.show(Toast(
-                text: "\(model.settings.summonHotKey.displayString) is taken by another app",
+                text: "\(MacSettings.shared.summonHotKey.displayString) is taken by another app",
                 symbol: "keyboard.badge.exclamationmark",
                 tone: .warning,
                 detail: "Choose a different shortcut in Settings"
@@ -106,7 +107,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         if model.settings.quickSaveEnabled {
-            center.register(.quickSave, combo: model.settings.quickSaveHotKey) {
+            center.register(.quickSave, combo: MacSettings.shared.quickSaveHotKey) {
                 Services.model.quickSaveSelection()
             }
         } else {

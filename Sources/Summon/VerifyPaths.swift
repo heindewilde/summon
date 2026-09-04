@@ -60,7 +60,7 @@ enum VerifyPaths {
     // MARK: - 1. The global hot key, actually pressed
 
     private static func verifyHotKey(model: AppModel, controller: PanelController) async {
-        let combo = model.settings.summonHotKey
+        let combo = MacSettings.shared.summonHotKey
         let box = Box()
 
         let registered = HotKeyCenter.shared.register(.summon, combo: combo) {

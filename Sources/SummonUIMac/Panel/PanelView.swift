@@ -261,7 +261,7 @@ public struct PanelView: View {
                 EmptyStateView(
                     symbol: "tray",
                     title: "Nothing to summon yet",
-                    message: "Copy something, then press \(model.settings.quickSaveHotKey.displayString) to save it — or drop a file straight onto this panel."
+                    message: "Copy something, then press \(MacSettings.shared.quickSaveHotKey.displayString) to save it — or drop a file straight onto this panel."
                 )
             } else {
                 EmptyStateView(

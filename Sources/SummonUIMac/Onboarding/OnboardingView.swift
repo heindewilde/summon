@@ -163,15 +163,15 @@ public struct OnboardingView: View {
             VStack(spacing: Theme.Space.s) {
                 settingRow("Summon panel", "Opens the search panel.") {
                     HotKeyRecorder(combo: Binding(
-                        get: { model.settings.summonHotKey },
-                        set: { model.settings.summonHotKey = $0 }
+                        get: { MacSettings.shared.summonHotKey },
+                        set: { MacSettings.shared.summonHotKey = $0 }
                     )) { _ in model.reregisterHotKeys() }
                 }
 
                 settingRow("Save what’s selected", "Grabs your selection or Finder files.") {
                     HotKeyRecorder(combo: Binding(
-                        get: { model.settings.quickSaveHotKey },
-                        set: { model.settings.quickSaveHotKey = $0 }
+                        get: { MacSettings.shared.quickSaveHotKey },
+                        set: { MacSettings.shared.quickSaveHotKey = $0 }
                     )) { _ in model.reregisterHotKeys() }
                 }
             }

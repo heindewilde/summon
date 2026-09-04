@@ -93,7 +93,7 @@ public struct MenuBarView: View {
                 .help(model.vault.isUnlocked ? "Lock sensitive items" : "Unlock sensitive items")
             }
 
-            KeyCap(model.settings.summonHotKey.displayString)
+            KeyCap(MacSettings.shared.summonHotKey.displayString)
         }
         .padding(.horizontal, Theme.Space.s)
         .padding(.vertical, Theme.Space.xs + 1)
@@ -103,7 +103,7 @@ public struct MenuBarView: View {
         VStack(alignment: .leading, spacing: Theme.Space.xxs) {
             Text("Nothing saved yet")
                 .font(Theme.Typography.body.weight(.medium))
-            Text("Copy something and press \(model.settings.quickSaveHotKey.displayString), or open Summon and drop files in.")
+            Text("Copy something and press \(MacSettings.shared.quickSaveHotKey.displayString), or open Summon and drop files in.")
                 .font(Theme.Typography.caption)
                 .foregroundStyle(Theme.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
@@ -160,7 +160,7 @@ public struct MenuBarView: View {
     private var footer: some View {
         VStack(spacing: 0) {
             MenuAction(title: "Open Summon", symbol: "sparkle.magnifyingglass",
-                       shortcut: model.settings.summonHotKey.displayString) {
+                       shortcut: MacSettings.shared.summonHotKey.displayString) {
                 model.summon()
             }
             MenuAction(title: "Save Clipboard", symbol: "square.and.arrow.down") {

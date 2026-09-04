@@ -72,7 +72,9 @@ public struct MainWindowView: View {
         EmptyStateView(
             symbol: "sparkles",
             title: "Select something",
-            message: "Choose an item to edit it here. To actually use one, press \(model.settings.summonHotKey.displayString) from wherever you’re working."
+            message: model.summonShortcutLabel.map {
+                "Choose an item to edit it here. To actually use one, press \($0) from wherever you’re working."
+            } ?? "Choose an item to edit it here."
         )
     }
 
@@ -119,7 +121,7 @@ public struct MainWindowView: View {
             } label: {
                 Label("Summon", systemImage: "sparkle.magnifyingglass")
             }
-            .help("Open the summon panel (\(model.settings.summonHotKey.displayString))")
+            .help(model.summonShortcutLabel.map { "Open the summon panel (\($0))" } ?? "Open the summon panel")
         }
     }
 

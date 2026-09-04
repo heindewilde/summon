@@ -1,4 +1,8 @@
+#if canImport(AppKit)
 import AppKit
+#else
+import UIKit
+#endif
 import SwiftUI
 import SummonKit
 
@@ -36,10 +40,10 @@ public enum Theme {
     // something rather than merely marked with it.
 
     /// The panel and window ground, layered over the vibrancy material.
-    public static let chrome = Color(nsColor: .dyn(light: .srgb(0.965, 0.960, 0.995, 0.86),
+    public static let chrome = Color(platform: .dyn(light: .srgb(0.965, 0.960, 0.995, 0.86),
                                                   dark: .srgb(0.043, 0.040, 0.063, 0.92)))
     /// Sheets and popovers that sit above the chrome — the ⌘K action panel.
-    public static let raised = Color(nsColor: .dyn(light: .srgb(1, 0.995, 1, 0.96),
+    public static let raised = Color(platform: .dyn(light: .srgb(1, 0.995, 1, 0.96),
                                                    dark: .srgb(0.098, 0.090, 0.137, 0.94)))
     // MARK: - State
     //
@@ -48,11 +52,11 @@ public enum Theme {
 
     /// Solid violet. The one button that finishes a sentence, a drop line, progress.
     /// Never a fill behind a kind glyph — see the note on this type.
-    public static let accent = Color(nsColor: .dyn(light: .srgb(0.36, 0.25, 0.78),
+    public static let accent = Color(platform: .dyn(light: .srgb(0.36, 0.25, 0.78),
                                                    dark: .srgb(0.64, 0.55, 1.00)))
     /// Ink on top of `accent`. The accent inverts between appearances — dark violet on
     /// light, light violet on dark — so what reads on it inverts too.
-    public static let onAccent = Color(nsColor: .dyn(light: .srgb(1, 1, 1),
+    public static let onAccent = Color(platform: .dyn(light: .srgb(1, 1, 1),
                                                      dark: .srgb(0.055, 0.055, 0.071)))
 
     /// The selected row: keys act on this. A tint, never solid.
@@ -60,38 +64,38 @@ public enum Theme {
     /// Stronger than it needed to be on a neutral ground: once the ground is itself
     /// violet-cast, a 14% violet fill on it is nearly the same colour, and selection
     /// stops reading. It is paired with `selectionEdge` for the same reason.
-    public static let selection = Color(nsColor: .dyn(light: .srgb(0.36, 0.25, 0.78, 0.20),
+    public static let selection = Color(platform: .dyn(light: .srgb(0.36, 0.25, 0.78, 0.20),
                                                       dark: .srgb(0.68, 0.60, 1.00, 0.24)))
     /// The lit top edge of a selected row — the tell that a pane of glass is sitting
     /// on the surface rather than the surface having changed colour.
-    public static let selectionEdge = Color(nsColor: .dyn(light: .srgb(0.36, 0.25, 0.78, 0.30),
+    public static let selectionEdge = Color(platform: .dyn(light: .srgb(0.36, 0.25, 0.78, 0.30),
                                                           dark: .srgb(0.86, 0.82, 1.00, 0.30)))
     /// Still selected, but the keyboard is in another pane. The old neutral selection,
     /// kept — this is the macOS convention, and in a three-pane window it is the only
     /// way to say which column the arrow keys belong to.
-    public static let selectionInactive = Color(nsColor: .dyn(light: .srgb(0, 0, 0, 0.06),
+    public static let selectionInactive = Color(platform: .dyn(light: .srgb(0, 0, 0, 0.06),
                                                               dark: .srgb(1, 1, 1, 0.08)))
     /// Where you are in the navigation, which is not the same as what has focus.
-    public static let navActive = Color(nsColor: .dyn(light: .srgb(0.36, 0.25, 0.78, 0.18),
+    public static let navActive = Color(platform: .dyn(light: .srgb(0.36, 0.25, 0.78, 0.18),
                                                       dark: .srgb(0.64, 0.55, 1.00, 0.22)))
     /// The pointer is here. Stays neutral on purpose: hover follows the mouse, and a
     /// violet that chases the cursor across a list strobes.
-    public static let rowHover = Color(nsColor: .dyn(light: .srgb(0, 0, 0, 0.035),
+    public static let rowHover = Color(platform: .dyn(light: .srgb(0, 0, 0, 0.035),
                                                      dark: .srgb(1, 1, 1, 0.05)))
     /// Keystrokes land in this control. One per screen, ever.
-    public static let focusRing = Color(nsColor: .dyn(light: .srgb(0.36, 0.25, 0.78, 0.75),
+    public static let focusRing = Color(platform: .dyn(light: .srgb(0.36, 0.25, 0.78, 0.75),
                                                       dark: .srgb(0.64, 0.55, 1.00, 0.75)))
     /// The bloom: the icon's light, spread across a whole surface rather than pooled
     /// behind one object. This is the single biggest reason the onboarding looks like
     /// the icon and the rest of the app did not — the accent said where you were, but
     /// the ground it said it on was the same neutral grey any utility ships with.
-    public static let bloom = Color(nsColor: .dyn(light: .srgb(0.42, 0.30, 0.92, 0.20),
+    public static let bloom = Color(platform: .dyn(light: .srgb(0.42, 0.30, 0.92, 0.20),
                                                   dark: .srgb(0.52, 0.40, 1.00, 0.52)))
 
     /// The specular edge of glass: the thin bright line along a lit top edge. Without
     /// it a translucent fill is a flat tint, which is most of why the first pass at
     /// this read as "plain" — glass is edges and highlights, not transparency.
-    public static let glassSheen = Color(nsColor: .dyn(light: .srgb(1, 1, 1, 0.90),
+    public static let glassSheen = Color(platform: .dyn(light: .srgb(1, 1, 1, 0.90),
                                                        dark: .srgb(1, 0.99, 1, 0.24)))
 
     /// A drop lands here. Its own token because a drop target drawn with `selection`
@@ -99,13 +103,13 @@ public enum Theme {
     public static let dropTarget = accent
     /// The lit edge of a pane of glass, which is why it is brighter than a hairline
     /// usually is: on a translucent surface an 8% rule disappears into the blur.
-    public static let hairline = Color(nsColor: .dyn(light: .srgb(0.30, 0.24, 0.55, 0.14),
+    public static let hairline = Color(platform: .dyn(light: .srgb(0.30, 0.24, 0.55, 0.14),
                                                      dark: .srgb(1, 0.99, 1, 0.13)))
     /// A field or well inset into the chrome. Violet-cast rather than neutral, so a
     /// well reads as part of the same material as everything around it.
-    public static let surface = Color(nsColor: .dyn(light: .srgb(0.36, 0.25, 0.78, 0.055),
+    public static let surface = Color(platform: .dyn(light: .srgb(0.36, 0.25, 0.78, 0.055),
                                                     dark: .srgb(0.72, 0.66, 1.00, 0.075)))
-    public static let surfaceRaised = Color(nsColor: .dyn(light: .srgb(1, 1, 1, 0.72),
+    public static let surfaceRaised = Color(platform: .dyn(light: .srgb(1, 1, 1, 0.72),
                                                           dark: .srgb(0.78, 0.74, 1.00, 0.11)))
 
     // MARK: - Text
@@ -114,15 +118,15 @@ public enum Theme {
     // are asserted in ContrastTests — the first draft of this palette put the row's
     // body preview at 3.20:1 in dark and 2.65:1 in light, both under the 4.5:1 bar
     // for text this size, and it looked fine.
-    public static let primaryText = Color(nsColor: .dyn(light: .srgb(0, 0, 0, 0.88),
+    public static let primaryText = Color(platform: .dyn(light: .srgb(0, 0, 0, 0.88),
                                                         dark: .srgb(1, 1, 1, 0.95)))
-    public static let secondaryText = Color(nsColor: .dyn(light: .srgb(0, 0, 0, 0.64),
+    public static let secondaryText = Color(platform: .dyn(light: .srgb(0, 0, 0, 0.64),
                                                           dark: .srgb(1, 1, 1, 0.66)))
-    public static let tertiaryText = Color(nsColor: .dyn(light: .srgb(0, 0, 0, 0.58),
+    public static let tertiaryText = Color(platform: .dyn(light: .srgb(0, 0, 0, 0.58),
                                                          dark: .srgb(1, 1, 1, 0.50)))
     /// Decoration only — the ⌘-number badge, a disabled glyph. Never body text; held
     /// to the 3:1 non-text bar rather than 4.5:1.
-    public static let faintText = Color(nsColor: .dyn(light: .srgb(0, 0, 0, 0.45),
+    public static let faintText = Color(platform: .dyn(light: .srgb(0, 0, 0, 0.45),
                                                       dark: .srgb(1, 1, 1, 0.36)))
 
     // MARK: - Status
@@ -131,15 +135,15 @@ public enum Theme {
     // "this worked" and "this needs your attention". Those are the jobs colour is
     // genuinely best at, so they survive the monochrome rule.
 
-    public static let danger = Color(nsColor: .dyn(light: .srgb(0.78, 0.18, 0.18),
+    public static let danger = Color(platform: .dyn(light: .srgb(0.78, 0.18, 0.18),
                                                    dark: .srgb(1.00, 0.42, 0.40)))
     // The two light values are darker than they look like they should be. They were
     // 0.10/0.55/0.30 and 0.72/0.47/0.04, which measure 3.93:1 and 3.38:1 on the light
     // ground — both under the 4.5:1 bar, both shipped, and neither catchable by the old
     // contrast test, which only ever knew about the four text tiers.
-    public static let success = Color(nsColor: .dyn(light: .srgb(0.091, 0.503, 0.275),
+    public static let success = Color(platform: .dyn(light: .srgb(0.091, 0.503, 0.275),
                                                     dark: .srgb(0.36, 0.85, 0.55)))
-    public static let warning = Color(nsColor: .dyn(light: .srgb(0.605, 0.395, 0.034),
+    public static let warning = Color(platform: .dyn(light: .srgb(0.605, 0.395, 0.034),
                                                     dark: .srgb(1.00, 0.72, 0.28)))
 
     // MARK: - Rhythm
@@ -272,15 +276,15 @@ public enum Theme {
     public enum Elevation {
         /// A menu or dropdown lifted off the surface below it.
         public static let popover = Shadow(
-            color: Color(nsColor: .dyn(light: .srgb(0, 0, 0, 0.16), dark: .srgb(0, 0, 0, 0.34))),
+            color: Color(platform: .dyn(light: .srgb(0, 0, 0, 0.16), dark: .srgb(0, 0, 0, 0.34))),
             radius: 14, y: 6)
         /// A sheet, which sits higher and casts further.
         public static let sheet = Shadow(
-            color: Color(nsColor: .dyn(light: .srgb(0, 0, 0, 0.20), dark: .srgb(0, 0, 0, 0.42))),
+            color: Color(platform: .dyn(light: .srgb(0, 0, 0, 0.20), dark: .srgb(0, 0, 0, 0.42))),
             radius: 22, y: 10)
         /// A toast, which is small and should not look heavy.
         public static let toast = Shadow(
-            color: Color(nsColor: .dyn(light: .srgb(0, 0, 0, 0.12), dark: .srgb(0, 0, 0, 0.28))),
+            color: Color(platform: .dyn(light: .srgb(0, 0, 0, 0.12), dark: .srgb(0, 0, 0, 0.28))),
             radius: 10, y: 4)
     }
 
@@ -319,15 +323,15 @@ public enum Theme {
 
     public static func color(for kind: ItemKind) -> Color {
         switch kind {
-        case .text: Color(nsColor: .dyn(light: .srgb(0.36, 0.25, 0.78), dark: .srgb(0.64, 0.55, 1.00)))
-        case .richText: Color(nsColor: .dyn(light: .srgb(0.22, 0.36, 0.80), dark: .srgb(0.50, 0.66, 1.00)))
-        case .image: Color(nsColor: .dyn(light: .srgb(0.05, 0.52, 0.52), dark: .srgb(0.33, 0.83, 0.80)))
+        case .text: Color(platform: .dyn(light: .srgb(0.36, 0.25, 0.78), dark: .srgb(0.64, 0.55, 1.00)))
+        case .richText: Color(platform: .dyn(light: .srgb(0.22, 0.36, 0.80), dark: .srgb(0.50, 0.66, 1.00)))
+        case .image: Color(platform: .dyn(light: .srgb(0.05, 0.52, 0.52), dark: .srgb(0.33, 0.83, 0.80)))
         // Darker in light than it looks like it should be, for the same reason
         // `warning` is: amber on a near-white ground is always the one that fails. At
         // 0.76/0.44/0.07 it measured 3.43:1 on the chrome — over the 3:1 glyph bar by
         // a hair — and 2.78:1 once a selected row put the accent tint underneath it.
-        case .document: Color(nsColor: .dyn(light: .srgb(0.66, 0.38, 0.04), dark: .srgb(1.00, 0.71, 0.32)))
-        case .file: Color(nsColor: .dyn(light: .srgb(0.36, 0.40, 0.48), dark: .srgb(0.66, 0.71, 0.80)))
+        case .document: Color(platform: .dyn(light: .srgb(0.66, 0.38, 0.04), dark: .srgb(1.00, 0.71, 0.32)))
+        case .file: Color(platform: .dyn(light: .srgb(0.36, 0.40, 0.48), dark: .srgb(0.66, 0.71, 0.80)))
         }
     }
 
@@ -336,30 +340,61 @@ public enum Theme {
 
     public static func folderColor(_ name: String) -> Color {
         switch name {
-        case "blue": Color(nsColor: .dyn(light: .srgb(0.15, 0.40, 0.85), dark: .srgb(0.45, 0.66, 1.00)))
-        case "teal": Color(nsColor: .dyn(light: .srgb(0.05, 0.52, 0.52), dark: .srgb(0.33, 0.83, 0.80)))
-        case "green": Color(nsColor: .dyn(light: .srgb(0.15, 0.52, 0.26), dark: .srgb(0.42, 0.84, 0.53)))
-        case "amber": Color(nsColor: .dyn(light: .srgb(0.76, 0.47, 0.05), dark: .srgb(1.00, 0.73, 0.30)))
-        case "red": Color(nsColor: .dyn(light: .srgb(0.75, 0.20, 0.22), dark: .srgb(1.00, 0.47, 0.45)))
-        case "graphite": Color(nsColor: .dyn(light: .srgb(0.36, 0.40, 0.46), dark: .srgb(0.68, 0.72, 0.78)))
-        case "violet": Color(nsColor: .dyn(light: .srgb(0.36, 0.25, 0.78), dark: .srgb(0.64, 0.55, 1.00)))
-        default: Color(nsColor: .dyn(light: .srgb(0.36, 0.40, 0.46), dark: .srgb(0.68, 0.72, 0.78)))
+        case "blue": Color(platform: .dyn(light: .srgb(0.15, 0.40, 0.85), dark: .srgb(0.45, 0.66, 1.00)))
+        case "teal": Color(platform: .dyn(light: .srgb(0.05, 0.52, 0.52), dark: .srgb(0.33, 0.83, 0.80)))
+        case "green": Color(platform: .dyn(light: .srgb(0.15, 0.52, 0.26), dark: .srgb(0.42, 0.84, 0.53)))
+        case "amber": Color(platform: .dyn(light: .srgb(0.76, 0.47, 0.05), dark: .srgb(1.00, 0.73, 0.30)))
+        case "red": Color(platform: .dyn(light: .srgb(0.75, 0.20, 0.22), dark: .srgb(1.00, 0.47, 0.45)))
+        case "graphite": Color(platform: .dyn(light: .srgb(0.36, 0.40, 0.46), dark: .srgb(0.68, 0.72, 0.78)))
+        case "violet": Color(platform: .dyn(light: .srgb(0.36, 0.25, 0.78), dark: .srgb(0.64, 0.55, 1.00)))
+        default: Color(platform: .dyn(light: .srgb(0.36, 0.40, 0.46), dark: .srgb(0.68, 0.72, 0.78)))
         }
     }
 }
 
 // MARK: - Colour helpers
 
-extension NSColor {
-    static func srgb(_ r: CGFloat, _ g: CGFloat, _ b: CGFloat, _ a: CGFloat = 1) -> NSColor {
+/// `NSColor` on macOS, `UIColor` on iOS.
+///
+/// Every token below is a pair of sRGB literals wrapped in `.dyn`, and the numbers
+/// are the design system — `ContrastTests` asserts each text tier against its
+/// background at WCAG AA, and the first monochrome palette here sat at 2.65:1 while
+/// looking perfectly fine on screen. So the port keeps every literal exactly as it
+/// was and changes only which framework resolves it.
+#if canImport(AppKit)
+public typealias PlatformColor = NSColor
+#else
+public typealias PlatformColor = UIColor
+#endif
+
+extension PlatformColor {
+    static func srgb(_ r: CGFloat, _ g: CGFloat, _ b: CGFloat, _ a: CGFloat = 1) -> PlatformColor {
+        #if canImport(AppKit)
         NSColor(srgbRed: r, green: g, blue: b, alpha: a)
+        #else
+        UIColor(red: r, green: g, blue: b, alpha: a)
+        #endif
     }
 
     /// One colour, correct in both appearances — never a value defined only for dark.
-    static func dyn(light: NSColor, dark: NSColor) -> NSColor {
+    static func dyn(light: PlatformColor, dark: PlatformColor) -> PlatformColor {
+        #if canImport(AppKit)
         NSColor(name: nil) { appearance in
             appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? dark : light
         }
+        #else
+        UIColor { $0.userInterfaceStyle == .dark ? dark : light }
+        #endif
+    }
+}
+
+extension Color {
+    public init(platform: PlatformColor) {
+        #if canImport(AppKit)
+        self.init(nsColor: platform)
+        #else
+        self.init(uiColor: platform)
+        #endif
     }
 }
 

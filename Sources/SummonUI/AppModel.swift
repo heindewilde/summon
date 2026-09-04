@@ -1,4 +1,8 @@
+#if canImport(AppKit)
 import AppKit
+#else
+import UIKit
+#endif
 import Observation
 import SwiftUI
 import SummonKit
@@ -185,7 +189,9 @@ public final class AppModel {
     public private(set) var folderDropTarget: FolderDropTarget?
 
     /// The same, for the item list's insertion line.
+    #if canImport(AppKit)
     public private(set) var itemDropTarget: ItemDropTarget?
+    #endif
 
     /// When a drop delegate last said anything. Not observed: it exists to notice
     /// silence, and waking every row to say "still dragging" is exactly the cost this
@@ -219,11 +225,13 @@ public final class AppModel {
         folderDropTarget = target
     }
 
+    #if canImport(AppKit)
     public func setItemDropTarget(_ target: ItemDropTarget?) {
         dropHeartbeat = Date()
         if itemDropTarget != target { itemDropTarget = target }
         if target != nil { startDropWatchdog() }
     }
+    #endif
 
     /// Clears a stranded indicator.
     ///
@@ -238,10 +246,16 @@ public final class AppModel {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .milliseconds(120))
                 guard let live = self else { return }
+                #if canImport(AppKit)
                 guard live.folderDropTarget != nil || live.itemDropTarget != nil else { return }
+                #else
+                guard live.folderDropTarget != nil else { return }
+                #endif
                 guard Date().timeIntervalSince(live.dropHeartbeat) > 0.4 else { continue }
                 live.folderDropTarget = nil
+                #if canImport(AppKit)
                 live.itemDropTarget = nil
+                #endif
                 return
             }
         }
@@ -783,7 +797,9 @@ public final class AppModel {
         switch style {
         case .open:
             if let url = payload.fileURL {
+                #if canImport(AppKit)
                 NSWorkspace.shared.open(url)
+                #endif
                 store.recordUse(id: id, inApp: bundleID)
                 dismissPanel()
             } else {
@@ -838,6 +854,7 @@ public final class AppModel {
 
     // MARK: - Dragging
 
+    #if canImport(AppKit)
     /// The provider behind a dragged row. Files drag as files; snippets drag as their
     /// rendered text, with formatting when they have it. Locked items refuse to drag,
     /// which is the same rule the insert path follows.
@@ -850,7 +867,9 @@ public final class AppModel {
         }
         return DragProvider.make(for: payload, title: snapshot.title, itemID: id)
     }
+    #endif
 
+    #if canImport(AppKit)
     /// A drag that carries the row's identity but none of its contents.
     ///
     /// For a locked item, and for anything whose payload cannot be built. Refusing to
@@ -862,6 +881,7 @@ public final class AppModel {
         provider.registerSummonID(id, as: SummonDragType.item)
         return provider
     }
+    #endif
 
     // MARK: - Vault
 
@@ -963,6 +983,7 @@ public final class AppModel {
     /// starting a countdown — and the README already claimed the key was discarded on
     /// sleep, which until now it was not.
     private func startLockOnAwayObservers() {
+        #if canImport(AppKit)
         let workspace = NSWorkspace.shared.notificationCenter
         for name in [NSWorkspace.willSleepNotification, NSWorkspace.sessionDidResignActiveNotification] {
             workspace.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
@@ -976,6 +997,7 @@ public final class AppModel {
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.lockIfUnlocked() }
         }
+        #endif
     }
 
     /// Locks without a toast: nobody is looking at the screen when this fires.
@@ -1011,11 +1033,18 @@ public final class AppModel {
         let pinned = store.snapshots.first { $0.id == id }?.isPinned ?? false
         show(Toast(text: pinned ? "Pinned" : "Unpinned", symbol: pinned ? "pin.fill" : "pin.slash", tone: .neutral))
     }
-
+    /// Shows the item's file in the file manager.
+    ///
+    /// The method stays on both platforms and its body does not: six views offer this
+    /// and guarding each of them would put the platform test in the UI rather than
+    /// behind it. iOS has no Finder to reveal into — a Files-app equivalent is a
+    /// question for the companion, not a gap to paper over here.
     public func revealInFinder(_ id: UUID) {
+        #if canImport(AppKit)
         guard let item = store.item(id: id), let blob = item.storedBlob,
               let url = try? store.files.materialize(blob, itemID: id, key: vault.currentKey) else { return }
         NSWorkspace.shared.activateFileViewerSelecting([url])
+        #endif
     }
 
     public func deleteItem(_ id: UUID) {
@@ -1455,17 +1484,23 @@ public final class AppModel {
         if info.hasItemsConforming(to: [.fileURL]) {
             let providers = info.itemProviders(for: [.fileURL])
             Task { @MainActor in
+                #if canImport(AppKit)
                 let urls = await FolderDropDelegate.urls(from: providers)
+                #else
+                let urls: [URL] = []
+                #endif
                 guard !urls.isEmpty else { return }
                 importDroppedFiles(urls, into: folder)
             }
             return
         }
+        #if canImport(AppKit)
         let providers = info.itemProviders(for: [.text])
         Task { @MainActor in
             guard let text = await FolderDropDelegate.text(from: providers) else { return }
             acceptDroppedText(text, into: folder)
         }
+        #endif
     }
 
     // MARK: - Creation actions
@@ -1539,7 +1574,11 @@ public final class AppModel {
 
     /// The one place a file chooser is opened, so import behaves identically
     /// whether it arrives by drag, menu, Services, or hotkey.
+    ///
+    /// iOS wants `fileImporter` rather than a modal panel, which is a presentation
+    /// decision for the companion's UI rather than something to decide here.
     public func presentImportPanel(into folder: SummonFolder? = nil) {
+        #if canImport(AppKit)
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = true
         panel.canChooseDirectories = true
@@ -1548,6 +1587,7 @@ public final class AppModel {
         panel.message = "Choose files to add to your library. Summon copies them, so moving the originals later is safe."
         guard panel.runModal() == .OK else { return }
         importDroppedFiles(panel.urls, into: folder)
+        #endif
     }
 
     // MARK: - Toasts

@@ -339,12 +339,61 @@ public struct LockPill: View {
 /// The panel had one of these all along and the library window had nothing — it took
 /// the system's opaque window background, which is why the accent and the bloom
 /// arrived everywhere except the surface people spend the most time in.
+/// The blur behind a surface, named by what the surface *is* rather than by AppKit's
+/// taxonomy.
+///
+/// `GlassBackground` is drawn by the library window and by Settings as well as by the
+/// panel and the menu bar, so a shared component was exposing
+/// `SurfaceMaterial` in its public initialiser — which is how a design
+/// system ends up platform-bound one parameter at a time. These five are the ones the
+/// app actually asks for.
+public enum SurfaceMaterial: Sendable {
+    case underWindowBackground
+    case headerView
+    case sidebar
+    case popover
+    case hudWindow
+
+    #if canImport(AppKit)
+    var appKit: NSVisualEffectView.Material {
+        switch self {
+        case .underWindowBackground: .underWindowBackground
+        case .headerView: .headerView
+        case .sidebar: .sidebar
+        case .popover: .popover
+        case .hudWindow: .hudWindow
+        }
+    }
+    #else
+    /// iOS has no material taxonomy of this shape — SwiftUI offers thickness, so the
+    /// mapping is by how much of the surface behind should show through.
+    var swiftUI: Material {
+        switch self {
+        case .underWindowBackground, .sidebar: .regularMaterial
+        case .headerView: .thinMaterial
+        case .popover, .hudWindow: .ultraThinMaterial
+        }
+    }
+    #endif
+}
+
+public enum SurfaceBlending: Sendable {
+    case behindWindow
+    case withinWindow
+
+    #if canImport(AppKit)
+    var appKit: NSVisualEffectView.BlendingMode {
+        self == .behindWindow ? .behindWindow : .withinWindow
+    }
+    #endif
+}
+
 public struct GlassBackground: View {
-    public var material: NSVisualEffectView.Material
+    public var material: SurfaceMaterial
     public var bloom: Double
     public var tint: Color
 
-    public init(material: NSVisualEffectView.Material = .underWindowBackground,
+    public init(material: SurfaceMaterial = .underWindowBackground,
                 bloom: Double = 1, tint: Color = Theme.chrome) {
         self.material = material
         self.bloom = bloom
@@ -383,18 +432,18 @@ public struct PanelBackground: View {
 }
 
 public struct VisualEffectBackground: View {
-    public var material: NSVisualEffectView.Material
-    public var blending: NSVisualEffectView.BlendingMode
+    public var material: SurfaceMaterial
+    public var blending: SurfaceBlending
     @Environment(\.isSnapshotting) private var isSnapshotting
 
-    public init(material: NSVisualEffectView.Material, blending: NSVisualEffectView.BlendingMode) {
+    public init(material: SurfaceMaterial, blending: SurfaceBlending) {
         self.material = material
         self.blending = blending
     }
 
     public var body: some View {
         if isSnapshotting {
-            Color(nsColor: .dyn(light: .srgb(0.97, 0.97, 0.98), dark: .srgb(0.15, 0.15, 0.17)))
+            Color(platform: .dyn(light: .srgb(0.97, 0.97, 0.98), dark: .srgb(0.15, 0.15, 0.17)))
         } else {
             #if canImport(AppKit)
             VisualEffectRepresentable(material: material, blending: blending)
@@ -402,7 +451,7 @@ public struct VisualEffectBackground: View {
             // UIKit has no NSVisualEffectView equivalent that takes a material and a
             // blending mode; SwiftUI's own material is the closest thing and is what
             // an iOS surface would reach for anyway.
-            Rectangle().fill(.ultraThinMaterial)
+            Rectangle().fill(material.swiftUI)
             #endif
         }
     }
@@ -410,22 +459,23 @@ public struct VisualEffectBackground: View {
 
 #if canImport(AppKit)
 struct VisualEffectRepresentable: NSViewRepresentable {
-    var material: NSVisualEffectView.Material
-    var blending: NSVisualEffectView.BlendingMode
+    var material: SurfaceMaterial
+    var blending: SurfaceBlending
 
     func makeNSView(context: Context) -> NSVisualEffectView {
         let view = NSVisualEffectView()
-        view.material = material
-        view.blendingMode = blending
+        view.material = material.appKit
+        view.blendingMode = blending.appKit
         view.state = .active
         return view
     }
 
     func updateNSView(_ view: NSVisualEffectView, context: Context) {
-        view.material = material
-        view.blendingMode = blending
+        view.material = material.appKit
+        view.blendingMode = blending.appKit
     }
-}#endif
+}
+#endif
 
 
 

@@ -151,8 +151,19 @@ public struct ItemDetailView: View {
             VStack(alignment: .leading, spacing: 0) {
                 Group {
                     if snapshot.kind == .richText {
+                        #if canImport(AppKit)
                         SnippetEditor(attributed: $attributed)
                             .onChange(of: attributed) { _, _ in scheduleCommit() }
+                        #else
+                        // Read-only until there is a UITextView twin. Showing the
+                        // formatting and declining to edit it beats a plain editor
+                        // that would quietly flatten it on the first keystroke.
+                        ScrollView {
+                            Text(AttributedString(attributed))
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        #endif
                     } else {
                         TextEditor(text: $body_)
                             .font(Theme.Typography.title)
@@ -252,7 +263,11 @@ public struct ItemDetailView: View {
                     .foregroundStyle(Theme.danger)
             } else if Vault.biometricsAvailable && model.vault.biometricsEnabled {
                 Button("Use Touch ID") { Task { await model.tryBiometricUnlock() } }
+                    #if canImport(AppKit)
                     .buttonStyle(.link)
+                    #else
+                    .buttonStyle(.borderless)
+                    #endif
                     .font(Theme.Typography.meta)
             } else {
                 Text("Unlocks everything sensitive until it re-locks.")

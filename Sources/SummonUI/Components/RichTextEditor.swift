@@ -1,3 +1,12 @@
+/// The rich-text editor, and the reason it is macOS-only for now.
+///
+/// It is an NSTextView representable. UIKit's UITextView could host the same
+/// attributed string, but a twin is not a small job — selection, the typing
+/// attributes, the toolbar and the commit cycle all have to be rebuilt — and
+/// rich-text *editing* is deliberately out of the companion's first version.
+/// ItemDetailView shows rich text read-only there instead, which is honest about
+/// what works rather than offering an editor that silently drops formatting.
+#if canImport(AppKit)
 import AppKit
 import SwiftUI
 import SummonKit
@@ -99,3 +108,4 @@ public struct SnippetEditor: View {
         }
     }
 }
+#endif

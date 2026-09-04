@@ -37,7 +37,9 @@ public struct MainWindowView: View {
         }
         .navigationSplitViewStyle(.balanced)
         .toolbar { toolbar }
+        #if canImport(AppKit)
         .toolbarBackground(.hidden, for: .windowToolbar)
+        #endif
         .overlay(alignment: .bottom) {
             if let toast = model.toast {
                 ToastView(toast: toast)

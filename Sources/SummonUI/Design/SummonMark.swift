@@ -1,4 +1,6 @@
+#if canImport(AppKit)
 import AppKit
+#endif
 import SwiftUI
 
 /// Summon's mark: a spiral wound clockwise inward, the shape the app icon carries.
@@ -138,6 +140,10 @@ public enum SummonMark {
 
     // MARK: - Menu bar
 
+    /// macOS only: the menu bar is the one surface that needs a raster of the mark,
+    /// and NSImage's drawing handler has no UIKit counterpart worth faking. The Shape
+    /// above is the portable form and is what every other surface already draws.
+    #if canImport(AppKit)
     /// The mark as a template image, which is what the menu bar needs: macOS ignores a
     /// template's colour and uses only its coverage, so it tints correctly in both
     /// appearances and inverts while the menu is open.
@@ -156,6 +162,7 @@ public enum SummonMark {
         image.isTemplate = true
         return image
     }()
+    #endif
 }
 
 /// The mark as a SwiftUI shape, for drawing it inline in the app.

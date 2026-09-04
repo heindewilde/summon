@@ -38,8 +38,11 @@ jobs:
       # a symbolic-traits case the two frameworks spell differently.
       #
       # No signing identity needed, so it runs on a stock runner.
-      - name: Build SummonKit for iOS
+      - name: Build for iOS
         run: |
-          xcodebuild -scheme SummonKit \
-            -destination 'generic/platform=iOS' \
-            build CODE_SIGNING_ALLOWED=NO | tail -20
+          for scheme in SummonKit SummonUI; do
+            echo "==> $scheme"
+            xcodebuild -scheme "$scheme" \
+              -destination 'generic/platform=iOS' \
+              build CODE_SIGNING_ALLOWED=NO | tail -5
+          done

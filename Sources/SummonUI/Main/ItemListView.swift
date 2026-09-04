@@ -33,8 +33,10 @@ public struct ItemListView: View {
         // which is where a new item would go anyway. The delegate refuses Summon's
         // own drags: a row dragged over the empty space below the list still carries
         // its contents, and a content-based handler would duplicate it.
+        #if canImport(AppKit)
         .onDrop(of: [.fileURL, .text, SummonDragType.item, SummonDragType.folder],
                 delegate: LibraryDropDelegate(model: model, folder: { currentFolder }))
+        #endif
     }
 
     /// Whether rows can be dragged into a hand-made order right now.
@@ -170,8 +172,12 @@ struct ItemRow: View {
     static let height: CGFloat = Theme.rowRoomy
 
     private var dropEdge: VerticalAlignment? {
+        #if canImport(AppKit)
         guard let target = model.itemDropTarget, target.itemID == item.id else { return nil }
         return target.placeAfter ? .bottom : .top
+        #else
+        return nil
+        #endif
     }
 
     var body: some View {
@@ -196,8 +202,10 @@ struct ItemRow: View {
             .overlay(alignment: .top) { if dropEdge == .top { DropLine() } }
             .overlay(alignment: .bottom) { if dropEdge == .bottom { DropLine() } }
             .contextMenu { ItemContextMenu(model: model, item: item) }
+            #if canImport(AppKit)
             .onDrag { model.dragProvider(for: item.id) ?? model.identityOnlyDragProvider(for: item.id) }
             .modifier(ReorderDropTarget(model: model, item: item, enabled: canReorder))
+            #endif
     }
 }
 
@@ -209,6 +217,7 @@ private struct ReorderDropTarget: ViewModifier {
     let enabled: Bool
 
     func body(content: Content) -> some View {
+        #if canImport(AppKit)
         if enabled {
             content.onDrop(of: [SummonDragType.item],
                            delegate: ItemReorderDropDelegate(item: item, model: model,
@@ -216,6 +225,9 @@ private struct ReorderDropTarget: ViewModifier {
         } else {
             content
         }
+        #else
+        content
+        #endif
     }
 }
 
@@ -230,8 +242,8 @@ struct ItemCard: View {
                 RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous)
                     .fill(Theme.color(for: item.kind).opacity(0.10))
                 if !item.isLocked, let url = model.thumbnailURL(for: item.id),
-                   let image = NSImage(contentsOf: url) {
-                    Image(nsImage: image)
+                   let image = PanelPreview.decode(url) {
+                    Image(decorative: image, scale: 1)
                         .resizable()
                         .aspectRatio(contentMode: .fill)
                         .clipShape(.rect(cornerRadius: Theme.Radius.small, style: .continuous))
@@ -269,7 +281,9 @@ struct ItemCard: View {
                 .strokeBorder(isSelected ? Theme.accent : Theme.hairline, lineWidth: 1)
         )
         .contextMenu { ItemContextMenu(model: model, item: item) }
+        #if canImport(AppKit)
         .onDrag { model.dragProvider(for: item.id) ?? model.identityOnlyDragProvider(for: item.id) }
+        #endif
     }
 }
 

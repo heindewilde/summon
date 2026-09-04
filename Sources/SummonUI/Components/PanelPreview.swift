@@ -1,4 +1,9 @@
+import ImageIO
+#if canImport(AppKit)
 import AppKit
+#else
+import UIKit
+#endif
 import PDFKit
 import SwiftUI
 import SummonKit
@@ -83,10 +88,17 @@ public struct PanelPreview: View {
         }
     }
 
+    /// Decoded through ImageIO rather than NSImage: same result, no AppKit, and no
+    /// window-server dependency in a view that may be drawn while snapshotting.
+    static func decode(_ url: URL) -> CGImage? {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
+        return CGImageSourceCreateImageAtIndex(source, 0, nil)
+    }
+
     private var imagePreview: some View {
         Group {
-            if let url = fileURL ?? thumbnailURL, let image = NSImage(contentsOf: url) {
-                Image(nsImage: image)
+            if let url = fileURL ?? thumbnailURL, let image = Self.decode(url) {
+                Image(decorative: image, scale: 1)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -118,9 +130,19 @@ public struct PanelPreview: View {
     private var filePreview: some View {
         VStack(spacing: Theme.Space.s) {
             if let url = fileURL {
+                // macOS can ask the workspace for the document's real icon. iOS has no
+                // equivalent — a file has no per-app icon there — so it gets the same
+                // kind glyph the rest of the app uses.
+                #if canImport(AppKit)
                 Image(nsImage: NSWorkspace.shared.icon(forFile: url.path))
                     .resizable()
                     .frame(width: 64, height: 64)
+                #else
+                Image(systemName: "doc")
+                    .font(.system(size: 56))
+                    .foregroundStyle(Theme.secondaryText)
+                    .frame(width: 64, height: 64)
+                #endif
                 Text(url.lastPathComponent)
                     .font(Theme.Typography.body.weight(.medium))
                     .lineLimit(2)
@@ -180,12 +202,13 @@ struct PDFPreview: View {
             // ImageRenderer cannot draw a PDFView, so render page one as an image.
             // The document must outlive the page, or PDFKit draws nothing.
             if let document = PDFDocument(url: url), let page = document.page(at: 0) {
-                let bounds = page.bounds(for: .mediaBox)
-                Image(nsImage: page.thumbnail(of: CGSize(width: bounds.width * 1.6,
-                                                         height: bounds.height * 1.6),
-                                              for: .mediaBox))
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
+                if let rendered = PDFPreview.render(page, scale: 1.6) {
+                    Image(decorative: rendered, scale: 1)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                } else {
+                    Color.clear
+                }
             } else {
                 Color.clear
             }
@@ -195,19 +218,60 @@ struct PDFPreview: View {
     }
 }
 
+extension PDFPreview {
+    /// A page drawn into a bitmap, for the snapshot path that cannot host a PDFView.
+    ///
+    /// `PDFPage.thumbnail(of:for:)` would be shorter and returns an NSImage on macOS
+    /// and a UIImage on iOS — a platform-shaped return in the middle of a shared view.
+    /// Drawing into a CGContext is the same work without that.
+    static func render(_ page: PDFPage, scale: CGFloat) -> CGImage? {
+        let bounds = page.bounds(for: .mediaBox)
+        guard bounds.width > 1, bounds.height > 1 else { return nil }
+        let size = CGSize(width: (bounds.width * scale).rounded(),
+                          height: (bounds.height * scale).rounded())
+        guard let ctx = CGContext(data: nil, width: Int(size.width), height: Int(size.height),
+                                  bitsPerComponent: 8, bytesPerRow: 0,
+                                  space: CGColorSpaceCreateDeviceRGB(),
+                                  bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)
+        else { return nil }
+        ctx.setFillColor(CGColor(gray: 1, alpha: 1))
+        ctx.fill(CGRect(origin: .zero, size: size))
+        ctx.scaleBy(x: scale, y: scale)
+        page.draw(with: .mediaBox, to: ctx)
+        return ctx.makeImage()
+    }
+}
+
+/// PDFKit ships PDFView on both platforms; only the representable protocol differs.
+#if canImport(AppKit)
 struct PDFViewRepresentable: NSViewRepresentable {
     let url: URL
 
-    func makeNSView(context: Context) -> PDFView {
+    func makeNSView(context: Context) -> PDFView { Self.make(url) }
+
+    func updateNSView(_ view: PDFView, context: Context) {
+        if view.document?.documentURL != url { view.document = PDFDocument(url: url) }
+    }
+}
+#else
+struct PDFViewRepresentable: UIViewRepresentable {
+    let url: URL
+
+    func makeUIView(context: Context) -> PDFView { Self.make(url) }
+
+    func updateUIView(_ view: PDFView, context: Context) {
+        if view.document?.documentURL != url { view.document = PDFDocument(url: url) }
+    }
+}
+#endif
+
+extension PDFViewRepresentable {
+    static func make(_ url: URL) -> PDFView {
         let view = PDFView()
         view.autoScales = true
         view.displayMode = .singlePage
         view.backgroundColor = .clear
         view.document = PDFDocument(url: url)
         return view
-    }
-
-    func updateNSView(_ view: PDFView, context: Context) {
-        if view.document?.documentURL != url { view.document = PDFDocument(url: url) }
     }
 }

@@ -1,4 +1,3 @@
-import AppKit
 import SummonKit
 import SwiftUI
 
@@ -93,8 +92,10 @@ public struct SidebarView: View {
         // A drop target, so a ring — not `Theme.selection`, which would say this row is
         // the one you are on. Same fix as the folder rows a few screens down.
         .rowSurface(rootTargeted ? .dropTarget : .idle)
+        #if canImport(AppKit)
         .onDrop(of: SummonDragType.all,
                 delegate: RootFolderDropDelegate(model: model, isTargeted: $rootTargeted))
+        #endif
         .help("Drag a folder or an item here to take it out of its folder")
     }
 
@@ -171,7 +172,11 @@ struct TagRow: View {
                     .font(Theme.Typography.title)
                     .focused($nameFocused)
                     .onSubmit(commitRename)
+                    // ⎋ to abandon a rename. No iOS equivalent — there is no
+                    // escape key to press, and losing focus already commits.
+                    #if canImport(AppKit)
                     .onExitCommand { model.renamingTagID = nil }
+                    #endif
                     .onAppear { renameText = tag.name; nameFocused = true }
                     .onChange(of: nameFocused) { _, focused in if !focused { commitRename() } }
             } else {
@@ -280,7 +285,11 @@ struct FolderRow: View {
                     .font(Theme.Typography.title)
                     .focused($nameFocused)
                     .onSubmit(commitRename)
+                    // ⎋ to abandon a rename. No iOS equivalent — there is no
+                    // escape key to press, and losing focus already commits.
+                    #if canImport(AppKit)
                     .onExitCommand { model.renamingFolderID = nil }
+                    #endif
                     .onAppear { renameText = entry.name; nameFocused = true }
                     .onChange(of: nameFocused) { _, focused in if !focused { commitRename() } }
             } else {
@@ -317,6 +326,7 @@ struct FolderRow: View {
         .overlay(alignment: .bottom) { if dropZone == .after { DropLine() } }
         .contentShape(.rect)
         .onTapGesture { model.sidebarSelection = .folder(entry.id) }
+        #if canImport(AppKit)
         .onDrag {
             model.sidebarSelection = .folder(entry.id)
             let provider = NSItemProvider()
@@ -330,6 +340,7 @@ struct FolderRow: View {
         .onDrop(of: FolderDropTypes,
                 delegate: FolderDropDelegate(folder: folderForDrop, model: model,
                                              rowHeight: SidebarView.rowHeight))
+        #endif
         .contextMenu { menu }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(entry.itemCount > 0 ? "\(entry.name), \(entry.itemCount) items"

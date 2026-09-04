@@ -38,7 +38,7 @@ jobs:
       # a symbolic-traits case the two frameworks spell differently.
       #
       # No signing identity needed, so it runs on a stock runner.
-      - name: Build for iOS
+      - name: Build the libraries for iOS
         run: |
           for scheme in SummonKit SummonUI; do
             echo "==> $scheme"
@@ -46,3 +46,12 @@ jobs:
               -destination 'generic/platform=iOS' \
               build CODE_SIGNING_ALLOWED=NO | tail -5
           done
+
+      # The app on top of them. Without this the libraries could stay green while the
+      # thing that uses them stopped building — and the app target is where an
+      # unavailable API or a missing conformance actually shows up.
+      - name: Build the iOS app
+        run: |
+          xcodebuild -project Summon.xcodeproj -scheme SummonPhone \
+            -destination 'generic/platform=iOS Simulator' \
+            build CODE_SIGNING_ALLOWED=NO | tail -5

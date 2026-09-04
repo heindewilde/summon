@@ -1,6 +1,9 @@
 import SummonKit
 import SummonUI
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#endif
 
 /// The iOS companion.
 ///
@@ -17,7 +20,15 @@ struct SummonPhoneApp: App {
         WindowGroup {
             Group {
                 if let model {
+                    #if os(iOS)
+                    if UIDevice.current.userInterfaceIdiom == .phone {
+                        PhoneRootView(model: model)
+                    } else {
+                        MainWindowView(model: model)
+                    }
+                    #else
                     MainWindowView(model: model)
+                    #endif
                 } else if let failure {
                     // The same posture the Mac takes: a library that will not open is
                     // said out loud rather than logged and shrugged at.

@@ -23,12 +23,44 @@ public struct LibraryRow: View {
     public var density: Density = .compact
 
     public enum Density: Sendable {
-        case compact, roomy
-        var height: CGFloat { self == .compact ? Theme.rowHeight : Theme.rowRoomy }
-        var title: Font { self == .compact ? Theme.Typography.title : Theme.Typography.heading }
+        case compact, roomy, touch
+
+        var height: CGFloat {
+            switch self {
+            case .compact: Theme.rowHeight
+            case .roomy: Theme.rowRoomy
+            case .touch: Theme.rowTouch
+            }
+        }
+
+        var title: Font {
+            switch self {
+            case .compact: Theme.Typography.title
+            case .roomy, .touch: Theme.Typography.heading
+            }
+        }
+
         /// A 15pt glyph beside a 15pt title in a 48pt row reads as undersized; the
         /// glyph is the row's only coloured element and should hold its own.
-        var glyph: CGFloat { self == .compact ? 15 : 17 }
+        var glyph: CGFloat {
+            switch self {
+            case .compact: 15
+            case .roomy: 17
+            case .touch: 19
+            }
+        }
+
+        /// What a fingertip gets by default.
+        ///
+        /// Chosen here rather than at each call site, so the phone cannot end up with
+        /// three row heights the way the Mac's three surfaces once did.
+        public static var platformDefault: Density {
+            #if canImport(AppKit)
+            .compact
+            #else
+            .touch
+            #endif
+        }
     }
     /// The ⌘-number, when this surface binds one. Nil draws nothing — a badge with
     /// no handler behind it is a promise the app does not keep.

@@ -14,7 +14,18 @@ public struct SidebarView: View {
     @State private var renameText = ""
     @State private var rootTargeted = false
 
-    public init(model: AppModel) { self.model = model }
+    /// Called when a section is chosen, even if it was already the current one.
+    ///
+    /// A three-column window shows the result of a tap immediately, so setting the
+    /// selection is the whole interaction. A phone has to push, and it has to push
+    /// when you tap the section you are already on — which observing the selection
+    /// cannot see.
+    var onSelect: ((SidebarSelection) -> Void)?
+
+    public init(model: AppModel, onSelect: ((SidebarSelection) -> Void)? = nil) {
+        self.model = model
+        self.onSelect = onSelect
+    }
 
     /// The sidebar's denser row. Reads the token rather than defining a third row
     /// height beside `Theme.rowHeight` and the action menu's — the folder drop delegate
@@ -139,7 +150,7 @@ public struct SidebarView: View {
         // left the window showing two chosen things and no way to tell them apart.
         .rowSurface(isSelected ? .navActive : .idle)
         .contentShape(.rect)
-        .onTapGesture { model.sidebarSelection = selection }
+        .onTapGesture { model.sidebarSelection = selection; onSelect?(selection) }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(count > 0 ? "\(title), \(count) items" : title)
         .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)

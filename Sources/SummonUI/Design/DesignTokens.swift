@@ -180,6 +180,13 @@ public enum Theme {
     /// through and wants results on screen, a library is sat in and wants air.
     public static let rowRoomy: CGFloat = 48
 
+    /// A row you hit with a fingertip.
+    ///
+    /// 44pt is Apple's minimum target and the floor rather than the choice; 52 gives
+    /// the same breathing room around a two-line row that `rowRoomy` gives a pointer,
+    /// on a surface where nothing hovers to tell you what you are about to hit.
+    public static let rowTouch: CGFloat = 52
+
     // MARK: - Typography
     //
     // Named, because every call site used to hardcode `.system(size:)` — which is how

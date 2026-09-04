@@ -11,6 +11,16 @@ public struct LibraryPaths: Sendable {
     public var blobs: URL { root.appending(path: "Blobs") }
     public var vault: URL { root.appending(path: "Vault") }
     public var thumbnails: URL { root.appending(path: "Thumbnails") }
+
+    /// Decrypted-nothing, throw-away copies of unsealed payloads.
+    ///
+    /// Once the bytes live in the store there is no managed file to hand another app,
+    /// and `materialize` would otherwise have to write a temporary copy every time —
+    /// which also means "Reveal in Finder" would point at a file in /tmp. This is a
+    /// cache, not storage: the store is the source of truth and anything here can be
+    /// deleted and rebuilt. Sealed content never lands here; it goes to the scratch
+    /// directory that is wiped on lock and on quit.
+    public var cache: URL { root.appending(path: "Cache") }
     public var vaultKeyFile: URL { root.appending(path: "vault.wrap") }
 
     /// Which one-off repairs this library has already had. Per-library rather than
@@ -44,7 +54,7 @@ public struct LibraryPaths: Sendable {
     }
 
     public func createDirectories() {
-        for dir in [root, blobs, vault, thumbnails] {
+        for dir in [root, blobs, vault, thumbnails, cache] {
             try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         }
     }

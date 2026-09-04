@@ -114,9 +114,18 @@ public struct FileStore: Sendable {
 
     // MARK: - Read
 
+    /// The bytes as they sit on disk, without decrypting.
+    ///
+    /// The fallback path now that `LibraryStore` reads payloads from the store first.
+    public func read(rawOnly blob: StoredBlob) throws -> Data {
+        guard let raw = try? Data(contentsOf: location(of: blob)) else {
+            throw FileStoreError.missingBlob(blob.filename)
+        }
+        return raw
+    }
+
     public func read(_ blob: StoredBlob, itemID: UUID, key: VaultKey?) throws -> Data {
-        let url = location(of: blob)
-        guard let raw = try? Data(contentsOf: url) else { throw FileStoreError.missingBlob(blob.filename) }
+        let raw = try read(rawOnly: blob)
         guard blob.isSealed else { return raw }
         guard let key else { throw FileStoreError.needsUnlock }
         return try key.open(raw, itemID: itemID)
@@ -126,7 +135,11 @@ public struct FileStore: Sendable {
     /// this is a decrypted copy in a temporary directory that is wiped on quit.
     public func materialize(_ blob: StoredBlob, itemID: UUID, key: VaultKey?) throws -> URL {
         guard blob.isSealed else { return location(of: blob) }
-        let data = try read(blob, itemID: itemID, key: key)
+        return try scratch(try read(blob, itemID: itemID, key: key), for: blob, itemID: itemID)
+    }
+
+    /// A decrypted copy in the temporary directory that is wiped on lock and on quit.
+    public func scratch(_ data: Data, for blob: StoredBlob, itemID: UUID) throws -> URL {
         let dir = FileStore.scratchDirectory()
         let url = dir.appending(path: FileStore.scratchName(for: blob, itemID: itemID))
 
@@ -139,6 +152,41 @@ public struct FileStore: Sendable {
                                  attributes: [.posixPermissions: 0o600])
         else { throw FileStoreError.unreadable(url) }
         return url
+    }
+
+    /// A durable copy of unsealed bytes, for opening and revealing.
+    ///
+    /// Named by content hash, so a rewritten item gets a new file rather than a stale
+    /// one, and two items with identical bytes share. Ordinary permissions: this is
+    /// plaintext that was never secret, and it is the file another app will open.
+    public func cached(_ data: Data, for blob: StoredBlob, itemID: UUID) throws -> URL {
+        try? FileManager.default.createDirectory(at: paths.cache, withIntermediateDirectories: true)
+        // Named by item first and content second: the hash alone would be
+        // unrevokable, and marking an item sensitive has to be able to destroy every
+        // plaintext copy of it. The hash still means a rewritten item gets a new file
+        // rather than a stale one.
+        let ext = blob.fileExtension.isEmpty ? "bin" : blob.fileExtension
+        let stem = "\(itemID.uuidString)-\(blob.contentHash.prefix(16))"
+        let url = paths.cache.appending(path: "\(stem).\(ext)")
+
+        if let existing = try? Data(contentsOf: url), existing == data { return url }
+        try data.write(to: url, options: .atomic)
+        return url
+    }
+
+    /// Destroys every cached copy of one item.
+    ///
+    /// Called when an item becomes sensitive. The cache holds plaintext that was never
+    /// secret until the moment someone decides it is, and leaving a readable copy
+    /// behind is exactly the leak `scrubSensitiveContent` and the VACUUM exist to
+    /// prevent one layer down.
+    public func removeCached(itemID: UUID) {
+        let manager = FileManager.default
+        let entries = (try? manager.contentsOfDirectory(at: paths.cache,
+                                                        includingPropertiesForKeys: nil)) ?? []
+        for url in entries where url.lastPathComponent.hasPrefix(itemID.uuidString) {
+            try? manager.removeItem(at: url)
+        }
     }
 
     /// A filename that cannot escape the scratch directory.

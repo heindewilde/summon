@@ -1042,7 +1042,7 @@ public final class AppModel {
     public func revealInFinder(_ id: UUID) {
         #if canImport(AppKit)
         guard let item = store.item(id: id), let blob = item.storedBlob,
-              let url = try? store.files.materialize(blob, itemID: id, key: vault.currentKey) else { return }
+              let url = try? store.materialize(blob, itemID: id, key: vault.currentKey) else { return }
         NSWorkspace.shared.activateFileViewerSelecting([url])
         #endif
     }
@@ -1624,8 +1624,8 @@ public final class AppModel {
             data.body = store.resolveBodyText(item, key: key)
         } else if let blob = item.storedBlob {
             data.fileURL = blob.isSealed
-                ? try? store.files.materialize(blob, itemID: id, key: key)
-                : store.files.location(of: blob)
+                ? try? store.materialize(blob, itemID: id, key: key)
+                : try? store.materialize(blob, itemID: id, key: nil)
             if data.body == nil {
                 data.body = store.resolveExtractedText(item, key: key)
             }

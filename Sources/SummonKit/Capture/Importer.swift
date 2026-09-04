@@ -127,7 +127,7 @@ public final class Importer {
         // 1. Get readable text out of the content.
         var extracted = ""
         if kind.isBlobBacked, let blob = item.storedBlob {
-            if let url = try? store.files.materialize(blob, itemID: id, key: key) {
+            if let url = try? store.materialize(blob, itemID: id, key: key) {
                 extracted = await TextExtractor.extract(from: url, kind: kind)
                 await makeThumbnail(for: id, from: url, sensitive: sensitive)
             }

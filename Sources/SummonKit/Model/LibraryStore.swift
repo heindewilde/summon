@@ -559,7 +559,12 @@ public final class LibraryStore {
             if let blob = item.storedBlob {
                 item.apply(try files.seal(blob, itemID: item.id, key: key))
             }
+            // The bytes in the store are the ones that matter now, and the ones that
+            // will sync. Sealing the file and not the payload would leave an item
+            // showing a padlock with its plaintext sitting in the database.
+            try resealPayload(for: item, key: key, sealed: true)
             files.deleteThumbnail(itemID: item.id)
+            files.removeCached(itemID: item.id)
         } else {
             if let sealed = item.sealedBody {
                 let data = try key.open(sealed, itemID: item.id)
@@ -582,6 +587,7 @@ public final class LibraryStore {
             if let blob = item.storedBlob {
                 item.apply(try files.unseal(blob, itemID: item.id, key: key))
             }
+            try resealPayload(for: item, key: key, sealed: false)
         }
     }
 
@@ -662,6 +668,63 @@ public final class LibraryStore {
             let container = try decoder.container(keyedBy: CodingKeys.self)
             scrubVersion = try container.decodeIfPresent(Int.self, forKey: .scrubVersion) ?? 0
         }
+    }
+
+    /// Brings an item's stored bytes into line with its sensitivity.
+    private func resealPayload(for item: SummonItem, key: VaultKey, sealed: Bool) throws {
+        let id = item.id
+        var descriptor = FetchDescriptor<SummonPayload>(
+            predicate: #Predicate { $0.itemID == id })
+        descriptor.fetchLimit = 1
+        guard let payload = (try? context.fetch(descriptor))?.first,
+              payload.isSealed != sealed else { return }
+
+        payload.bytes = sealed
+            ? try key.seal(payload.bytes, itemID: item.id)
+            : try key.open(payload.bytes, itemID: item.id)
+        payload.isSealed = sealed
+    }
+
+    // MARK: - Reading payloads
+
+    /// The stored bytes for an item, exactly as stored — ciphertext if it is sealed.
+    public func storedBytes(for itemID: UUID) -> Data? {
+        var descriptor = FetchDescriptor<SummonPayload>(
+            predicate: #Predicate { $0.itemID == itemID })
+        descriptor.fetchLimit = 1
+        return (try? context.fetch(descriptor))?.first?.bytes
+    }
+
+    /// An item's content, decrypted if it needs to be.
+    ///
+    /// The store is the source of truth and the files under `Blobs/` and `Vault/` are
+    /// the fallback, not the other way round. The fallback exists because the migration
+    /// deliberately leaves those files in place for a release: a library that has not
+    /// been opened since the upgrade, or a payload the migration could not read, still
+    /// resolves instead of failing.
+    public func read(_ blob: StoredBlob, itemID: UUID, key: VaultKey?) throws -> Data {
+        let raw: Data
+        if let stored = storedBytes(for: itemID) {
+            raw = stored
+        } else {
+            raw = try files.read(rawOnly: blob)
+        }
+        guard blob.isSealed else { return raw }
+        guard let key else { throw FileStoreError.needsUnlock }
+        return try key.open(raw, itemID: itemID)
+    }
+
+    /// A real file another app can open.
+    ///
+    /// Sealed content goes to the scratch directory, which is wiped on lock and on
+    /// quit — unchanged. Unsealed content goes to the cache, which survives launches,
+    /// so opening a file twice does not write it twice and Reveal points at something
+    /// that stays put.
+    public func materialize(_ blob: StoredBlob, itemID: UUID, key: VaultKey?) throws -> URL {
+        let data = try read(blob, itemID: itemID, key: key)
+        return blob.isSealed
+            ? try files.scratch(data, for: blob, itemID: itemID)
+            : try files.cached(data, for: blob, itemID: itemID)
     }
 
     // MARK: - Payload migration
@@ -1027,13 +1090,13 @@ public final class LibraryStore {
 
         case .image:
             guard let blob = item.storedBlob else { return nil }
-            let data = try? files.read(blob, itemID: item.id, key: key)
-            let url = try? files.materialize(blob, itemID: item.id, key: key)
+            let data = try? read(blob, itemID: item.id, key: key)
+            let url = try? materialize(blob, itemID: item.id, key: key)
             return InsertPayload(fileURL: url, imageData: data)
 
         case .document, .file:
             guard let blob = item.storedBlob,
-                  let url = try? files.materialize(blob, itemID: item.id, key: key) else { return nil }
+                  let url = try? materialize(blob, itemID: item.id, key: key) else { return nil }
             return InsertPayload(fileURL: url)
         }
     }

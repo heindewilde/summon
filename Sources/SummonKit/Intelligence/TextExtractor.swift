@@ -92,14 +92,27 @@ public struct TextExtractor: Sendable {
         return .unsupported
     }
 
-    private static let wordProcessorTypes: [(UTType, NSAttributedString.DocumentType)] =
-        [
+    /// Word-processor formats, where the platform can read them.
+    ///
+    /// `.docFormat`, `.officeOpenXML` and `.openDocument` are AppKit's additions to
+    /// `NSAttributedString.DocumentType`; UIKit vends only plain text, RTF, RTFD and
+    /// HTML. So a .docx dropped into the iOS companion is stored and findable by name
+    /// and tag like any other file — its *contents* are only read on a Mac, and
+    /// `reader(for:)` already returns `.unsupported` for anything not in this list.
+    private static let wordProcessorTypes: [(UTType, NSAttributedString.DocumentType)] = {
+        #if canImport(AppKit)
+        let candidates: [(String, NSAttributedString.DocumentType)] = [
             ("com.microsoft.word.doc", .docFormat),
             ("org.openxmlformats.wordprocessingml.document", .officeOpenXML),
             ("org.oasis-open.opendocument.text", .openDocument),
-        ].compactMap { identifier, documentType in
+        ]
+        #else
+        let candidates: [(String, NSAttributedString.DocumentType)] = []
+        #endif
+        return candidates.compactMap { identifier, documentType in
             UTType(identifier).map { ($0, documentType) }
         }
+    }()
 
     public static func documentText(url: URL) async -> String {
         await Task.detached(priority: .utility) {

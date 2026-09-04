@@ -31,3 +31,15 @@ jobs:
       # a budget calibrated against an unoptimised build asserts nothing.
       - name: Test
         run: swift test -c release
+
+      # The only check that actually proves the platform split. `swift test` compiles
+      # for the host, so an `#if os(iOS)` branch is never built by it and rots in
+      # silence — this caught .docFormat, which AppKit vends and UIKit does not, and
+      # a symbolic-traits case the two frameworks spell differently.
+      #
+      # No signing identity needed, so it runs on a stock runner.
+      - name: Build SummonKit for iOS
+        run: |
+          xcodebuild -scheme SummonKit \
+            -destination 'generic/platform=iOS' \
+            build CODE_SIGNING_ALLOWED=NO | tail -20

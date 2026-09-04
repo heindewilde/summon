@@ -242,7 +242,7 @@ Requires **macOS 26** and **Xcode 26** (Swift 6.1+). There are **no dependencies
 Scripts/run.sh              # debug build, then launch
 Scripts/run.sh --demo       # …against a throwaway library
 Scripts/selftest.sh         # 90 runtime checks on a fresh demo library
-swift test                  # 262 tests over the logic layer
+swift test                  # 287 tests over the logic layer
 swift test -c release       # the same, in an optimised build
 Scripts/perf.sh             # the wall-clock budgets, on a quiet machine
 ```
@@ -357,7 +357,7 @@ Sources/
 
 | | |
 |---|---|
-| **262 tests** across 39 suites | The whole logic layer: vault round-trips and wrong-secret rejection, the cooldown holding against a clock set backwards, that extraction opens no socket and that a seal leaves no plaintext in the store file, ranking and frecency, placeholder parsing, folder trees and cycle refusal, every keyboard binding *and* the keys the panel deliberately declines, contrast ratios, and content edge cases from empty titles to right-to-left text |
+| **287 tests** across 45 suites | The whole logic layer: vault round-trips and wrong-secret rejection, the cooldown holding against a clock set backwards, that extraction opens no socket and that a seal leaves no plaintext in the store file, ranking and frecency, placeholder parsing, folder trees and cycle refusal, every keyboard binding *and* the keys the panel deliberately declines, contrast ratios, and content edge cases from empty titles to right-to-left text |
 | **90 runtime checks** | `Scripts/selftest.sh` drives the real app: hot key registration, panel window configuration, search reaching inside a PDF, the vault lifecycle end to end, and each keyboard binding actually reaching behaviour |
 | **Performance budgets** | Structural ones — "typing never rebuilds the index" — run everywhere and fail the build. The wall-clock ones run only in `Scripts/perf.sh`, which refuses outright if the machine is busy, because a budget measured beside a running test suite or a busy editor measures the scheduler rather than the code |
 | **A paste round trip** | Opens a scratch document in TextEdit, summons a snippet into it, and reads the result back through the Accessibility API — refusing to run unless TextEdit is genuinely frontmost |

@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import SummonKit
+import SummonKitMac
 import SummonUI
 
 /// End-to-end runtime checks for the parts unit tests cannot reach: real hot key

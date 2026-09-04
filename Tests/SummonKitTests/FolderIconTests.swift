@@ -83,10 +83,16 @@ struct FolderIconTests {
         // that. What a measurement *was* standing in for is the edit that revokes it:
         // changing it to a computed `static var`. So assert that directly, and it holds
         // on any machine at any load.
-        let before = FolderIcon.prepareCount
+        // One call first, so the lazy `static let` has certainly been initialised.
+        // Reading the count before that makes the test depend on whether some earlier
+        // test in the suite happened to touch FolderIcon — which it did, and which is
+        // why this passed once and then failed when the suite order changed.
+        _ = FolderIcon.search("mny")
+        let after = FolderIcon.prepareCount
+        #expect(after == 1, "prepared should be built exactly once, ever")
+
         for _ in 0..<300 { _ = FolderIcon.search("mny") }
-        #expect(FolderIcon.prepareCount == before)
-        #expect(FolderIcon.prepareCount == 1, "prepared should be built exactly once, ever")
+        #expect(FolderIcon.prepareCount == after, "searching rebuilt the tables")
     }
 
     @Test("Every colour the picker offers resolves to a distinct choice")

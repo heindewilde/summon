@@ -1,6 +1,7 @@
 import AppKit
 import Carbon.HIToolbox
 import Foundation
+import SummonKit
 
 /// System-wide shortcuts via Carbon's `RegisterEventHotKey`.
 ///

@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import SummonKit
+import SummonKitMac
 import SummonUI
 
 @MainActor

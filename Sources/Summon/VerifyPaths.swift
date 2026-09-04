@@ -3,6 +3,7 @@ import Carbon.HIToolbox
 import Foundation
 import ServiceManagement
 import SummonKit
+import SummonKitMac
 import SummonUI
 
 /// Exercises the paths that only exist against the real system: a global hot key

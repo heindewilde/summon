@@ -36,8 +36,10 @@ public struct SidebarView: View {
                 if model.vault.isConfigured {
                     row(.locked, "Sensitive", "lock", count: counts.sensitive)
                 }
-                row(.clipboard, "Clipboard", "doc.on.clipboard",
-                    count: model.clipboard.entries.count)
+                if model.clipboard.isSupported {
+                    row(.clipboard, "Clipboard", "doc.on.clipboard",
+                        count: model.clipboard.entries.count)
+                }
 
                 header("Folders")
                 ForEach(model.sidebarFolderRows) { entry in

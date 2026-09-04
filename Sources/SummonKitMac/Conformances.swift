@@ -27,7 +27,9 @@ extension Inserter: InsertionService {
     }
 }
 
-extension ClipboardMonitor: ClipboardService {}
+extension ClipboardMonitor: ClipboardService {
+    public var isSupported: Bool { true }
+}
 
 extension PlatformServices {
     /// Everything the Mac can do, wired together.

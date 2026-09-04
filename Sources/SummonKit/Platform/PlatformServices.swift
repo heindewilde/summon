@@ -58,6 +58,13 @@ public protocol InsertionService: AnyObject {
 /// it the tray fills up with things it just put there.
 @MainActor
 public protocol ClipboardService: AnyObject {
+    /// Whether this platform has a clipboard history at all.
+    ///
+    /// Distinct from `isEnabled`, which is a preference: the Mac's tray can be switched
+    /// off and still be a thing that exists. iOS cannot watch the pasteboard in the
+    /// background, so the answer there is no, and the sidebar should not offer a
+    /// section that can never fill.
+    var isSupported: Bool { get }
     var isEnabled: Bool { get set }
     var maxEntries: Int { get set }
     var entries: [ClipboardEntry] { get }

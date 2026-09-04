@@ -65,6 +65,7 @@ final class NoFocus: FocusService {
 /// permission prompt on every launch for a tray that could never fill itself.
 @MainActor
 final class NoClipboardHistory: ClipboardService {
+    var isSupported: Bool { false }
     var isEnabled: Bool = false
     var maxEntries: Int = 0
     var entries: [ClipboardEntry] { [] }

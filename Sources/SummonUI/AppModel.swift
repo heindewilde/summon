@@ -123,9 +123,12 @@ public final class AppModel {
     public let vault: Vault
     public let store: LibraryStore
     public let intelligence: Intelligence
-    public let clipboard: ClipboardMonitor
-    public let inserter: Inserter
-    public let focus: FocusTracker
+    /// What this machine can do. Protocols rather than the AppKit-backed classes
+    /// this used to construct itself — see `PlatformServices`.
+    @ObservationIgnored public let services: PlatformServices
+    public var clipboard: any ClipboardService { services.clipboard }
+    public var inserter: any InsertionService { services.insertion }
+    public var focus: any FocusService { services.focus }
     public let importer: Importer
     public let settings: AppSettings
 
@@ -319,17 +322,15 @@ public final class AppModel {
     private var toastTask: Task<Void, Never>?
     private var autoLockTimer: Timer?
 
-    public init() throws {
+    public init(services: PlatformServices) throws {
+        self.services = services
         let paths = LibraryPaths.standard()
         self.paths = paths
         let vault = Vault(paths: paths)
         self.vault = vault
         self.store = try LibraryStore(paths: paths, vault: vault)
         self.intelligence = Intelligence()
-        self.accessibility = AccessibilityStatus(probe: { Inserter.hasAccessibility })
-        self.clipboard = ClipboardMonitor(paths: paths)
-        self.inserter = Inserter()
-        self.focus = FocusTracker()
+        self.accessibility = AccessibilityStatus(probe: services.hasAccessibility)
         self.settings = AppSettings()
         self.importer = Importer(store: store, intelligence: intelligence)
 
@@ -369,7 +370,7 @@ public final class AppModel {
                                            snapshots: store.snapshots,
                                            revision: store.revision,
                                            frontmostBundleID: focus.previousBundleID,
-                                           frontmostAppName: focus.previousApp?.localizedName)
+                                           frontmostAppName: focus.previousAppName)
         results = ranked.allResults
 
         // Absolute positions assigned once, here, so ⌘-numbering runs across sections
@@ -792,7 +793,7 @@ public final class AppModel {
 
         case .copy:
             clipboard.ignoreNextChange()
-            inserter.writeToPasteboard(payload)
+            inserter.writeToPasteboard(payload, plainOnly: false)
             store.recordUse(id: id, inApp: bundleID)
             dismissPanel()
             show(Toast(text: "Copied", symbol: "doc.on.clipboard", tone: .success,
@@ -821,7 +822,7 @@ public final class AppModel {
     }
 
     private func offerAccessibilityOrConfirmCopy() {
-        if Inserter.hasAccessibility || !settings.autoPaste {
+        if services.hasAccessibility() || !settings.autoPaste {
             show(Toast(text: "Copied", symbol: "doc.on.clipboard", tone: .success,
                        detail: "Press ⌘V wherever you need it"))
         } else {
@@ -830,7 +831,7 @@ public final class AppModel {
             // Ask once per launch, and only after it would have helped.
             if !accessibilityPromptShown {
                 accessibilityPromptShown = true
-                Inserter.requestAccessibility()
+                services.requestAccessibility()
             }
         }
     }
@@ -1278,10 +1279,7 @@ public final class AppModel {
 
     public func quickSaveSelection() {
         Task {
-            let capture = SelectionCapture(inserter: inserter) { [weak self] in
-                self?.clipboard.ignoreNextChange()
-            }
-            let selection = await capture.capture()
+            let selection = await services.captureSelection()
             let created = await importer.importSelection(selection)
             runSearch()
             if created.isEmpty {
@@ -1295,7 +1293,7 @@ public final class AppModel {
         }
     }
 
-    public func saveClipboardEntry(_ entry: ClipboardMonitor.Entry) {
+    public func saveClipboardEntry(_ entry: ClipboardEntry) {
         Task {
             if let item = await importer.importClipboardEntry(entry) {
                 runSearch()

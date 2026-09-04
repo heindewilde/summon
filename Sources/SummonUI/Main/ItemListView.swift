@@ -334,7 +334,7 @@ struct ClipboardListView: View {
 /// name — the two are genuinely different shapes, not a duplication to fold together.
 private struct ClipboardEntryRow: View {
     @Bindable var model: AppModel
-    let entry: ClipboardMonitor.Entry
+    let entry: ClipboardEntry
 
     @State private var hovering = false
 

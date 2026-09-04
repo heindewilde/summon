@@ -2,6 +2,7 @@ import AppKit
 import Foundation
 import Testing
 @testable import SummonKit
+@testable import SummonKitMac
 
 @Suite("Heuristics")
 struct HeuristicsTests {

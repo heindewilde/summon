@@ -2,6 +2,7 @@ import AppKit
 import Foundation
 import Testing
 @testable import SummonKit
+@testable import SummonKitMac
 
 /// Uses a private, named pasteboard so running the suite never touches the real one.
 @Suite("Pasteboard")

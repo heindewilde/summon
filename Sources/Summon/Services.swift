@@ -2,6 +2,7 @@ import AppKit
 import SummonKit
 import SummonUI
 import SummonUIMac
+import SummonKitMac
 
 /// Single construction point for the app's services.
 ///
@@ -11,7 +12,7 @@ import SummonUIMac
 enum Services {
     static let model: AppModel = {
         do {
-            return try AppModel()
+            return try AppModel(services: .macOS())
         } catch {
             let alert = NSAlert()
             alert.messageText = "Summon couldn’t open your library"

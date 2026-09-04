@@ -81,7 +81,7 @@ public final class Importer {
 
     @discardableResult
     public func importClipboardEntry(
-        _ entry: ClipboardMonitor.Entry,
+        _ entry: ClipboardEntry,
         into folder: SummonFolder? = nil,
         sensitive: Bool = false
     ) async -> SummonItem? {

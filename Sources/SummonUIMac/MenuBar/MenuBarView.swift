@@ -2,6 +2,7 @@ import AppKit
 import SwiftUI
 import SummonKit
 import SummonUI
+import SummonKitMac
 
 /// The always-there surface: pinned and recent items, the clipboard tray, and the
 /// things you would otherwise have to open a window to do.
@@ -192,7 +193,7 @@ struct MenuBarRow: View {
 }
 
 struct ClipboardRow: View {
-    let entry: ClipboardMonitor.Entry
+    let entry: ClipboardEntry
     let save: () -> Void
     @State private var hovering = false
 

@@ -2,6 +2,7 @@ import AppKit
 import Foundation
 import Testing
 @testable import SummonKit
+@testable import SummonKitMac
 
 /// Mirrors `ClipboardMonitor.StoredEntry`, so the tests can lay down a real history
 /// file without driving the monitor against the machine's actual clipboard.

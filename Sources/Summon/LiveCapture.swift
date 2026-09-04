@@ -3,6 +3,7 @@ import SwiftUI
 import SummonKit
 import SummonUI
 import SummonUIMac
+import SummonKitMac
 
 /// Development helper for reviewing the surfaces `ImageRenderer` cannot draw —
 /// `NavigationSplitView` and `List`. It puts the real view in a real window and
@@ -123,11 +124,13 @@ enum LiveCapture {
             // sidebar selection rather than a mode, and `ImageRenderer` cannot draw the
             // window it lives in.
             model.sidebarSelection = .clipboard
-            if model.clipboard.entries.isEmpty {
-                model.clipboard.seedForCapture([
-                    .init(capturedAt: .now.addingTimeInterval(-90), kind: .text,
+            // The harness reaches past the protocol on purpose: seeding the tray is
+            // not something the app can do, so it is not on ClipboardService.
+            if let monitor = model.clipboard as? ClipboardMonitor, monitor.entries.isEmpty {
+                monitor.seedForCapture([
+                    ClipboardEntry(capturedAt: .now.addingTimeInterval(-90), kind: .text,
                           text: "NL91 ABNA 0417 1643 00", sourceAppName: "Safari"),
-                    .init(capturedAt: .now.addingTimeInterval(-2400), kind: .text,
+                    ClipboardEntry(capturedAt: .now.addingTimeInterval(-2400), kind: .text,
                           text: "Thanks — I'll get that over to you before Friday.",
                           sourceAppName: "Mail"),
                 ])

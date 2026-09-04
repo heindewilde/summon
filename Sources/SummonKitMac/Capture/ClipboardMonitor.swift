@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import SummonKit
 import Observation
 
 /// Watches the clipboard so saving never requires deciding to save *before* you copy.
@@ -11,46 +12,9 @@ import Observation
 @Observable
 public final class ClipboardMonitor {
 
-    public struct Entry: Identifiable, Sendable, Equatable {
-        public let id: UUID
-        public let capturedAt: Date
-        public let kind: ItemKind
-        public let text: String?
-        public let rtf: Data?
-        public let imageData: Data?
-        public let fileURL: URL?
-        public let sourceBundleID: String?
-        public let sourceAppName: String?
-
-        public var preview: String {
-            if let fileURL { return fileURL.lastPathComponent }
-            if imageData != nil { return "Image" }
-            let t = (text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            return t.isEmpty ? "Empty" : String(t.prefix(200))
-        }
-
-        public init(id: UUID = UUID(), capturedAt: Date, kind: ItemKind, text: String? = nil,
-                    rtf: Data? = nil, imageData: Data? = nil, fileURL: URL? = nil,
-                    sourceBundleID: String? = nil, sourceAppName: String? = nil) {
-            self.id = id
-            self.capturedAt = capturedAt
-            self.kind = kind
-            self.text = text
-            self.rtf = rtf
-            self.imageData = imageData
-            self.fileURL = fileURL
-            self.sourceBundleID = sourceBundleID
-            self.sourceAppName = sourceAppName
-        }
-
-        public var suggestedTitle: String {
-            if let fileURL { return fileURL.deletingPathExtension().lastPathComponent }
-            if imageData != nil {
-                return "Image from \(sourceAppName ?? "clipboard")"
-            }
-            return Heuristics.title(forText: text ?? "")
-        }
-    }
+    /// Kept as `ClipboardMonitor.Entry` for the call sites that read naturally that
+    /// way; the type itself is `ClipboardEntry`, on the portable side.
+    public typealias Entry = ClipboardEntry
 
     public private(set) var entries: [Entry] = []
     public var isEnabled: Bool = true { didSet { isEnabled ? start() : stop() } }

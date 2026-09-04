@@ -149,7 +149,7 @@ public struct PanelView: View {
     }
 
     private var placeholder: String {
-        if let app = model.focus.previousApp?.localizedName {
+        if let app = model.focus.previousAppName {
             return "Summon anything for \(app)…"
         }
         return "Summon anything…"

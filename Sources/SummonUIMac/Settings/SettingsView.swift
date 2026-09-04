@@ -2,6 +2,7 @@ import AppKit
 import SwiftUI
 import SummonKit
 import SummonUI
+import SummonKitMac
 
 public struct SettingsView: View {
     @Bindable var model: AppModel

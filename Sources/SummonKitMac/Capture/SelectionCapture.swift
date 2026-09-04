@@ -1,13 +1,6 @@
 import AppKit
 import Foundation
-
-/// What the save-selection hotkey managed to grab.
-public enum CapturedSelection: Sendable {
-    case files([URL])
-    case text(String, rtf: Data?)
-    case image(Data)
-    case nothing
-}
+import SummonKit
 
 /// Grabs whatever is selected right now, wherever you are.
 ///

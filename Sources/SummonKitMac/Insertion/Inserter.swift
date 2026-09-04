@@ -2,14 +2,7 @@ import AppKit
 import ApplicationServices
 import Carbon.HIToolbox
 import Foundation
-
-public enum InsertOutcome: Sendable, Equatable {
-    /// Content was pasted straight into the app you were in.
-    case pasted
-    /// Accessibility is not granted, so it is on the clipboard and waiting for ⌘V.
-    case copiedOnly
-    case failed(String)
-}
+import SummonKit
 
 /// Remembers which app you were in before the panel appeared, so content can be put
 /// back exactly where your cursor was.

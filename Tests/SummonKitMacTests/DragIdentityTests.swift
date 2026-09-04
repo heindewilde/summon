@@ -3,6 +3,7 @@ import Foundation
 import Testing
 import UniformTypeIdentifiers
 @testable import SummonKit
+@testable import SummonKitMac
 
 /// How a drag says which row it came from.
 ///

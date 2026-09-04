@@ -4,6 +4,7 @@ import SwiftUI
 import SummonKit
 import SummonUI
 import SummonUIMac
+import SummonKitMac
 
 /// End-to-end verification of the auto-paste path — the one sequence that cannot be
 /// unit tested, because it depends on a real Accessibility grant, real focus changes
@@ -119,7 +120,7 @@ enum PasteTest {
         let caretBack = payload.cursorOffsetFromEnd
 
         model.dismissPanel()
-        let outcome = await model.inserter.insert(payload, into: model.focus)
+        let outcome = await model.inserter.insert(payload, into: model.focus, plainOnly: false, autoPaste: true)
         check("Insert reports a real paste, not a clipboard fallback", outcome == .pasted,
               detail: "\(outcome)")
 

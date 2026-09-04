@@ -114,7 +114,7 @@ enum SelfTest {
            let payload = model.store.payload(for: template.id,
                                              fieldValues: ["first_name": "Marieke",
                                                            "invoice_number": "2026-084"]) {
-            model.inserter.writeToPasteboard(payload, to: scratch)
+            (model.inserter as? Inserter)?.writeToPasteboard(payload, to: scratch)
             let written = scratch.string(forType: .string) ?? ""
             check("A filled snippet reaches the pasteboard", !written.isEmpty)
             check("Placeholders are resolved, not pasted raw", !written.contains("{{"),

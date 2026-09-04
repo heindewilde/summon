@@ -139,7 +139,7 @@ enum VerifyPaths {
               detail: selection.map(\.lastPathComponent).joined(separator: ", "))
 
         if !selection.isEmpty {
-            let capture = SelectionCapture(inserter: model.inserter)
+            let capture = SelectionCapture(inserter: Inserter())
             let grabbed = await capture.capture()
             var imported = 0
             if case .files(let urls) = grabbed { imported = urls.count }

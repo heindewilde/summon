@@ -8,6 +8,13 @@ public struct LibraryPaths: Sendable {
     public let root: URL
 
     public var storeURL: URL { root.appending(path: "Library.store") }
+
+    /// The half of the library that stays on this device.
+    ///
+    /// A second store rather than a flag on a row, because "does not sync" is a
+    /// property of the store in Core Data, not of a record. It holds usage counts and
+    /// any payload too large to sensibly land on a phone.
+    public var localStoreURL: URL { root.appending(path: "Library-Local.store") }
     public var blobs: URL { root.appending(path: "Blobs") }
     public var vault: URL { root.appending(path: "Vault") }
     public var thumbnails: URL { root.appending(path: "Thumbnails") }

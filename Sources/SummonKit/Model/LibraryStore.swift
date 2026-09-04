@@ -57,15 +57,27 @@ public final class LibraryStore {
         self.vault = vault
         paths.createDirectories()
 
-        let schema = Schema([SummonItem.self, SummonFolder.self, SummonTag.self,
+        // Two stores, because "does not sync" is a property of a store rather than of
+        // a record. The shared one is what CloudKit will mirror; the local one holds
+        // what should never leave the device it was learned on.
+        let shared = Schema([SummonItem.self, SummonFolder.self, SummonTag.self,
                              AppAffinity.self, SummonPayload.self])
-        let config = ModelConfiguration(schema: schema, url: paths.storeURL, cloudKitDatabase: .none)
-        self.container = try ModelContainer(for: schema, configurations: [config])
+        let local = Schema([UsageStat.self])
+
+        let sharedConfig = ModelConfiguration("shared", schema: shared,
+                                              url: paths.storeURL, cloudKitDatabase: .none)
+        let localConfig = ModelConfiguration("local", schema: local,
+                                             url: paths.localStoreURL, cloudKitDatabase: .none)
+        self.container = try ModelContainer(
+            for: SummonItem.self, SummonFolder.self, SummonTag.self,
+            AppAffinity.self, SummonPayload.self, UsageStat.self,
+            configurations: sharedConfig, localConfig)
 
         // Before the first refresh, so ranking never sees a half-moved library. Cheap
         // after the first run — one id-only fetch that finds nothing to do — and it
         // needs no key, so it can happen at launch rather than waiting for an unlock.
         migratePayloads()
+        migrateUsage()
         refresh()
     }
 
@@ -121,11 +133,16 @@ public final class LibraryStore {
         itemsByID = Dictionary(items.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         foldersByID = Dictionary(allFolders().map { ($0.id, $0) },
                                  uniquingKeysWith: { first, _ in first })
-        snapshots = items.map { snapshot(for: $0, key: key) }
+        let usage = usageByItem()
+        snapshots = items.map { snapshot(for: $0, key: key, usage: usage[$0.id]) }
         revision &+= 1
     }
 
     public func snapshot(for item: SummonItem, key: VaultKey?) -> ItemSnapshot {
+        snapshot(for: item, key: key, usage: usage(for: item.id))
+    }
+
+    private func snapshot(for item: SummonItem, key: VaultKey?, usage: UsageStat?) -> ItemSnapshot {
         let sensitive = item.isEffectivelySensitive
         let locked = sensitive && key == nil
 
@@ -146,8 +163,9 @@ public final class LibraryStore {
             preview = previewLine(for: item, body: body)
         }
 
-        var affinity: [String: Int] = [:]
-        for a in item.affinities ?? [] { affinity[a.bundleID] = a.count }
+        // From the device-local store, not the item. The fields on SummonItem are
+        // left behind by migrateUsage and deliberately no longer read.
+        let affinity = usage?.affinity ?? [:]
 
         return ItemSnapshot(
             id: item.id,
@@ -164,8 +182,8 @@ public final class LibraryStore {
             isSensitive: sensitive,
             isLocked: locked,
             hasPlaceholders: item.kind.isTextual && SnippetTemplate.requiresInput(body),
-            useCount: item.useCount,
-            lastUsedAt: item.lastUsedAt,
+            useCount: usage?.useCount ?? 0,
+            lastUsedAt: usage?.lastUsedAt,
             createdAt: item.createdAt,
             updatedAt: item.updatedAt,
             byteSize: item.byteSize,
@@ -727,6 +745,53 @@ public final class LibraryStore {
             : try files.cached(data, for: blob, itemID: itemID)
     }
 
+    // MARK: - Usage, on this device only
+
+    /// Every device-local usage record, by item. Built once per refresh rather than
+    /// fetched per item — `refresh` walks the whole library, and a fetch each time
+    /// turned one query into one per row.
+    private func usageByItem() -> [UUID: UsageStat] {
+        let all = (try? context.fetch(FetchDescriptor<UsageStat>())) ?? []
+        return Dictionary(all.map { ($0.itemID, $0) }, uniquingKeysWith: { a, b in
+            // Two records for one item can only come from a bug, but picking the
+            // busier one loses less than picking arbitrarily.
+            a.useCount >= b.useCount ? a : b
+        })
+    }
+
+    private func usage(for itemID: UUID) -> UsageStat? {
+        var descriptor = FetchDescriptor<UsageStat>(predicate: #Predicate { $0.itemID == itemID })
+        descriptor.fetchLimit = 1
+        return (try? context.fetch(descriptor))?.first
+    }
+
+    /// Moves usage counts out of the synced records and into the local store.
+    ///
+    /// Like the payload migration, the marker is the data: an item is done when a
+    /// `UsageStat` exists for it. The old `useCount`, `lastUsedAt` and `AppAffinity`
+    /// are left in place and simply stop being read — they are the way back, and
+    /// removing them is a later release's decision.
+    @discardableResult
+    public func migrateUsage() -> Int {
+        let existing = Set(((try? context.fetch(FetchDescriptor<UsageStat>())) ?? []).map(\.itemID))
+        var moved = 0
+        for item in allItems() where !existing.contains(item.id) {
+            var affinity: [String: Int] = [:]
+            for a in item.affinities ?? [] { affinity[a.bundleID] = a.count }
+            guard item.useCount > 0 || item.lastUsedAt != nil || !affinity.isEmpty else { continue }
+            context.insert(UsageStat(itemID: item.id,
+                                     useCount: item.useCount,
+                                     lastUsedAt: item.lastUsedAt,
+                                     affinity: affinity))
+            moved += 1
+        }
+        if moved > 0 {
+            do { try context.save() } catch { report(error, while: "Moving usage history") }
+            Log.store.info("Moved \(moved, privacy: .public) usage records off the synced store")
+        }
+        return moved
+    }
+
     // MARK: - Payload migration
 
     /// Moves blob bytes from `Blobs/` and `Vault/` into `SummonPayload`.
@@ -881,18 +946,19 @@ public final class LibraryStore {
 
     /// Records that an item was used, optionally while a particular app was frontmost.
     public func recordUse(id: UUID, inApp bundleID: String?) {
-        guard let item = item(id: id) else { return }
-        item.useCount += 1
-        item.lastUsedAt = Date()
+        guard item(id: id) != nil else { return }
 
-        if let bundleID, !bundleID.isEmpty, bundleID != "com.heindewilde.summon" {
-            if let existing = (item.affinities ?? []).first(where: { $0.bundleID == bundleID }) {
-                existing.count += 1
-                existing.lastUsed = Date()
-            } else {
-                let affinity = AppAffinity(bundleID: bundleID, item: item)
-                context.insert(affinity)
-            }
+        // Writes the local store, not the item. This fires on every paste, and the
+        // item record is the one CloudKit mirrors — see UsageStat.
+        let attribution = (bundleID?.isEmpty == false && bundleID != "com.heindewilde.summon")
+            ? bundleID : nil
+
+        if let stat = usage(for: id) {
+            stat.record(inApp: attribution)
+        } else {
+            let stat = UsageStat(itemID: id)
+            stat.record(inApp: attribution)
+            context.insert(stat)
         }
         save(); refresh()
     }

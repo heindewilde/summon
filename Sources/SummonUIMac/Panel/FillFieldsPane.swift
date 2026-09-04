@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import SummonKit
+import SummonUI
 
 /// The step between choosing a snippet and inserting it: fill in what varies.
 ///

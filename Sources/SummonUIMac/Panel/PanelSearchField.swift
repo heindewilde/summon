@@ -1,5 +1,7 @@
 import AppKit
 import SwiftUI
+import SummonUI
+import SummonKit
 
 /// The panel's text field.
 ///

@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import SummonKit
+import SummonUI
 
 /// The summon panel. One field, one list, a preview when it earns its place, and a
 /// footer that teaches its own shortcuts. Everything here is reachable without the

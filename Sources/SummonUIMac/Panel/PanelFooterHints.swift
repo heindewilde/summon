@@ -1,5 +1,6 @@
 import SummonKit
 import SwiftUI
+import SummonUI
 
 /// The footer's key hints, which change under your fingers.
 ///

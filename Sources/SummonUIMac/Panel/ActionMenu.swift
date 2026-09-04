@@ -1,6 +1,7 @@
 import AppKit
 import SummonKit
 import SwiftUI
+import SummonUI
 
 /// The ⌘K panel: every action for the selected item, searchable, anchored bottom-right.
 ///

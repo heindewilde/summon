@@ -301,7 +301,7 @@ public final class AppModel {
 
     /// Cached TCC answer. Reading `Inserter.hasAccessibility` directly from a view
     /// body meant a TCC round trip twice per render.
-    public let accessibility = AccessibilityStatus()
+    public let accessibility: AccessibilityStatus
 
     /// Held modifiers, on their own observable object so that watching them redraws
     /// the footer and nothing else. See `PanelModifierState`.
@@ -317,6 +317,7 @@ public final class AppModel {
         self.vault = vault
         self.store = try LibraryStore(paths: paths, vault: vault)
         self.intelligence = Intelligence()
+        self.accessibility = AccessibilityStatus(probe: { Inserter.hasAccessibility })
         self.clipboard = ClipboardMonitor(paths: paths)
         self.inserter = Inserter()
         self.focus = FocusTracker()
@@ -474,22 +475,9 @@ public final class AppModel {
         return true
     }
 
-    /// The field editor's path. Unmodified editing keys arrive as selectors.
-    @discardableResult
-    public func routeFieldSelector(_ selector: Selector, fieldIsEmpty: Bool) -> Bool {
-        guard let key = PanelKeyRouter.key(for: selector) else { return false }
-        let modifiers = KeyModifiers(NSApp.currentEvent?.modifierFlags ?? [])
-        guard let command = PanelKeyMap.command(for: KeyChord(key, modifiers),
-                                                in: keyContext,
-                                                queryIsEmpty: fieldIsEmpty,
-                                                selectionIsFolder: selectionHasFolder) else { return false }
-        perform(command)
-        return true
-    }
-
     /// ⇥ needs somewhere to go: the selected item must sit in a folder, and we must
     /// not already be scoped to one.
-    private var selectionHasFolder: Bool {
+    public var selectionHasFolder: Bool {
         folderScope == nil && selectedResult?.item.folderPath.isEmpty == false
     }
 

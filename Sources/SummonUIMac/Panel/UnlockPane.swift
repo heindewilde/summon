@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import SummonKit
+import SummonUI
 
 /// The secret and Touch ID, inline in the panel. Unlocking should not mean going
 /// somewhere else.

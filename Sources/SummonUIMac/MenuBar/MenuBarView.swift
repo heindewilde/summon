@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import SummonKit
+import SummonUI
 
 /// The always-there surface: pinned and recent items, the clipboard tray, and the
 /// things you would otherwise have to open a window to do.

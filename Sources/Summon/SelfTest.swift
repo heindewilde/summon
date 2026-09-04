@@ -3,6 +3,7 @@ import SwiftUI
 import SummonKit
 import SummonKitMac
 import SummonUI
+import SummonUIMac
 
 /// End-to-end runtime checks for the parts unit tests cannot reach: real hot key
 /// registration, the panel window, and the full choose-then-insert path.

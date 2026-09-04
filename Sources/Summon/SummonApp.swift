@@ -2,6 +2,7 @@ import AppKit
 import SwiftUI
 import SummonKit
 import SummonUI
+import SummonUIMac
 
 @main
 struct SummonApp: App {

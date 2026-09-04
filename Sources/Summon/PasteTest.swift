@@ -3,6 +3,7 @@ import ApplicationServices
 import SwiftUI
 import SummonKit
 import SummonUI
+import SummonUIMac
 
 /// End-to-end verification of the auto-paste path — the one sequence that cannot be
 /// unit tested, because it depends on a real Accessibility grant, real focus changes

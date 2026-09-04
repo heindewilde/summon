@@ -1,5 +1,6 @@
 import SummonKit
 import SwiftUI
+import SummonUI
 
 /// The menu bar item, as a plain menu.
 ///

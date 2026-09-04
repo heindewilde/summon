@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import SummonKit
+import SummonUI
 
 /// First run. Three short steps: what this is, the shortcut, and the two optional
 /// things worth offering before someone starts.

@@ -1,6 +1,7 @@
 import AppKit
 import SummonKit
 import SummonUI
+import SummonUIMac
 
 /// Single construction point for the app's services.
 ///

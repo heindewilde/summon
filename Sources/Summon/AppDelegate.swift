@@ -3,6 +3,7 @@ import SwiftUI
 import SummonKit
 import SummonKitMac
 import SummonUI
+import SummonUIMac
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {

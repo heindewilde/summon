@@ -1,6 +1,7 @@
 import AppKit
 import SummonKit
 import SummonUI
+import SummonUIMac
 
 /// Walks the library window's accessibility tree and reports what a person can
 /// actually reach — by pointer and by keyboard.

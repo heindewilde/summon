@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import SummonKit
+import SummonUI
 
 public struct SettingsView: View {
     @Bindable var model: AppModel

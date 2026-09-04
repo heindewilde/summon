@@ -1,6 +1,7 @@
 import AppKit
 import SummonKit
 import SummonUI
+import SummonUIMac
 
 /// Drives a real drag from an item row onto a folder row, and reports where it got to.
 ///

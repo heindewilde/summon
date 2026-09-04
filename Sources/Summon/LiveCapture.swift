@@ -2,6 +2,7 @@ import AppKit
 import SwiftUI
 import SummonKit
 import SummonUI
+import SummonUIMac
 
 /// Development helper for reviewing the surfaces `ImageRenderer` cannot draw —
 /// `NavigationSplitView` and `List`. It puts the real view in a real window and

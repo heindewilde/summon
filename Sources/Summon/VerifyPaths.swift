@@ -5,6 +5,7 @@ import ServiceManagement
 import SummonKit
 import SummonKitMac
 import SummonUI
+import SummonUIMac
 
 /// Exercises the paths that only exist against the real system: a global hot key
 /// actually being pressed, the Finder selection bridge, the Services registration,

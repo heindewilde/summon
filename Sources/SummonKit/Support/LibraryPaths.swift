@@ -30,6 +30,19 @@ public struct LibraryPaths: Sendable {
     public var cache: URL { root.appending(path: "Cache") }
     public var vaultKeyFile: URL { root.appending(path: "vault.wrap") }
 
+    /// Wrong guesses and when the last one happened. **Never syncs.**
+    ///
+    /// Kept apart from `vault.wrap` because the two are different kinds of thing. The
+    /// wrapper is the vault; the throttle is a property of *the device being attacked*.
+    /// Syncing it down would be a bypass — a stale, lower count clears a cooldown
+    /// someone else is serving — and syncing it up would be a denial of service, since
+    /// anyone able to guess wrongly on one device could lock you out of another.
+    ///
+    /// Two devices therefore means two independent attempt budgets. That is inherent to
+    /// unlocking on more than one machine, the per-device cooldown still holds, and it
+    /// belongs in Known Limits rather than in a comment.
+    public var vaultThrottleFile: URL { root.appending(path: "vault.throttle.json") }
+
     /// Which one-off repairs this library has already had. Per-library rather than
     /// per-user: the demo library and a real one are at different versions, and a
     /// preference shared between them would claim work on one had been done on both.

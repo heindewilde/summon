@@ -27,6 +27,9 @@ public final class Vault {
     private let paths: LibraryPaths
     private var key: VaultKey?
     private var wrapper: VaultWrapper?
+
+    /// The wrapper as it stands, for tests that need to write an older file shape.
+    var wrapperForTesting: VaultWrapper? { wrapper }
     private var lastActivity = Date()
 
     private let keychainService = "com.heindewilde.summon.vault"
@@ -41,7 +44,16 @@ public final class Vault {
 
     public func reload() {
         if let data = try? Data(contentsOf: paths.vaultKeyFile),
-           let w = try? JSONDecoder().decode(VaultWrapper.self, from: data) {
+           var w = try? JSONDecoder().decode(VaultWrapper.self, from: data) {
+            // The throttle is device-local and lives in its own file. A wrapper written
+            // before the split still carries its counters inline, and they are used
+            // when the separate file is absent — so an existing cooldown survives the
+            // upgrade rather than being forgiven.
+            if let throttleData = try? Data(contentsOf: paths.vaultThrottleFile),
+               let throttle = try? JSONDecoder().decode(Throttle.self, from: throttleData) {
+                w.failedAttempts = throttle.failedAttempts
+                w.lastFailedAt = throttle.lastFailedAt
+            }
             wrapper = w
             state = .locked
         } else {
@@ -107,6 +119,7 @@ public final class Vault {
     /// plaintext *before* calling this, or it becomes unreadable.
     public func removePIN() throws {
         try? FileManager.default.removeItem(at: paths.vaultKeyFile)
+        try? FileManager.default.removeItem(at: paths.vaultThrottleFile)
         disableBiometricUnlock()
         wrapper = nil
         key = nil
@@ -325,9 +338,26 @@ public final class Vault {
 
     // MARK: - Private
 
+    /// Wrong guesses, kept on the device that heard them. See `vaultThrottleFile`.
+    struct Throttle: Codable, Sendable {
+        var failedAttempts: Int = 0
+        var lastFailedAt: Date?
+    }
+
+    /// Writes the wrapper in two pieces: key material, and the attempt counters.
+    ///
+    /// The wrapper file is what would travel if the vault ever syncs, so it must carry
+    /// no throttle state at all — not merely state that is ignored on read. Zeroing the
+    /// fields before encoding is what makes that true of the bytes rather than of the
+    /// reader.
     private func persist(_ w: VaultWrapper) throws {
-        let data = try JSONEncoder().encode(w)
-        try data.write(to: paths.vaultKeyFile, options: .atomic)
+        var keyMaterial = w
+        keyMaterial.failedAttempts = 0
+        keyMaterial.lastFailedAt = nil
+        try JSONEncoder().encode(keyMaterial).write(to: paths.vaultKeyFile, options: .atomic)
+
+        let throttle = Throttle(failedAttempts: w.failedAttempts, lastFailedAt: w.lastFailedAt)
+        try JSONEncoder().encode(throttle).write(to: paths.vaultThrottleFile, options: .atomic)
     }
 
     private func keychainHasKey() -> Bool {

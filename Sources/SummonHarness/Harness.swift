@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import SummonKit
+import SummonMacApp
 
 /// The runtime harnesses, and the one rule all of them share.
 ///
@@ -61,5 +62,53 @@ enum Harness {
         guard let refusal else { return }
         FileHandle.standardError.write(Data((refusal + "\n").utf8))
         exit(2)
+    }
+}
+
+/// The dispatch `AppDelegate` used to carry inline, now behind `AppDelegate.harness`
+/// so the shipped app does not link any of it.
+public enum HarnessLauncher {
+    /// Installs the dispatcher. Call before `SummonApp.main()`.
+    @MainActor
+    public static func install() {
+        AppDelegate.harness = dispatch
+    }
+
+    /// True when a harness mode has taken over the launch.
+    @MainActor
+    static func dispatch(controller: PanelController) -> Bool {
+        // Before any mode is dispatched: several of them are destructive, and the
+        // demo library is the only one they are allowed to be destructive to.
+        Harness.refuseIfPointedAtARealLibrary()
+
+        if VerifyPaths.isRequested {
+            Task { await VerifyPaths.run(controller: controller) }
+            return true
+        }
+        if PasteTest.isRequested {
+            Task { await PasteTest.run() }
+            return true
+        }
+        if let live = LiveCapture.mode {
+            Task { await LiveCapture.run(mode: live, controller: controller) }
+            return true
+        }
+        if DragProbe.isRequested {
+            Task { await DragProbe.run() }
+            return true
+        }
+        if UIProbe.isRequested {
+            Task { await UIProbe.run(controller: controller) }
+            return true
+        }
+        if SelfTest.isRequested {
+            Task { await SelfTest.run(controller: controller) }
+            return true
+        }
+        if let directory = SnapshotRunner.requestedDirectory {
+            Task { await SnapshotRunner.run(into: directory) }
+            return true
+        }
+        return false
     }
 }

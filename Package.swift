@@ -8,6 +8,8 @@ let package = Package(
         .executable(name: "Summon", targets: ["Summon"]),
         .library(name: "SummonKit", targets: ["SummonKit"]),
         .library(name: "SummonUI", targets: ["SummonUI"]),
+        // The Mac app itself, for the Xcode target that archives it for the App Store.
+        .library(name: "SummonMacApp", targets: ["SummonMacApp"]),
     ],
     targets: [
         // Pure logic. No SwiftUI, no AppKit, no UIKit — and now the compiler agrees,
@@ -25,10 +27,23 @@ let package = Package(
         // The panel, the menu bar, and the views that reach into AppKit.
         .target(name: "SummonUIMac", dependencies: ["SummonUI", "SummonKitMac"]),
 
-        // Thin executable: window/panel lifecycle and wiring.
+        // The Mac app: window/panel lifecycle and wiring. A library rather than an
+        // executable, because an Xcode app target cannot link an executable — and the
+        // App Store needs an archive that only Xcode produces.
+        .target(
+            name: "SummonMacApp",
+            dependencies: ["SummonKit", "SummonUI", "SummonKitMac", "SummonUIMac"]),
+
+        // The runtime harnesses: self-test, UI and drag probes, paste and path checks.
+        // Linked only by the development launcher, never by the App Store build.
+        .target(
+            name: "SummonHarness",
+            dependencies: ["SummonMacApp", "SummonKit", "SummonUI", "SummonKitMac", "SummonUIMac"]),
+
+        // Development launcher: the app plus the harness. What build-app.sh packages.
         .executableTarget(
             name: "Summon",
-            dependencies: ["SummonKit", "SummonUI", "SummonKitMac", "SummonUIMac"]),
+            dependencies: ["SummonMacApp", "SummonHarness"]),
 
         .testTarget(name: "SummonKitTests", dependencies: ["SummonKit"]),
 

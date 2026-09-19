@@ -4,12 +4,15 @@ import SummonKit
 import SummonUI
 import SummonUIMac
 
-@main
-struct SummonApp: App {
+/// No `@main` here: the entry point lives in whichever launcher links this — the
+/// Xcode app target for the App Store, or `Sources/Summon` for development builds.
+public struct SummonApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @State private var model = Services.model
 
-    var body: some Scene {
+    public init() {}
+
+    public var body: some Scene {
         // Suppressed on launch. A `Window` scene otherwise opens itself, so the
         // library existed from the moment the app started — and because summoning
         // activates the app, it came forward with the panel every single time. The

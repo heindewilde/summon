@@ -3,6 +3,7 @@ import Carbon.HIToolbox
 import Foundation
 import ServiceManagement
 import SummonKit
+import SummonMacApp
 import SummonKitMac
 import SummonUI
 import SummonUIMac

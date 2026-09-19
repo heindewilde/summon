@@ -1,5 +1,6 @@
 import AppKit
 import SummonKit
+import SummonMacApp
 import SummonUI
 import SummonUIMac
 

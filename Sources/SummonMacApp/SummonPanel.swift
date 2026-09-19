@@ -10,14 +10,14 @@ import SummonUIMac
 /// into it without the panel stealing the *document* focus of the app underneath.
 /// The app is activated deliberately, after the previously-frontmost app has already
 /// been recorded, so focus can be handed straight back on insert.
-final class SummonPanel: NSPanel {
-    override var canBecomeKey: Bool { true }
-    override var canBecomeMain: Bool { false }
+public final class SummonPanel: NSPanel {
+    public override var canBecomeKey: Bool { true }
+    public override var canBecomeMain: Bool { false }
 
     /// Escape must close the panel even when a text field has focus. Routed through
     /// `AppModel.escape()` so it pops exactly one level rather than dismissing
     /// outright — the action menu and a folder scope are levels above the panel.
-    override func cancelOperation(_ sender: Any?) {
+    public override func cancelOperation(_ sender: Any?) {
         onCancel?()
     }
 
@@ -25,7 +25,7 @@ final class SummonPanel: NSPanel {
     /// main menu — which is what lets ⌘K mean Actions in the panel. Everything the
     /// key map declines returns false, so ⌘C, ⌘V, ⌘A and ⌘Z keep working in the
     /// search field.
-    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+    public override func performKeyEquivalent(with event: NSEvent) -> Bool {
         if keyRouter?.handleKeyEquivalent(event) == true { return true }
         return super.performKeyEquivalent(with: event)
     }
@@ -35,7 +35,7 @@ final class SummonPanel: NSPanel {
 }
 
 @MainActor
-final class PanelController: NSObject, NSWindowDelegate {
+public final class PanelController: NSObject, NSWindowDelegate {
     private var panel: SummonPanel?
     private let model: AppModel
     private let router: PanelKeyRouter
@@ -46,13 +46,13 @@ final class PanelController: NSObject, NSWindowDelegate {
         super.init()
     }
 
-    var isVisible: Bool { panel?.isVisible ?? false }
+    public var isVisible: Bool { panel?.isVisible ?? false }
 
     /// Exposed only for the runtime self-test, which asserts the panel's window
     /// configuration is what makes the summon-and-paste sequence work.
-    var debugPanel: SummonPanel? { panel }
+    public var debugPanel: SummonPanel? { panel }
 
-    func toggle() {
+    public func toggle() {
         if isVisible { hide() } else { model.summon() }
     }
 
@@ -64,7 +64,7 @@ final class PanelController: NSObject, NSWindowDelegate {
     /// behaviour. This does not eliminate SwiftUI's first *display* pass — only a real
     /// on-screen appearance does that — so cold and warm summons are reported
     /// separately rather than pretending they are the same number.
-    func prewarm() {
+    public func prewarm() {
         guard panel == nil else { return }
         let panel = makePanel()
         self.panel = panel
@@ -75,14 +75,14 @@ final class PanelController: NSObject, NSWindowDelegate {
     /// key focus, so a capture cannot interrupt what someone is doing — and a stray
     /// keystroke cannot reach the panel and paste into their frontmost app.
     /// `screencapture -l` does not require the window to be key.
-    func showForCapture() {
+    public func showForCapture() {
         let panel = panel ?? makePanel()
         self.panel = panel
         position(panel)
         panel.orderFrontRegardless()
     }
 
-    func show() {
+    public func show() {
         let panel = panel ?? makePanel()
         self.panel = panel
         panel.keyRouter = router
@@ -110,7 +110,7 @@ final class PanelController: NSObject, NSWindowDelegate {
         panel.makeKeyAndOrderFront(nil)
     }
 
-    func hide() {
+    public func hide() {
         router.endModifierTracking()
         panel?.orderOut(nil)
         for window in loweredWindows { window.level = .normal }
@@ -168,7 +168,7 @@ final class PanelController: NSObject, NSWindowDelegate {
     }
 
     // Clicking away is a dismissal — the panel should never linger.
-    func windowDidResignKey(_ notification: Notification) {
+    public func windowDidResignKey(_ notification: Notification) {
         guard isVisible else { return }
         model.dismissPanel()
     }

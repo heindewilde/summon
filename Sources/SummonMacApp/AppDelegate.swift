@@ -6,10 +6,20 @@ import SummonUI
 import SummonUIMac
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+public final class AppDelegate: NSObject, NSApplicationDelegate {
+    /// Set before `SummonApp.main()` by a launcher that links `SummonHarness`.
+    /// Returns true when a harness mode has taken over the launch.
+    ///
+    /// A hook rather than an import, so the harness stays out of the shipped app: it
+    /// drives synthetic input, runs AppleScript and writes to `/tmp`, none of which
+    /// belongs in a sandboxed App Store binary. It is not `#if DEBUG` either — the
+    /// performance budgets only assert in release, and `Scripts/selftest.sh` runs the
+    /// release build on purpose.
+    public static var harness: (@MainActor (PanelController) -> Bool)?
+
     private(set) var panelController: PanelController?
 
-    func applicationDidFinishLaunching(_ notification: Notification) {
+    public func applicationDidFinishLaunching(_ notification: Notification) {
         let model = Services.model
         let controller = PanelController(model: model)
         panelController = controller
@@ -33,42 +43,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // copies of sealed files are exactly what should not outlive a session.
         FileStore.clearScratch()
 
-        // Before any harness mode is dispatched: several of them are destructive, and
-        // the demo library is the only one they are allowed to be destructive to.
-        Harness.refuseIfPointedAtARealLibrary()
-
-        if VerifyPaths.isRequested {
-            Task { await VerifyPaths.run(controller: controller) }
-            return
-        }
-
-        if PasteTest.isRequested {
-            Task { await PasteTest.run() }
-            return
-        }
-
-        if let live = LiveCapture.mode {
-            Task { await LiveCapture.run(mode: live, controller: controller) }
-            return
-        }
-
-        if DragProbe.isRequested {
-            Task { await DragProbe.run() }
-            return
-        }
-
-        if UIProbe.isRequested {
-            Task { await UIProbe.run(controller: controller) }
-            return
-        }
-
-        if SelfTest.isRequested {
-            Task { await SelfTest.run(controller: controller) }
-            return
-        }
-
-        if let directory = SnapshotRunner.requestedDirectory {
-            Task { await SnapshotRunner.run(into: directory) }
+        // A development launcher can take the launch over for a runtime harness. The
+        // App Store build links no harness, so there this is always nil.
+        if let harness = Self.harness, harness(controller) {
             return
         }
 
@@ -115,17 +92,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+    public func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         // Summon lives in the menu bar; closing the library window is not quitting.
         false
     }
 
-    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+    public func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         if !flag { Services.model.showMainWindowHandler?() }
         return true
     }
 
-    func applicationWillTerminate(_ notification: Notification) {
+    public func applicationWillTerminate(_ notification: Notification) {
         HotKeyCenter.shared.unregisterAll()
         FileStore.clearScratch()
     }

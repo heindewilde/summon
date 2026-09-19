@@ -9,8 +9,8 @@ import SummonKitMac
 /// A lazy `static let` on the main actor, so both the SwiftUI scenes and the AppKit
 /// delegate observe exactly one `AppModel` without either having to own it.
 @MainActor
-enum Services {
-    static let model: AppModel = {
+public enum Services {
+    public static let model: AppModel = {
         do {
             return try AppModel(services: .macOS())
         } catch {

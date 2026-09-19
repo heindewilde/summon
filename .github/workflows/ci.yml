@@ -55,3 +55,12 @@ jobs:
           xcodebuild -project Summon.xcodeproj -scheme SummonPhone \
             -destination 'generic/platform=iOS Simulator' \
             build CODE_SIGNING_ALLOWED=NO | tail -5
+
+      # The App Store build of the Mac app. It links the same SummonMacApp as the
+      # development launcher above, but not the harness — so this is the only step
+      # that proves the shipped configuration still builds.
+      - name: Build the Mac app
+        run: |
+          xcodebuild -project Summon.xcodeproj -scheme SummonMac \
+            -destination 'generic/platform=macOS' \
+            build CODE_SIGNING_ALLOWED=NO | tail -5

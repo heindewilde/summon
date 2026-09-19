@@ -125,8 +125,14 @@ printf 'APPL????' > "$CONTENTS/PkgInfo"
 # are bound to the code signature, and an ad-hoc signature is a hash of the binary,
 # so every rebuild looks like a new app and silently loses the permission. Signing
 # with a certificate keeps the grant across rebuilds.
-# Create one with Scripts/create-signing-identity.sh.
-SIGN_IDENTITY="${SUMMON_SIGN_IDENTITY:-Summon Local Dev}"
+#
+# The Apple Development identity when there is one, because the Xcode build signs
+# with it too: two signatures on one bundle ID would each reset the other's
+# Accessibility grant. "Summon Local Dev" (Scripts/create-signing-identity.sh) is
+# the fallback for a machine with no Apple account.
+APPLE_DEV_IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null \
+  | sed -n 's/.*"\(Apple Development: [^"]*\)".*/\1/p' | head -1)"
+SIGN_IDENTITY="${SUMMON_SIGN_IDENTITY:-${APPLE_DEV_IDENTITY:-Summon Local Dev}}"
 
 # `-o runtime` is not optional for this app. Without the Hardened Runtime there is
 # no library validation and no restriction on task_for_pid, so any process running

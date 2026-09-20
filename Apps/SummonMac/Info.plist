@@ -4,6 +4,11 @@
 <dict>
     <!-- Summon lives in the menu bar and holds decrypted vault state in memory; the
          system must not quietly terminate it as "idle". -->
+    <!-- Summon encrypts sensitive items with CryptoKit, which is Apple's own
+         encryption used to protect the owner's data on their own device — exempt from
+         export compliance documentation. Declared here so every upload does not ask. -->
+    <key>ITSAppUsesNonExemptEncryption</key><false/>
+
     <key>NSSupportsAutomaticTermination</key><false/>
     <key>NSSupportsSuddenTermination</key><false/>
 

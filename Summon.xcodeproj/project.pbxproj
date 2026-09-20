@@ -7,6 +7,11 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		F1000010 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = F1000001 /* PrivacyInfo.xcprivacy */; };
+		F1000011 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = F1000001 /* PrivacyInfo.xcprivacy */; };
+		F1000012 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = F1000001 /* PrivacyInfo.xcprivacy */; };
+		F1000013 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = F1000001 /* PrivacyInfo.xcprivacy */; };
+		F1000014 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = F1000001 /* PrivacyInfo.xcprivacy */; };
 		E1000010 /* ActionViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000001 /* ActionViewController.swift */; };
 		E1000011 /* SummonKit in Frameworks */ = {isa = PBXBuildFile; productRef = E1000012 /* SummonKit */; };
 		E1000013 /* SummonQuickAction.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = E1000002 /* SummonQuickAction.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -53,6 +58,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		F1000001 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		E1000001 /* ActionViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionViewController.swift; sourceTree = "<group>"; };
 		E1000002 /* SummonQuickAction.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = SummonQuickAction.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		E1000003 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -187,6 +193,7 @@
 			isa = PBXGroup;
 			children = (
 				B0000005 /* Assets.xcassets */,
+				F1000001 /* PrivacyInfo.xcprivacy */,
 			);
 			path = Apps/Shared;
 			sourceTree = "<group>";
@@ -404,6 +411,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A1000023 /* Assets.xcassets in Resources */,
+				F1000010 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -412,6 +420,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				B0000012 /* Assets.xcassets in Resources */,
+				F1000011 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -419,6 +428,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F1000012 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -426,6 +436,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F1000013 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -433,6 +444,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F1000014 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

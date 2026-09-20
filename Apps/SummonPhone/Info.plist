@@ -8,6 +8,11 @@
          phone only learns of the Mac's changes when it is next opened. Declared here
          rather than through INFOPLIST_KEY_UIBackgroundModes, which did not reach the
          built plist. -->
+    <!-- Summon encrypts sensitive items with CryptoKit, which is Apple's own
+         encryption used to protect the owner's data on their own device — exempt from
+         export compliance documentation. Declared here so every upload does not ask. -->
+    <key>ITSAppUsesNonExemptEncryption</key><false/>
+
     <key>UIBackgroundModes</key>
     <array><string>remote-notification</string></array>
 

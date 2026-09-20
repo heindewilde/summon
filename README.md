@@ -13,7 +13,7 @@
 <p align="center">
   <a href="https://github.com/heindewilde/summon/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/heindewilde/summon/actions/workflows/ci.yml/badge.svg"></a>
   <a href="LICENSE"><img alt="License: AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-blue.svg"></a>
-  <img alt="Platform: macOS 26+" src="https://img.shields.io/badge/platform-macOS%2026+-000000?logo=apple&logoColor=white">
+  <img alt="Platform: macOS 26+, iOS 26+" src="https://img.shields.io/badge/platform-macOS%2026+%20%C2%B7%20iOS%2026+-000000?logo=apple&logoColor=white">
   <img alt="Swift 6.1" src="https://img.shields.io/badge/Swift-6.1-F05138?logo=swift&logoColor=white">
   <img alt="SwiftData" src="https://img.shields.io/badge/data-SwiftData-0071e3?logo=swift&logoColor=white">
   <img alt="Dependencies: none" src="https://img.shields.io/badge/dependencies-none-2ea44f">
@@ -37,7 +37,7 @@
 
 **One keystroke, wherever you are.** Press ⌥Space in any app, type a few characters, press ↩, and the thing lands in the app you were already using. No window to find, no tab to switch to, no clipboard to babysit. The panel appears over your work and disappears again.
 
-**Private because it never leaves.** There is no account, no sync, no telemetry, and no networking code — the app makes no outbound requests at all. Anything you mark sensitive is encrypted with AES-GCM under a key wrapped by your PIN — or by a passphrase, if you want something that holds up against someone who has your disk — so a locked item stays findable by name while revealing nothing of its contents, its file, or even its OCR'd text.
+**Private by construction.** There is no account, no telemetry, and no server of ours: sync runs through *your* iCloud, performed by the system, and nothing ever reaches the developer. Anything you mark sensitive is encrypted with AES-GCM under a key wrapped by your PIN — or by a passphrase, if you want something that holds up against someone who has your disk — so a locked item stays findable by name while revealing nothing of its contents, its file, or even its OCR'd text. Turn on **Encrypt everything** and that applies to the whole library, including what syncs. What you do *not* seal crosses iCloud like the rest of your iCloud data, which Apple can read unless you have Advanced Data Protection on — a trade worth knowing about rather than a claim worth overstating.
 
 **Fast, and measured rather than claimed.** A keystroke re-ranks 2,000 items in **0.55 ms**. Those numbers are asserted by the test suite against budgets that fail the build — because the first time performance was "fixed" here, the benchmark and the app disagreed about what was being measured, and nobody noticed for a whole commit.
 
@@ -82,7 +82,7 @@ Mark anything sensitive and it's encrypted at rest. Titles stay searchable; cont
 <td width="33%" valign="top">
 
 ### 🏠 Never leaves the Mac
-No account, no sync, no analytics, no networking code. Your library is a folder you can back up yourself.
+No account, no analytics, no server of ours. Sync is your own iCloud, and sensitive items cross it encrypted with a key Apple never sees.
 
 </td>
 </tr>
@@ -303,11 +303,15 @@ Stated plainly, because an app that asks for Accessibility and holds your bank d
 
 **Apple Intelligence is optional.** Every feature that uses it falls back to deterministic heuristics when it is off, ineligible, or still downloading.
 
-**No sync, and no iOS app yet.** Deliberate. The schema has followed CloudKit's rules since the first commit; the sync code does not exist.
+**Two devices means two unlock budgets.** The wrapped key and the count of wrong guesses are device-local — syncing the count down would clear a cooldown someone else is serving, and syncing it up would lock you out of a device you are holding. So each device throttles its own attacker, and each has its own PIN.
+
+**Sealing cannot reach back in time.** Marking an item sensitive protects it from then on; a copy that already synced as plain text is already on Apple's servers, and no local scrub reaches it. Summon says so at the moment you seal.
+
+**The keyboard extension is not in v1.** A keyboard that could reach your library needs Full Access, and one that works without it cannot. Widgets, Shortcuts and the share sheet cover the same ground without the trust ask.
 
 **OCR covers English and Dutch.** Hard-coded, and easy to extend.
 
-**Summon is unsandboxed**, which it must be to read a Finder selection over Apple Events and to paste into other apps.
+**Summon is sandboxed**, as the App Store requires. Reading the Finder selection over Apple Events needed a temporary exception the Store rejects, so files arrive the other way round: Finder hands them over through **Quick Actions → Add to Summon**, the Services menu, or a drag. Pasting into another app still works — that is the Accessibility permission, which the sandbox does not mediate.
 
 ---
 
@@ -333,7 +337,7 @@ Sources/
 
 **SwiftData models are main-actor bound and not `Sendable`**, so ranking works over `ItemSnapshot` value types instead. That keeps concurrency simple *and* makes the whole search layer testable without a store.
 
-**The schema follows CloudKit's rules from day one** — no unique constraints, every relationship optional with an inverse, every attribute defaulted — so an iOS companion is additive rather than a migration. No sync code ships today.
+**The schema followed CloudKit's rules from day one** — no unique constraints, every relationship optional with an inverse, every attribute defaulted — which is why turning sync on was a change to one line rather than a migration. Usage history and payloads too large for a phone live in a second, device-local store: "does not sync" is a property of a store in Core Data, not of a record.
 
 **The panel and the library draw the same row.** Three surfaces had grown three heights and three type scales before they were collapsed into one component; density cannot drift between them now.
 
@@ -377,9 +381,9 @@ That estimator has a limit worth naming: it assumes *some* sample lands in a qui
 
 ## 🗺 Roadmap
 
-- **A notarised release** — signed downloads, with Touch ID unlock arriving alongside them
-- **iCloud sync** — the schema has followed CloudKit's rules since the first commit, so this is additive rather than a migration
-- **An iOS companion** — for the same reason
+- **The App Store, both apps** — one purchase covering Mac, iPhone and iPad; free
+- **A keyboard extension** — cut from v1 over Full Access; Shortcuts and widgets cover most of it
+- **Rich-text editing everywhere** — done on both platforms; lists and links still want work
 - **Keyword expansion** — type `;sig` anywhere and have it expand in place
 - **Smart collections** — saved searches that behave like folders
 
@@ -406,7 +410,7 @@ Two things worth knowing before digging in:
 ## ❓ FAQ
 
 **Does anything leave my Mac?**
-No. There is no networking code in the app at all — no account, no sync, no analytics, no crash reporting.
+Only into your own iCloud, and only if you use Summon on more than one device. There is no account, no analytics, no crash reporting, and no server of ours — sync is performed by the system into your private CloudKit database. Items you mark sensitive are encrypted before they leave; "Encrypt everything" does the same for all of them.
 
 **Do I have to grant Accessibility?**
 No. Without it Summon copies and tells you to press ⌘V. The global shortcut works either way.
@@ -420,8 +424,8 @@ A PIN unless you have a reason not to: it is four boxes that fill themselves, wh
 **Do I need Apple Intelligence?**
 No. It improves suggested titles and tags when available and falls back to plain rules when it is not.
 
-**Why is it unsandboxed?**
-To read a Finder selection over Apple Events and to paste into other apps. A sandboxed build could do neither.
+**Is it sandboxed?**
+Yes, as the App Store requires. Pasting into another app survives the sandbox — that is the Accessibility permission, which the sandbox does not mediate. Reading the Finder selection over Apple Events did not, so files now arrive through Quick Actions, the Services menu, or a drag.
 
 **Can I use a different shortcut?**
 Yes, both are rebindable in Settings. If another app already owns your choice, Summon tells you rather than failing quietly.

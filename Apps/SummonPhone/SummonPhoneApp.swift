@@ -52,7 +52,7 @@ struct SummonPhoneApp: App {
                     if UIDevice.current.userInterfaceIdiom == .phone {
                         PhoneHomeView(model: model)
                     } else {
-                        MainWindowView(model: model)
+                        PadRootView(model: model)
                     }
                     #else
                     MainWindowView(model: model)

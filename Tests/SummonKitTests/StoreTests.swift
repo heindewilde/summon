@@ -375,3 +375,62 @@ struct TagManagementTests {
         #expect(store.allTags().map(\.name) == ["legal"])
     }
 }
+
+@Suite("Encrypt everything")
+@MainActor
+struct EncryptEverythingTests {
+    private func makeStore() throws -> (LibraryStore, LibraryPaths) {
+        let paths = LibraryPaths.temporary()
+        let vault = Vault(paths: paths, syncsMasterKey: false)
+        return (try LibraryStore(paths: paths, vault: vault, syncs: false), paths)
+    }
+
+    @Test("Turning it on seals every item, and off unseals them again")
+    func sealsAndUnseals() async throws {
+        let (store, paths) = try makeStore()
+        defer { paths.destroy() }
+        try await store.vault.setUpPIN("1234")
+
+        let item = store.createSnippet(title: "Bank details", body: "NL91 ABNA 0417 1643 00")
+        #expect(item.bodyText != nil)
+
+        try store.setEncryptEverything(true)
+        #expect(item.bodyText == nil)
+        #expect(item.sealedBody != nil)
+        #expect(item.isEffectivelySensitive)
+
+        try store.setEncryptEverything(false)
+        #expect(item.bodyText == "NL91 ABNA 0417 1643 00")
+        #expect(item.sealedBody == nil)
+        #expect(item.isEffectivelySensitive == false)
+    }
+
+    @Test("Turning it off leaves the items you marked yourself sealed")
+    func keepsDeliberateChoices() async throws {
+        let (store, paths) = try makeStore()
+        defer { paths.destroy() }
+        try await store.vault.setUpPIN("1234")
+
+        let chosen = store.createSnippet(title: "Passport", body: "NL number")
+        let ordinary = store.createSnippet(title: "Office address", body: "Herengracht 1")
+        try store.setSensitive(chosen, true)
+
+        try store.setEncryptEverything(true)
+        try store.setEncryptEverything(false)
+
+        #expect(chosen.bodyText == nil, "an item marked sensitive by hand stays sealed")
+        #expect(chosen.isEffectivelySensitive)
+        #expect(ordinary.bodyText == "Herengracht 1")
+    }
+
+    @Test("It needs the vault open, like every other re-keying")
+    func requiresUnlocked() async throws {
+        let (store, paths) = try makeStore()
+        defer { paths.destroy() }
+        try await store.vault.setUpPIN("1234")
+        _ = store.createSnippet(title: "Anything", body: "text")
+        store.vault.lock()
+
+        #expect(throws: VaultError.locked) { try store.setEncryptEverything(true) }
+    }
+}

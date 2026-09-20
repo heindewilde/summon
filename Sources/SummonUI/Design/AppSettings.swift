@@ -56,6 +56,11 @@ public final class AppSettings {
             applyAppearance()
         }
     }
+    /// Seal every item, not only the ones marked sensitive. What makes the library
+    /// unreadable to anyone but these devices once it syncs.
+    public var encryptEverything: Bool {
+        didSet { defaults.set(encryptEverything, forKey: "vault.encryptEverything") }
+    }
     public var autoPaste: Bool {
         didSet { defaults.set(autoPaste, forKey: "insert.autoPaste") }
     }
@@ -69,6 +74,7 @@ public final class AppSettings {
             "clipboard.persist": false,
             "clipboard.limit": 40,
             "vault.autoLockMinutes": 5,
+            "vault.encryptEverything": false,
             "intelligence.enabled": true,
             "app.showDockIcon": true,
             "insert.autoPaste": true,
@@ -82,6 +88,7 @@ public final class AppSettings {
         clipboardPersists = defaults.bool(forKey: "clipboard.persist")
         clipboardLimit = defaults.integer(forKey: "clipboard.limit")
         autoLockMinutes = defaults.integer(forKey: "vault.autoLockMinutes")
+        encryptEverything = defaults.bool(forKey: "vault.encryptEverything")
         intelligenceEnabled = defaults.bool(forKey: "intelligence.enabled")
         showDockIcon = defaults.bool(forKey: "app.showDockIcon")
         autoPaste = defaults.bool(forKey: "insert.autoPaste")

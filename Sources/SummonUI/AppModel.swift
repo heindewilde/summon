@@ -1266,6 +1266,35 @@ public final class AppModel {
     /// This used to be its own three lines, which drifted: it dropped the key but left
     /// the decrypted scratch copies on disk and the decoded thumbnails in memory. The
     /// one lock a person asks for explicitly was the one that protected least.
+    /// Seals the whole library, or unseals what only this setting sealed.
+    ///
+    /// Needs the vault open, like every other re-keying, so a locked vault asks for
+    /// the secret first and comes back here. The warning on the way in is the honest
+    /// one: sealing from now on cannot recall a copy that already synced as plaintext.
+    public func setEncryptEverything(_ on: Bool) {
+        guard vault.isConfigured else {
+            presentLockSheet(.create)
+            return
+        }
+        guard vault.isUnlocked else {
+            presentLockSheet(.unlock(reason: on ? "to encrypt your whole library"
+                                                : "to decrypt the items only that setting sealed"))
+            return
+        }
+        do {
+            let changed = try store.setEncryptEverything(on)
+            settings.encryptEverything = on
+            runSearch()
+            show(Toast(text: on ? "Everything is encrypted" : "Only marked items stay encrypted",
+                       symbol: on ? "lock.fill" : "lock.open.fill",
+                       tone: .success,
+                       detail: changed == 1 ? "1 item" : "\(changed) items"))
+        } catch {
+            show(Toast(text: "Couldn’t change that", symbol: "exclamationmark.triangle",
+                       tone: .danger, detail: error.localizedDescription))
+        }
+    }
+
     public func lockVaultNow() {
         lockVault()
     }

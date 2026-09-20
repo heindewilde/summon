@@ -45,6 +45,11 @@ public final class SummonItem {
     public var isPinned: Bool = false
     public var isSensitive: Bool = false
 
+    /// Sealed because "Encrypt everything" is on, rather than because this item was
+    /// chosen. Kept apart from `isSensitive` so turning the setting off again unseals
+    /// only what it sealed, and leaves the items you marked yourself alone.
+    public var sealedByPolicy: Bool = false
+
     public var createdAt: Date = Date()
     public var updatedAt: Date = Date()
     public var lastUsedAt: Date?
@@ -83,8 +88,10 @@ public final class SummonItem {
     }
 
     /// Sensitivity is inherited: an item inside a sensitive folder is sensitive.
+    /// "Encrypt everything" is a third way in, and the only one that can be undone in
+    /// bulk.
     public var isEffectivelySensitive: Bool {
-        isSensitive || (folder?.isEffectivelySensitive ?? false)
+        isSensitive || sealedByPolicy || (folder?.isEffectivelySensitive ?? false)
     }
 
     public var tagNames: [String] {

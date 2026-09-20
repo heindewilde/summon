@@ -3,6 +3,7 @@ import AppKit
 #else
 import UIKit
 #endif
+import CoreData
 import Foundation
 import Observation
 import SQLite3
@@ -585,6 +586,50 @@ public final class LibraryStore {
         item.updatedAt = Date()
         try reconcileSensitivity(item, wasSensitive: wasSensitive)
         save(); compactStore(); refresh()
+    }
+
+    /// Seals every item in the library, or unseals the ones only this setting sealed.
+    ///
+    /// Sync carries titles and bodies as themselves unless an item is sealed, so this
+    /// is the switch that makes the whole library unreadable to anyone but these
+    /// devices — Apple included, without Advanced Data Protection.
+    ///
+    /// Turning it off leaves items marked sensitive by hand, or sitting in a sensitive
+    /// folder, exactly as they were: `sealedByPolicy` is what this owns, and the only
+    /// thing it undoes.
+    ///
+    /// Returns how many items changed.
+    @discardableResult
+    public func setEncryptEverything(_ on: Bool) throws -> Int {
+        guard vault.isUnlocked else { throw VaultError.locked }
+        var changed = 0
+        for item in allItems() {
+            let was = item.isEffectivelySensitive
+            if on {
+                guard !item.sealedByPolicy else { continue }
+                item.sealedByPolicy = true
+            } else {
+                guard item.sealedByPolicy else { continue }
+                item.sealedByPolicy = false
+            }
+            guard item.isEffectivelySensitive != was else { continue }
+            item.updatedAt = Date()
+            try reconcileSensitivity(item, wasSensitive: was)
+            changed += 1
+        }
+        save()
+        // Sealing leaves the plaintext in freed pages until the file is rewritten,
+        // which is the whole point of compacting here rather than at some quiet
+        // moment later.
+        compactStore()
+        refresh()
+        return changed
+    }
+
+    /// True when every item in the library is sealed by the setting.
+    public var encryptsEverything: Bool {
+        let items = allItems()
+        return !items.isEmpty && items.allSatisfy(\.sealedByPolicy)
     }
 
     public func setFolderSensitive(_ folder: SummonFolder, _ sensitive: Bool) throws {

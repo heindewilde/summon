@@ -226,7 +226,7 @@ struct PrivacySettings: View {
             }
 
             if Vault.biometricStorageAvailable {
-                Toggle("Unlock with Touch ID", isOn: Binding(
+                Toggle("Unlock with \(Biometry.name)", isOn: Binding(
                     get: { model.vault.biometricsEnabled },
                     set: { enabled in
                         if enabled {
@@ -236,7 +236,7 @@ struct PrivacySettings: View {
                             }
                             do { try model.vault.enableBiometricUnlock() }
                             catch {
-                                model.show(Toast(text: "Couldn’t enable Touch ID",
+                                model.show(Toast(text: "Couldn’t enable \(Biometry.name)",
                                                  symbol: "exclamationmark.triangle", tone: .danger,
                                                  detail: error.localizedDescription))
                             }
@@ -254,6 +254,23 @@ struct PrivacySettings: View {
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.secondaryText)
             }
+
+            Toggle("Encrypt everything", isOn: Binding(
+                get: { model.settings.encryptEverything },
+                set: { model.setEncryptEverything($0) }
+            ))
+            // Sync carries an unsealed item as itself, so without this the titles and
+            // bodies of everything you did not mark are readable by Apple unless
+            // Advanced Data Protection is on. Said here rather than in the privacy
+            // policy alone, because this is where the choice is made.
+            Label("""
+            Sensitive items are always encrypted. Turn this on and the whole library \
+            is, so nothing readable leaves your devices — including when it syncs. \
+            Sealing an item now cannot take back a copy that already synced as plain \
+            text.
+            """, systemImage: "icloud.and.arrow.up")
+                .font(Theme.Typography.caption)
+                .foregroundStyle(Theme.secondaryText)
         }
 
         SettingsSection(model.vault.secretKind.displayName) {

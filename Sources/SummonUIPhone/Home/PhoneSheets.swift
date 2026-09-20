@@ -20,8 +20,22 @@ struct PhoneSheets: ViewModifier {
         if case .fill(let id) = model.mode { FillTarget(id: id) } else { nil }
     }
 
+    /// True while something is waiting on the vault. The model sets this when a locked
+    /// item is chosen; on the Mac the panel answers it, and on a phone nothing did —
+    /// tapping a locked item appeared to do nothing at all unless Face ID happened to
+    /// be enrolled and succeeded on its own.
+    private var isUnlocking: Bool {
+        if case .unlock = model.mode { true } else { false }
+    }
+
     func body(content: Content) -> some View {
         content
+            .sheet(isPresented: Binding(get: { isUnlocking },
+                                        set: { if !$0 { model.dismissPanel() } })) {
+                // Dismisses itself: a successful unlock puts the model back in search
+                // mode and then does the thing that was waiting.
+                VaultSheet(model: model) { model.dismissPanel() }
+            }
             .sheet(item: Binding(get: { fillTarget },
                                  set: { if $0 == nil { model.dismissPanel() } })) { target in
                 FillFieldsSheet(model: model, itemID: target.id) { model.dismissPanel() }

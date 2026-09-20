@@ -16,6 +16,8 @@ struct PhoneSettingsView: View {
 
     /// Whether this device can be told about the other one's changes as they happen,
     /// rather than finding out when Summon is next opened.
+    @State private var organising = false
+
     private var pushStatus: String {
         UserDefaults.standard.string(forKey: "sync.pushStatus") ?? "Checking…"
     }
@@ -76,6 +78,14 @@ struct PhoneSettingsView: View {
                     """)
                 }
 
+                Section {
+                    Button("Folders & Tags…", systemImage: "folder.badge.gearshape") {
+                        organising = true
+                    }
+                } footer: {
+                    Text("Create, rename, nest and recolour folders, and tidy up tags.")
+                }
+
                 Section("Appearance") {
                     Picker("Theme", selection: Binding(
                         get: { model.settings.appearance },
@@ -109,6 +119,9 @@ struct PhoneSettingsView: View {
             .sheet(item: Binding(get: { model.lockSheet },
                                  set: { if $0 == nil { model.cancelLockSheet() } })) { purpose in
                 LockSheet(model: model, purpose: purpose) { model.finishLockSheet() }
+            }
+            .sheet(isPresented: $organising) {
+                FolderManagerView(model: model) { organising = false }
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)

@@ -25,7 +25,7 @@
     <!-- Release has its own copy of this file with `production`. A production build
          carrying a development token gets no pushes, and sync would then look broken
          for everyone but the developer. -->
-    <key>com.apple.developer.aps-environment</key><string>development</string>
+    <key>com.apple.developer.aps-environment</key><string>production</string>
 
     <!-- Shared with the iOS app so the vault's master key can live in one keychain
          group. Needs the Team ID prefix; without it the kernel rejects the

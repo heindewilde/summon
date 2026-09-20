@@ -14,6 +14,12 @@ struct PhoneSettingsView: View {
     @Bindable var model: AppModel
     let dismiss: () -> Void
 
+    /// Whether this device can be told about the other one's changes as they happen,
+    /// rather than finding out when Summon is next opened.
+    private var pushStatus: String {
+        UserDefaults.standard.string(forKey: "sync.pushStatus") ?? "Checking…"
+    }
+
     var body: some View {
         NavigationStack {
             Form {
@@ -83,6 +89,7 @@ struct PhoneSettingsView: View {
 
                 Section("iCloud") {
                     LabeledContent("Sync", value: model.store.syncStatus?.summary ?? "Waiting…")
+                    LabeledContent("Live updates", value: pushStatus)
                     if let error = model.store.syncStatus?.error {
                         Text(error)
                             .font(.footnote)

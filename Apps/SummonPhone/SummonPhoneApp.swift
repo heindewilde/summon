@@ -21,6 +21,14 @@ import UIKit
 /// notification — the payload is the signal, and the mirroring machinery handles it
 /// once the app is registered.
 final class PushRegistrar: NSObject, UIApplicationDelegate {
+    /// What registration did, for Settings to show.
+    ///
+    /// Worth surfacing because the failure is invisible: the entitlement was spelled
+    /// the macOS way for a while, which iOS drops silently at signing time, and the
+    /// only symptom was that changes from the other device arrived when you next
+    /// opened the app rather than while you watched.
+    static let statusKey = "sync.pushStatus"
+
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions options: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         application.registerForRemoteNotifications()
@@ -28,8 +36,16 @@ final class PushRegistrar: NSObject, UIApplicationDelegate {
     }
 
     func application(_ application: UIApplication,
+                     didRegisterForRemoteNotificationsWithDeviceToken token: Data) {
+        UserDefaults.standard.set("Registered", forKey: Self.statusKey)
+        Log.app.info("Registered for the pushes CloudKit sends when another device changes the library.")
+    }
+
+    func application(_ application: UIApplication,
                      didFailToRegisterForRemoteNotificationsWithError error: any Error) {
-        Log.store.warning("Push registration failed, so sync will only catch up on launch: \(error.localizedDescription, privacy: .public)")
+        UserDefaults.standard.set("Unavailable — changes arrive when you open Summon",
+                                  forKey: Self.statusKey)
+        Log.app.warning("Push registration failed, so sync will only catch up on launch: \(error.localizedDescription, privacy: .public)")
     }
 }
 

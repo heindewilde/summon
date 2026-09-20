@@ -16,7 +16,7 @@
          simply was not in the built app. Release has its own copy of this file with
          `production`, because a production build carrying a development token gets no
          pushes, and sync would then look broken for everyone but the developer. -->
-    <key>aps-environment</key><string>development</string>
+    <key>aps-environment</key><string>production</string>
 
     <key>keychain-access-groups</key>
     <array><string>$(AppIdentifierPrefix)com.heindewilde.summon</string></array>

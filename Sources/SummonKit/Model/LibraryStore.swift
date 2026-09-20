@@ -62,7 +62,16 @@ public final class LibraryStore {
         !LibraryPaths.isDemoMode && paths.isInAppGroupContainer
     }
 
-    public init(paths: LibraryPaths, vault: Vault, syncs: Bool? = nil) throws {
+    /// Whether the payload and usage migrations have already run for this library.
+    ///
+    /// An extension opens the store without migrating and needs to know whether it is
+    /// looking at a library this build understands. The question is cheap: both
+    /// migrations are "is there a blob with no payload row", asked with an id-only
+    /// fetch.
+    public private(set) var isMigrated = true
+
+    public init(paths: LibraryPaths, vault: Vault, syncs: Bool? = nil,
+                migrates: Bool = true) throws {
         self.paths = paths
         self.files = FileStore(paths: paths)
         self.vault = vault
@@ -93,8 +102,14 @@ public final class LibraryStore {
         // Before the first refresh, so ranking never sees a half-moved library. Cheap
         // after the first run — one id-only fetch that finds nothing to do — and it
         // needs no key, so it can happen at launch rather than waiting for an unlock.
-        migratePayloads()
-        migrateUsage()
+        if migrates {
+            migratePayloads()
+            migrateUsage()
+        } else {
+            // Left to the container app. Rewriting every payload is not work to start
+            // in a process that can be killed a second later.
+            isMigrated = !hasUnmigratedPayloads()
+        }
         refresh()
 
         if mirrors {
@@ -1037,6 +1052,17 @@ public final class LibraryStore {
     /// One item per save rather than one batch: `importFile` caps a file at 256 MB and
     /// reads it whole, so a batch would hold several of those in memory at once.
     @discardableResult
+    /// Whether any blob still lives outside the store. See `isMigrated`.
+    func hasUnmigratedPayloads() -> Bool {
+        var idsOnly = FetchDescriptor<SummonPayload>()
+        idsOnly.propertiesToFetch = [\.itemID]
+        var localIDsOnly = FetchDescriptor<SummonLocalPayload>()
+        localIDsOnly.propertiesToFetch = [\.itemID]
+        let moved = Set(((try? context.fetch(idsOnly)) ?? []).map(\.itemID))
+            .union(((try? context.fetch(localIDsOnly)) ?? []).map(\.itemID))
+        return allItems().contains { $0.storedBlob != nil && !moved.contains($0.id) }
+    }
+
     public func migratePayloads() -> Int {
         // Ids only. A plain fetch would fault in every payload's bytes to build a set
         // of UUIDs, which on a library of any size is the whole thing read off disk on

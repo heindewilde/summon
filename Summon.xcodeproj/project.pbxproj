@@ -7,6 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		C1000010 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1000001 /* ShareViewController.swift */; };
+		C1000011 /* SummonKit in Frameworks */ = {isa = PBXBuildFile; productRef = C1000012 /* SummonKit */; };
+		C1000013 /* SummonShare.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = C1000002 /* SummonShare.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		A1000023 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B0000005 /* Assets.xcassets */; };
 		B0000010 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000001 /* main.swift */; };
 		B0000011 /* SummonMacApp in Frameworks */ = {isa = PBXBuildFile; productRef = B0000018 /* SummonMacApp */; };
@@ -17,7 +20,25 @@
 		B0000040 /* SummonUIPhone in Frameworks */ = {isa = PBXBuildFile; productRef = B0000041 /* SummonUIPhone */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		C1000030 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				C1000013 /* SummonShare.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
+		C1000001 /* ShareViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
+		C1000002 /* SummonShare.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = SummonShare.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		C1000003 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		C1000004 /* SummonShare.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SummonShare.entitlements; sourceTree = "<group>"; };
 		B0000001 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 		B0000002 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		B0000003 /* SummonMac.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SummonMac.entitlements; sourceTree = "<group>"; };
@@ -47,6 +68,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		C1000020 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C1000011 /* SummonKit in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -55,6 +84,7 @@
 			children = (
 				A1000005 /* SummonPhone */,
 				B0000006 /* SummonMac */,
+				C1000005 /* SummonShare */,
 				B0000007 /* Shared */,
 				A1000006 /* Products */,
 			);
@@ -67,6 +97,16 @@
 				B0000008 /* SummonPhone.entitlements */,
 			);
 			path = Apps/SummonPhone;
+			sourceTree = "<group>";
+		};
+		C1000005 /* SummonShare */ = {
+			isa = PBXGroup;
+			children = (
+				C1000001 /* ShareViewController.swift */,
+				C1000003 /* Info.plist */,
+				C1000004 /* SummonShare.entitlements */,
+			);
+			path = Apps/SummonShare;
 			sourceTree = "<group>";
 		};
 		B0000006 /* SummonMac */ = {
@@ -92,6 +132,7 @@
 			children = (
 				A1000002 /* SummonPhone.app */,
 				B0000004 /* Summon.app */,
+				C1000002 /* SummonShare.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -106,10 +147,12 @@
 				A1000008 /* Sources */,
 				A1000003 /* Frameworks */,
 				A1000009 /* Resources */,
+				C1000030 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				C1000040 /* PBXTargetDependency */,
 			);
 			name = SummonPhone;
 			packageProductDependencies = (
@@ -141,7 +184,45 @@
 			productReference = B0000004 /* Summon.app */;
 			productType = "com.apple.product-type.application";
 		};
+		C1000050 /* SummonShare */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C1000060 /* Build configuration list for PBXNativeTarget "SummonShare" */;
+			buildPhases = (
+				C1000021 /* Sources */,
+				C1000020 /* Frameworks */,
+				C1000022 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = SummonShare;
+			packageProductDependencies = (
+				C1000012 /* SummonKit */,
+			);
+			productName = SummonShare;
+			productReference = C1000002 /* SummonShare.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
+
+/* Begin PBXTargetDependency section */
+		C1000040 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = C1000050 /* SummonShare */;
+			targetProxy = C1000041 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin PBXContainerItemProxy section */
+		C1000041 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A1000012 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = C1000050;
+			remoteInfo = SummonShare;
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXProject section */
 		A1000012 /* Project object */ = {
@@ -177,6 +258,7 @@
 			targets = (
 				A1000007 /* SummonPhone */,
 				B0000020 /* SummonMac */,
+				C1000050 /* SummonShare */,
 			);
 		};
 /* End PBXProject section */
@@ -198,6 +280,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		C1000022 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -214,6 +303,14 @@
 			buildActionMask = 2147483647;
 			files = (
 				B0000010 /* main.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C1000021 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C1000010 /* ShareViewController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -380,6 +477,54 @@
 			};
 			name = Release;
 		};
+		C1000061 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Apps/SummonShare/SummonShare.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Apps/SummonShare/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Add to Summon";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.heindewilde.summon.share;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		C1000062 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Apps/SummonShare/SummonShare.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Apps/SummonShare/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Add to Summon";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.heindewilde.summon.share;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -410,6 +555,15 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		C1000060 /* Build configuration list for PBXNativeTarget "SummonShare" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C1000061 /* Debug */,
+				C1000062 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
@@ -435,6 +589,10 @@
 		B0000018 /* SummonMacApp */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = SummonMacApp;
+		};
+		C1000012 /* SummonKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = SummonKit;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

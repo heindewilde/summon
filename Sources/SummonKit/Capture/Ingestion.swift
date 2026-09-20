@@ -31,9 +31,14 @@ public final class Ingestion {
     private let store: LibraryStore
     private let importer: Importer
 
-    public init() throws {
-        let paths = LibraryPaths.standard()
-        let vault = Vault(paths: paths)
+    public convenience init() throws {
+        try self.init(paths: LibraryPaths.standard())
+    }
+
+    /// Takes its paths so a test can point it at a throwaway library. An extension
+    /// always uses `standard()`, which is the App Group container.
+    public init(paths: LibraryPaths) throws {
+        let vault = Vault(paths: paths, syncsMasterKey: false)
         // Never mirrors: an extension that opened a CloudKit-backed container would
         // start a sync it has no time to finish. The container app exports what lands
         // here the next time it runs.

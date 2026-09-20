@@ -14,6 +14,7 @@ import SwiftUI
 public struct PhoneRootView: View {
     @Bindable var model: AppModel
     @State private var path: [Route] = []
+    @State private var showingVault = false
 
     public init(model: AppModel) { self.model = model }
 
@@ -59,6 +60,30 @@ public struct PhoneRootView: View {
                 }
             }
             .animation(Theme.panelIn, value: model.toast)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showingVault = true
+                    } label: {
+                        Label("Sensitive items",
+                              systemImage: model.vault.isUnlocked ? "lock.open" : "lock")
+                    }
+                    // Hidden rather than disabled when there is nothing to unlock: a
+                    // lock that cannot be opened is a question, not a control.
+                    .opacity(model.vault.isConfigured ? 1 : 0)
+                    .disabled(!model.vault.isConfigured)
+                }
+            }
+        }
+        .sheet(isPresented: $showingVault) {
+            VaultSheet(model: model) { showingVault = false }
+        }
+        // The same sheet the Mac window presents: setting a PIN, changing it, proving
+        // it before something happens. Without this the phone could reach a state that
+        // asks a question it has no way to show.
+        .sheet(item: Binding(get: { model.lockSheet },
+                             set: { if $0 == nil { model.cancelLockSheet() } })) { purpose in
+            LockSheet(model: model, purpose: purpose) { model.finishLockSheet() }
         }
         // Popping back to the list must clear the selection, or choosing the same item
         // again pushes nothing — `onChange` never fires for a value that did not change.

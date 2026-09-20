@@ -92,7 +92,7 @@ public enum VaultError: Error, Equatable, LocalizedError {
         case .pinNotFourDigits: "A PIN is four digits."
         case .passphraseTooShort: "A passphrase is at least \(PassphrasePolicy.minimumLength) characters."
         case .throttled(let t): "Too many attempts. Try again in \(Int(ceil(t))) seconds."
-        case .biometricsUnavailable: "Touch ID isn’t available on this Mac."
+        case .biometricsUnavailable: "\(Biometry.name) isn’t available on \(Biometry.deviceName)."
         case .biometricsFailed(let m): m
         case .corruptWrapper: "The vault key file is damaged."
         case .keyDerivationFailed: "Could not derive a key from that."

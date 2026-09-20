@@ -42,7 +42,22 @@ enum SelfTest {
         // MARK: Environment
         info("Library", model.paths.root.path)
         info("Accessibility granted", Inserter.hasAccessibility ? "yes" : "no (auto-paste falls back to copy)")
-        info("Touch ID available", Vault.biometricsAvailable ? "yes" : "no")
+        info("\(Biometry.name) available", Vault.biometricsAvailable ? "yes" : "no")
+
+        // MARK: Where the library lives
+        // A sandboxed build that cannot reach the group container falls back to its
+        // own Application Support and silently starts empty — which looks like data
+        // loss and is really a missing entitlement.
+        check("The library is in the App Group container", model.paths.isInAppGroupContainer,
+              detail: model.paths.root.path)
+        let groupRoot = FileManager.default
+            .containerURL(forSecurityApplicationGroupIdentifier: LibraryPaths.appGroupID)?.path() ?? ""
+        check("The vault's unlock-attempt count never enters it",
+              !groupRoot.isEmpty && !model.paths.vaultThrottleFile.path().hasPrefix(groupRoot),
+              detail: model.paths.vaultThrottleFile.path)
+        check("Nor does the wrapped key", 
+              !groupRoot.isEmpty && !model.paths.vaultKeyFile.path().hasPrefix(groupRoot),
+              detail: model.paths.vaultKeyFile.path)
         info("On-device model", "\(model.intelligence.status)")
 
         // MARK: Hot keys — the thing the app is named for

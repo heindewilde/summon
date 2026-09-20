@@ -61,3 +61,38 @@ struct VaultThrottleTests {
         #expect(reopened.throttledUntil != nil, "an upgrade must not forgive a pending cooldown")
     }
 }
+
+@Suite("The master key across devices")
+@MainActor
+struct SharedMasterKeyTests {
+    /// Every vault a test builds sits on a temporary library, which is what turns
+    /// iCloud Keychain off. Asserted here because the alternative is a test run that
+    /// adopts the developer's real master key — or publishes a throwaway one to the
+    /// account the machine is signed in to.
+    @Test("A test vault never takes part in iCloud Keychain")
+    func temporaryLibrariesDoNotSync() {
+        let paths = LibraryPaths.temporary()
+        defer { paths.destroy() }
+        #expect(paths.isInAppGroupContainer == false)
+    }
+
+    @Test("Setting a secret with no shared key generates a fresh one")
+    func generatesWhenNothingToJoin() async throws {
+        let paths = LibraryPaths.temporary()
+        defer { paths.destroy() }
+        let vault = Vault(paths: paths, syncsMasterKey: false)
+        try await vault.setUpPIN("1234")
+        #expect(vault.joinedExistingVault == false)
+        #expect(vault.isUnlocked)
+    }
+
+    @Test("The device-local files sit outside the library")
+    func deviceFilesAreSeparate() {
+        let paths = LibraryPaths(
+            root: URL(fileURLWithPath: "/tmp/group/Summon"),
+            deviceRoot: URL(fileURLWithPath: "/tmp/device/Summon"))
+        #expect(paths.vaultKeyFile.path.hasPrefix("/tmp/device"))
+        #expect(paths.vaultThrottleFile.path.hasPrefix("/tmp/device"))
+        #expect(paths.storeURL.path.hasPrefix("/tmp/group"))
+    }
+}

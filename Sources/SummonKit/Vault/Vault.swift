@@ -35,8 +35,32 @@ public final class Vault {
     private let keychainService = "com.heindewilde.summon.vault"
     private let keychainAccount = "master-key"
 
-    public init(paths: LibraryPaths) {
+    /// The same keychain group on both platforms, which is what lets the Mac and the
+    /// iPhone see one synchronizable item rather than two unrelated ones. macOS spells
+    /// the prefix out; iOS writes `$(AppIdentifierPrefix)` in its entitlements and
+    /// resolves to exactly this.
+    private let keychainAccessGroup = "JV4MVRB77Q.com.heindewilde.summon"
+
+    /// The master key as it travels between a person's own devices.
+    ///
+    /// Separate from `keychainAccount` because the two items are opposites: that one
+    /// is device-local and gated on biometry, this one is synchronizable and gated on
+    /// nothing but the account it lives in. A single item cannot be both —
+    /// `.biometryCurrentSet` is meaningless on a device the enrolment never reaches —
+    /// so the vault keeps both.
+    private let syncedKeychainAccount = "master-key-sync"
+
+    /// Whether this vault takes part in iCloud Keychain at all.
+    ///
+    /// False for the demo library and for the temporary ones tests build, so a test
+    /// run can never adopt the real master key, nor publish a throwaway one to the
+    /// account this Mac is signed in to.
+    private let syncsMasterKey: Bool
+
+    public init(paths: LibraryPaths, syncsMasterKey: Bool? = nil) {
         self.paths = paths
+        self.syncsMasterKey = syncsMasterKey
+            ?? (!LibraryPaths.isDemoMode && paths.isInAppGroupContainer)
         reload()
     }
 
@@ -74,13 +98,25 @@ public final class Vault {
     /// Whether this vault is opened by a PIN or a passphrase.
     public var secretKind: VaultSecretKind { wrapper?.kind ?? .pin }
 
+    /// True when setting a secret adopted a master key this account already had,
+    /// rather than generating one — i.e. this device just joined an existing vault and
+    /// the sealed items that sync to it will open.
+    public private(set) var joinedExistingVault = false
+
     public func setUpSecret(_ secret: String, kind: VaultSecretKind) async throws {
         guard VaultSecretPolicy.isValid(secret, kind: kind) else {
             throw VaultSecretPolicy.violation(for: kind)
         }
-        let master = VaultKey.generate()
+        // A second device must wrap the *existing* master key, not a new one: the
+        // items that sync to it are sealed under the first. The PIN is therefore
+        // per-device — it wraps the shared key locally — which is also why a wrong
+        // guess on one device says nothing about the other.
+        let existing = syncedMasterKey()
+        let master = existing ?? VaultKey.generate()
+        joinedExistingVault = existing != nil
         let w = try await VaultCrypto.wrap(master: master, secret: secret, kind: kind)
         try persist(w)
+        publishMasterKey(master)
         wrapper = w
         key = master
         state = .unlocked
@@ -130,7 +166,11 @@ public final class Vault {
 
     public func unlock(secret: String) async throws {
         guard let w = wrapper else { throw VaultError.notConfigured }
-        key = try await unwrapCounting(w, secret: secret)
+        let master = try await unwrapCounting(w, secret: secret)
+        // Publishes on first successful unlock for a vault that predates syncing, so
+        // an existing library can be joined from a phone without re-encrypting it.
+        publishMasterKey(master)
+        key = master
         state = .unlocked
         lastActivity = Date()
         lastError = nil
@@ -359,6 +399,68 @@ public final class Vault {
         let throttle = Throttle(failedAttempts: w.failedAttempts, lastFailedAt: w.lastFailedAt)
         try JSONEncoder().encode(throttle).write(to: paths.vaultThrottleFile, options: .atomic)
     }
+
+    // MARK: - iCloud Keychain
+
+    /// Reads the shared master key, if this account has one.
+    ///
+    /// Deliberately not gated on biometry or a PIN: iCloud Keychain is end-to-end
+    /// encrypted, tied to the Apple Account and its two-factor authentication, and
+    /// Apple cannot read it. The PIN protects the device; the account protects the
+    /// key. Syncing the *wrapped* key instead would be worse — it would hand anyone
+    /// with the account an offline target to grind a four-digit PIN against, with no
+    /// cooldown able to reach them.
+    private func syncedMasterKey() -> VaultKey? {
+        guard syncsMasterKey else { return nil }
+        var query = syncedQuery()
+        query[kSecReturnData as String] = true
+        var out: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &out)
+        guard status == errSecSuccess, let data = out as? Data else {
+            if status != errSecItemNotFound {
+                Log.vault.info("No shared master key available (status \(status)).")
+            }
+            return nil
+        }
+        return VaultKey(master: data)
+    }
+
+    /// Stores the master key for this account's other devices. Idempotent.
+    private func publishMasterKey(_ master: VaultKey) {
+        guard syncsMasterKey else { return }
+        var attrs = syncedQuery()
+        attrs[kSecValueData as String] = master.masterBytes
+        // After first unlock rather than while unlocked: a share extension or a
+        // background sync may need to open a sealed item with the screen locked, and
+        // `WhenUnlocked` cannot be combined with synchronizable items on macOS.
+        attrs[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+        let status = SecItemAdd(attrs as CFDictionary, nil)
+        if status == errSecDuplicateItem {
+            SecItemUpdate(syncedQuery() as CFDictionary,
+                          [kSecValueData as String: master.masterBytes] as CFDictionary)
+        } else if status != errSecSuccess {
+            Log.vault.warning("Could not share the master key (status \(status)).")
+        }
+    }
+
+    /// Withdraws the shared key. Only for "forget this vault everywhere", never for
+    /// removing the PIN on one device — the other devices' sealed items need it.
+    public func withdrawSharedMasterKey() {
+        guard syncsMasterKey else { return }
+        SecItemDelete(syncedQuery() as CFDictionary)
+    }
+
+    private func syncedQuery() -> [String: Any] {
+        [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: keychainService,
+            kSecAttrAccount as String: syncedKeychainAccount,
+            kSecAttrAccessGroup as String: keychainAccessGroup,
+            kSecAttrSynchronizable as String: kCFBooleanTrue as Any,
+        ]
+    }
+
+    // MARK: - Private
 
     private func keychainHasKey() -> Bool {
         let query: [String: Any] = [

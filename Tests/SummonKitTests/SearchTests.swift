@@ -265,3 +265,31 @@ struct RankingTests {
         #expect(index.search("same name", now: now).first?.item.isPinned == true)
     }
 }
+
+@Suite("Spotlight never indexes what the vault hides")
+struct SpotlightExclusionTests {
+    private func snapshot(sensitive: Bool, locked: Bool) -> ItemSnapshot {
+        ItemSnapshot(id: UUID(), title: "Passport scan", kind: .image,
+                     searchableText: "passport number", previewLine: "passport number",
+                     isSensitive: sensitive, isLocked: locked)
+    }
+
+    @Test("An ordinary item is indexable")
+    func ordinaryIsIndexed() {
+        #expect(SpotlightIndexer.isIndexable(snapshot(sensitive: false, locked: false)))
+    }
+
+    @Test("A sensitive item is never indexable, locked or not")
+    func sensitiveIsNeverIndexed() {
+        // Both directions matter. Locked is the state while the vault is shut, but an
+        // *unlocked* sensitive item is still one the person asked to keep out of
+        // sight — and Spotlight's index outlives the unlock.
+        #expect(SpotlightIndexer.isIndexable(snapshot(sensitive: true, locked: true)) == false)
+        #expect(SpotlightIndexer.isIndexable(snapshot(sensitive: true, locked: false)) == false)
+    }
+
+    @Test("A locked item is never indexable")
+    func lockedIsNeverIndexed() {
+        #expect(SpotlightIndexer.isIndexable(snapshot(sensitive: false, locked: true)) == false)
+    }
+}

@@ -5,6 +5,12 @@ import UIKit
 #endif
 import Observation
 import SwiftUI
+#if canImport(CoreSpotlight)
+import CoreSpotlight
+#endif
+#if canImport(WidgetKit)
+import WidgetKit
+#endif
 import SummonKit
 
 public struct FolderDropTarget: Equatable, Sendable {
@@ -379,6 +385,30 @@ public final class AppModel {
         return parsed
     }
 
+    /// Keeps Spotlight and the widgets in step with the library.
+    ///
+    /// Debounced, because it is called from `runSearch` — which runs on every
+    /// keystroke as well as every change — and reindexing a library on each letter
+    /// typed would be absurd. Spotlight's exclusion rule lives in `SpotlightIndexer`
+    /// and is asserted there; this only decides *when* to ask.
+    @ObservationIgnored private var publishTask: Task<Void, Never>?
+
+    public func publishToSystem() {
+        guard !isHarness else { return }
+        publishTask?.cancel()
+        let snapshots = store.snapshots
+        publishTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled else { return }
+            #if canImport(CoreSpotlight)
+            try? await SpotlightIndexer.reindex(snapshots)
+            #endif
+            #if canImport(WidgetKit)
+            WidgetCenter.shared.reloadAllTimelines()
+            #endif
+        }
+    }
+
     public func runSearch() {
         let ranked = searchEngine.sections(parsedQueryWithScope,
                                            snapshots: store.snapshots,
@@ -398,6 +428,7 @@ public final class AppModel {
             return DisplaySection(title: section.title, rows: rows)
         }
         if selectedIndex >= results.count { selectedIndex = max(0, results.count - 1) }
+        publishToSystem()
     }
 
     // MARK: - Main window keyboard

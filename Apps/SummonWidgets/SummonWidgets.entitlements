@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- The same library the app reads. No iCloud entitlement: an extension must not
+         start a sync it has no time to finish. -->
+    <key>com.apple.security.application-groups</key>
+    <array><string>group.com.heindewilde.summon</string></array>
+    <key>keychain-access-groups</key>
+    <array><string>$(AppIdentifierPrefix)com.heindewilde.summon</string></array>
+</dict>
+</plist>

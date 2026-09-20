@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>NSExtension</key>
+    <dict>
+        <key>NSExtensionPointIdentifier</key>
+        <string>com.apple.services</string>
+        <key>NSExtensionPrincipalClass</key>
+        <string>$(PRODUCT_MODULE_NAME).ActionViewController</string>
+        <key>NSExtensionAttributes</key>
+        <dict>
+            <key>NSExtensionServiceRoleType</key>
+            <string>NSExtensionServiceRoleTypeEditor</string>
+            <key>NSExtensionServiceAllowsFinderPreviewItem</key><true/>
+            <key>NSExtensionServiceAllowsTouchBarItem</key><false/>
+            <key>NSExtensionServiceFinderPreviewIconName</key><string>NSActionTemplate</string>
+            <key>NSExtensionActivationRule</key>
+            <dict>
+                <key>NSExtensionActivationSupportsFileWithMaxCount</key><integer>20</integer>
+            </dict>
+        </dict>
+    </dict>
+</dict>
+</plist>

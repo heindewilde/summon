@@ -7,6 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		E1000010 /* ActionViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000001 /* ActionViewController.swift */; };
+		E1000011 /* SummonKit in Frameworks */ = {isa = PBXBuildFile; productRef = E1000012 /* SummonKit */; };
+		E1000013 /* SummonQuickAction.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = E1000002 /* SummonQuickAction.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		D1000010 /* SummonWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000001 /* SummonWidgets.swift */; };
 		D1000011 /* SummonKit in Frameworks */ = {isa = PBXBuildFile; productRef = D1000012 /* SummonKit */; };
 		D1000013 /* SummonWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = D1000002 /* SummonWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -36,9 +39,24 @@
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		E1000030 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				E1000013 /* SummonQuickAction.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		E1000001 /* ActionViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionViewController.swift; sourceTree = "<group>"; };
+		E1000002 /* SummonQuickAction.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = SummonQuickAction.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		E1000003 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		E1000004 /* SummonQuickAction.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SummonQuickAction.entitlements; sourceTree = "<group>"; };
 		D1000001 /* SummonWidgets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SummonWidgets.swift; sourceTree = "<group>"; };
 		D1000002 /* SummonWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = SummonWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		D1000003 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -92,6 +110,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		E1000020 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E1000011 /* SummonKit in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -102,6 +128,7 @@
 				B0000006 /* SummonMac */,
 				C1000005 /* SummonShare */,
 				D1000005 /* SummonWidgets */,
+				E1000005 /* SummonQuickAction */,
 				B0000007 /* Shared */,
 				A1000006 /* Products */,
 			);
@@ -124,6 +151,16 @@
 				D1000004 /* SummonWidgets.entitlements */,
 			);
 			path = Apps/SummonWidgets;
+			sourceTree = "<group>";
+		};
+		E1000005 /* SummonQuickAction */ = {
+			isa = PBXGroup;
+			children = (
+				E1000001 /* ActionViewController.swift */,
+				E1000003 /* Info.plist */,
+				E1000004 /* SummonQuickAction.entitlements */,
+			);
+			path = Apps/SummonQuickAction;
 			sourceTree = "<group>";
 		};
 		C1000005 /* SummonShare */ = {
@@ -161,6 +198,7 @@
 				B0000004 /* Summon.app */,
 				C1000002 /* SummonShare.appex */,
 				D1000002 /* SummonWidgets.appex */,
+				E1000002 /* SummonQuickAction.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -200,10 +238,12 @@
 				B0000021 /* Sources */,
 				B0000022 /* Frameworks */,
 				B0000023 /* Resources */,
+				E1000030 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				E1000040 /* PBXTargetDependency */,
 			);
 			name = SummonMac;
 			packageProductDependencies = (
@@ -253,6 +293,26 @@
 			productReference = D1000002 /* SummonWidgets.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
+		E1000050 /* SummonQuickAction */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E1000060 /* Build configuration list for PBXNativeTarget "SummonQuickAction" */;
+			buildPhases = (
+				E1000021 /* Sources */,
+				E1000020 /* Frameworks */,
+				E1000022 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = SummonQuickAction;
+			packageProductDependencies = (
+				E1000012 /* SummonKit */,
+			);
+			productName = SummonQuickAction;
+			productReference = E1000002 /* SummonQuickAction.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXTargetDependency section */
@@ -265,6 +325,11 @@
 			isa = PBXTargetDependency;
 			target = D1000050 /* SummonWidgets */;
 			targetProxy = D1000041 /* PBXContainerItemProxy */;
+		};
+		E1000040 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = E1000050 /* SummonQuickAction */;
+			targetProxy = E1000041 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -282,6 +347,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = D1000050;
 			remoteInfo = SummonWidgets;
+		};
+		E1000041 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A1000012 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E1000050;
+			remoteInfo = SummonQuickAction;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -321,6 +393,7 @@
 				B0000020 /* SummonMac */,
 				C1000050 /* SummonShare */,
 				D1000050 /* SummonWidgets */,
+				E1000050 /* SummonQuickAction */,
 			);
 		};
 /* End PBXProject section */
@@ -350,6 +423,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		D1000022 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E1000022 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -388,6 +468,14 @@
 			buildActionMask = 2147483647;
 			files = (
 				D1000010 /* SummonWidgets.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E1000021 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E1000010 /* ActionViewController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -650,6 +738,56 @@
 			};
 			name = Release;
 		};
+		E1000061 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Apps/SummonQuickAction/SummonQuickAction.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Apps/SummonQuickAction/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Add to Summon";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.heindewilde.summon.quickaction;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+			};
+			name = Debug;
+		};
+		E1000062 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Apps/SummonQuickAction/SummonQuickAction.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Apps/SummonQuickAction/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Add to Summon";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.heindewilde.summon.quickaction;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -698,6 +836,15 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		E1000060 /* Build configuration list for PBXNativeTarget "SummonQuickAction" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E1000061 /* Debug */,
+				E1000062 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
@@ -729,6 +876,10 @@
 			productName = SummonKit;
 		};
 		D1000012 /* SummonKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = SummonKit;
+		};
+		E1000012 /* SummonKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = SummonKit;
 		};

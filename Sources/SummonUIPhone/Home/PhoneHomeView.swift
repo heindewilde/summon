@@ -21,6 +21,36 @@ public struct PhoneHomeView: View {
 
     public init(model: AppModel) { self.model = model }
 
+    #if DEBUG
+    /// Opens one screen straight away, so the App Store screenshots can be captured
+    /// without a human tapping through five of them in the right order. Debug only:
+    /// a shipping build has no way to reach it, and the Mac's `SnapshotRunner` is the
+    /// same idea for the same reason.
+    ///
+    ///     xcrun simctl launch <device> com.heindewilde.summon -SUMMON_SCREEN detail
+    private var requestedScreen: String? {
+        ProcessInfo.processInfo.arguments.firstIndex(of: "-SUMMON_SCREEN").flatMap {
+            let next = $0 + 1
+            return next < ProcessInfo.processInfo.arguments.count
+                ? ProcessInfo.processInfo.arguments[next] : nil
+        }
+    }
+
+    private func openRequestedScreen() {
+        switch requestedScreen {
+        case "detail": detail = model.store.snapshots.first(where: { !$0.isLocked })?.id
+        case "fill":
+            if let id = model.store.snapshots.first(where: \.hasPlaceholders)?.id {
+                model.use(id, style: .copy)
+            }
+        case "settings": showingSettings = true
+        case "organise": organising = true
+        case "vault": showingVault = true
+        default: break
+        }
+    }
+    #endif
+
     private var sections: PhoneSections { PhoneSections(model: model) }
 
     public var body: some View {
@@ -68,6 +98,9 @@ public struct PhoneHomeView: View {
             }
         }
         .animation(Theme.panelIn, value: model.toast)
+        #if DEBUG
+        .task { openRequestedScreen() }
+        #endif
     }
 
     private var list: some View {

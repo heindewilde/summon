@@ -186,22 +186,27 @@ struct PhoneItemDetailView: View {
             .buttonStyle(.borderedProminent)
             .tint(Theme.accent)
 
-            if let shared = shareable, !snapshot.isLocked {
-                ShareLink(item: shared) {
-                    Label("Share", systemImage: "square.and.arrow.up")
-                        .frame(maxWidth: 110)
-                        .padding(.vertical, Theme.Space.s)
+            if !snapshot.isLocked {
+                // A file shares as the file; a snippet shares as its text. Sharing a
+                // snippet used to be impossible because only files have a URL, which
+                // left the most common kind of item in the library with no way out of
+                // the app except the clipboard.
+                if let url = preview.fileURL {
+                    ShareLink(item: url) { shareLabel }.buttonStyle(.bordered)
+                } else if !body_.isEmpty {
+                    ShareLink(item: body_) { shareLabel }.buttonStyle(.bordered)
                 }
-                .buttonStyle(.bordered)
             }
         }
         .padding(Theme.Space.l)
         .background(.bar)
     }
 
-    /// A file shares as its file. A snippet has no URL, so its Share button is the
-    /// system's own text sheet rather than something invented here.
-    private var shareable: URL? { preview.fileURL }
+    private var shareLabel: some View {
+        Label("Share", systemImage: "square.and.arrow.up")
+            .frame(maxWidth: 110)
+            .padding(.vertical, Theme.Space.s)
+    }
 
     private func reload() {
         preview = model.previewData(for: itemID)

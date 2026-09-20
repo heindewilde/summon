@@ -51,7 +51,17 @@ public final class LibraryStore {
     @ObservationIgnored private var itemsByID: [UUID: SummonItem] = [:]
     @ObservationIgnored private var foldersByID: [UUID: SummonFolder] = [:]
 
-    public init(paths: LibraryPaths, vault: Vault) throws {
+    /// Whether the shared store is mirrored to the owner's private CloudKit database.
+    ///
+    /// Same rule as the vault's shared key: a real library in the App Group container,
+    /// never the demo one and never the temporary ones tests build. A test that
+    /// mirrored would need the network, an account and a container, and would leave
+    /// its fixtures in the developer's iCloud.
+    public static func syncsByDefault(paths: LibraryPaths) -> Bool {
+        !LibraryPaths.isDemoMode && paths.isInAppGroupContainer
+    }
+
+    public init(paths: LibraryPaths, vault: Vault, syncs: Bool? = nil) throws {
         self.paths = paths
         self.files = FileStore(paths: paths)
         self.vault = vault
@@ -64,8 +74,14 @@ public final class LibraryStore {
                              AppAffinity.self, SummonPayload.self])
         let local = Schema([UsageStat.self, SummonLocalPayload.self])
 
-        let sharedConfig = ModelConfiguration("shared", schema: shared,
-                                              url: paths.storeURL, cloudKitDatabase: .none)
+        // The shared store mirrors; the local one never does. Items marked sensitive
+        // are sealed before they are written, so what crosses for them is ciphertext
+        // — but everything else crosses as itself, which is what the copy now says
+        // out loud and what "Encrypt everything" exists to change.
+        let mirrors = syncs ?? Self.syncsByDefault(paths: paths)
+        let sharedConfig = ModelConfiguration(
+            "shared", schema: shared, url: paths.storeURL,
+            cloudKitDatabase: mirrors ? .private("iCloud.com.heindewilde.summon") : .none)
         let localConfig = ModelConfiguration("local", schema: local,
                                              url: paths.localStoreURL, cloudKitDatabase: .none)
         self.container = try ModelContainer(
@@ -79,7 +95,44 @@ public final class LibraryStore {
         migratePayloads()
         migrateUsage()
         refresh()
+
+        if mirrors { observeRemoteChanges() }
     }
+
+    /// Someone else's device changed the library.
+    ///
+    /// SwiftData exposes no change hook of its own, so this is Core Data's: the
+    /// coordinator posts once the mirrored changes have landed in the store. The
+    /// snapshots are rebuilt from the store rather than patched, because a remote
+    /// change can be anything — a new item, a deleted folder, a rewritten body — and
+    /// the rebuild is already what every local edit does.
+    ///
+    /// Coalesced, because an initial sync posts this many times in a row and each
+    /// rebuild re-ranks the whole library.
+    @ObservationIgnored private var remoteChangeObserver: (any NSObjectProtocol)?
+    @ObservationIgnored private var pendingRemoteRefresh: Task<Void, Never>?
+
+    private func observeRemoteChanges() {
+        remoteChangeObserver = NotificationCenter.default.addObserver(
+            forName: .NSPersistentStoreRemoteChange, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.pendingRemoteRefresh?.cancel()
+                self.pendingRemoteRefresh = Task { @MainActor [weak self] in
+                    try? await Task.sleep(for: .milliseconds(400))
+                    guard !Task.isCancelled, let self else { return }
+                    self.context.processPendingChanges()
+                    self.refresh()
+                    Log.store.info("Refreshed after a change from another device.")
+                }
+            }
+        }
+    }
+
+    // No deinit unregistering the observer: the store lives as long as the app, and
+    // a `deinit` cannot touch main-actor state without hopping off it, which is worse
+    // than the nothing it would save. The closure holds `self` weakly.
 
     // MARK: - Fetching
 

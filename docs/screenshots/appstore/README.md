@@ -5,6 +5,10 @@ the numbers in them are an example IBAN rather than anyone's.
 
 - `iphone-*.png` — iPhone 17 Pro (6.9"), dark
 - `ipad-home.png` — iPad Pro 13", dark
+- `main-window-dark.png`, `panel-search-dark.png` — Mac, 2160 × 1360, from the Mac's own
+  snapshot harness (`SUMMON_DEMO=1 SUMMON_SNAPSHOT=<dir> dist/Summon.app/Contents/MacOS/Summon`).
+  The Mac App Store wants 2880 × 1800; scale up or re-render at that size. The harness
+  writes inside the app's container now that the app is sandboxed, and says where.
 
 Re-capture after a UI change:
 

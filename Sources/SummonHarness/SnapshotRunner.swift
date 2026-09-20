@@ -11,13 +11,36 @@ import SummonUIMac
 /// Activated with `SUMMON_SNAPSHOT=<directory>`; never runs in normal use.
 @MainActor
 enum SnapshotRunner {
+    /// Where frames are actually written, once `run` has resolved it. `render` used to
+    /// read the environment variable directly, which is why the fallback below did not
+    /// help: the message changed and the writes still went nowhere.
+    private static var outputDirectory: URL?
+
+    /// The requested directory if it can be created and written, else one inside the
+    /// container that can.
+    private static func writable(_ requested: URL) -> URL {
+        let manager = FileManager.default
+        if (try? manager.createDirectory(at: requested, withIntermediateDirectories: true)) != nil,
+           manager.isWritableFile(atPath: requested.path) {
+            return requested
+        }
+        let fallback = URL.documentsDirectory.appending(path: "Snapshots")
+        try? manager.createDirectory(at: fallback, withIntermediateDirectories: true)
+        return fallback
+    }
+
     static var requestedDirectory: URL? {
         guard let path = ProcessInfo.processInfo.environment["SUMMON_SNAPSHOT"] else { return nil }
         return URL(fileURLWithPath: path)
     }
 
-    static func run(into directory: URL) async {
-        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    static func run(into requested: URL) async {
+        // Sandboxed now, so a path outside the container cannot be written and every
+        // write here is best-effort — the runner used to announce "snapshots written
+        // to /tmp/shots" while writing nothing at all. Fall back to somewhere it is
+        // allowed to write, and say which.
+        let directory = writable(requested)
+        outputDirectory = directory
         let model = Services.model
 
         await model.seedStarterLibraryIfEmpty()
@@ -99,6 +122,9 @@ enum SnapshotRunner {
             print("  · \(snap.title) [\(snap.kind.rawValue)] tags=\(snap.tagNames) extracted=\(snap.searchableText.count)ch")
         }
         print("Snapshots written to \(directory.path)")
+        if directory != requested {
+            print("(\(requested.path) is outside the sandbox, so they went here instead.)")
+        }
         NSApp.terminate(nil)
     }
 
@@ -161,7 +187,7 @@ enum SnapshotRunner {
     /// and settings. It cannot draw AppKit-backed containers — `NavigationSplitView`
     /// and `List` — so the library window is reviewed live instead.
     private static func render(_ view: some View, name: String, scheme: Appearance, size: CGSize) {
-        guard let appearance = scheme.nsAppearance, let directory = requestedDirectory else { return }
+        guard let appearance = scheme.nsAppearance, let directory = outputDirectory else { return }
         appearance.performAsCurrentDrawingAppearance {
             let wrapped = ZStack {
                 scheme.backing

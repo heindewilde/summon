@@ -16,6 +16,8 @@ public struct PhoneHomeView: View {
     @State private var showingSettings = false
     @State private var showingVault = false
     @State private var detail: UUID?
+    @State private var organising = false
+    @Environment(\.scenePhase) private var scenePhase
 
     public init(model: AppModel) { self.model = model }
 
@@ -46,6 +48,16 @@ public struct PhoneHomeView: View {
         }
         .sheet(isPresented: $showingVault) {
             VaultSheet(model: model) { showingVault = false }
+        }
+        .sheet(isPresented: $organising) {
+            FolderManagerView(model: model) { organising = false }
+        }
+        // A phone is handed to other people in a way a Mac is not, so sensitive items
+        // lock the moment Summon is no longer what is on screen — ahead of the
+        // auto-lock timer, which then only governs how long an *open* app stays
+        // unlocked.
+        .onChange(of: scenePhase) { _, phase in
+            if phase != .active, model.vault.isUnlocked { model.lockVaultNow() }
         }
         .phoneSheets(model: model)
         .overlay(alignment: .bottom) {
@@ -127,7 +139,7 @@ public struct PhoneHomeView: View {
             }
         }
         ToolbarItem(placement: .topBarTrailing) {
-            AddMenu(model: model)
+            AddMenu(model: model) { organising = true }
         }
     }
 

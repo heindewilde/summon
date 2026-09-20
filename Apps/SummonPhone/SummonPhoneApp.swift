@@ -43,7 +43,11 @@ struct SummonPhoneApp: App {
     var body: some Scene {
         WindowGroup {
             Group {
-                if let model {
+                if let model, !model.settings.hasCompletedOnboarding {
+                    WelcomeView(model: model) {
+                        model.settings.hasCompletedOnboarding = true
+                    }
+                } else if let model {
                     #if os(iOS)
                     if UIDevice.current.userInterfaceIdiom == .phone {
                         PhoneHomeView(model: model)

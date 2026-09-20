@@ -14,6 +14,9 @@ import UniformTypeIdentifiers
 /// menu covers the same ground, plus the share sheet once that extension exists.
 public struct AddMenu: View {
     @Bindable var model: AppModel
+    /// Opening the folder and tag manager. Here because the menu is already the
+    /// place a phone goes to change the library rather than search it.
+    var organise: (() -> Void)?
 
     @State private var choosingFiles = false
     @State private var choosingPhoto = false
@@ -24,7 +27,10 @@ public struct AddMenu: View {
     /// empty state both ask for a folder; the toolbar button does not.
     @State private var destination: SummonFolder?
 
-    public init(model: AppModel) { self.model = model }
+    public init(model: AppModel, organise: (() -> Void)? = nil) {
+        self.model = model
+        self.organise = organise
+    }
 
     public var body: some View {
         Menu {
@@ -38,6 +44,10 @@ public struct AddMenu: View {
             // menu dismisses itself before the picker it was holding can appear. The
             // button sets a flag and the modifier below does the presenting.
             Button("Choose a Photo…", systemImage: "photo") { choosingPhoto = true }
+            if let organise {
+                Divider()
+                Button("Organise Folders & Tags…", systemImage: "folder.badge.gearshape") { organise() }
+            }
         } label: {
             Label("Add", systemImage: "plus")
         }

@@ -12,6 +12,7 @@ import SwiftUI
 /// on a phone is "tap it, it's on the clipboard" — and the chevron beside it is the
 /// only way to open the item, so the two actions never fight over the same pixels.
 struct PhoneItemRow: View {
+    @Environment(\.dynamicTypeSize) private var typeSize
     let item: ItemSnapshot
     let onCopy: () -> Void
     let onOpen: () -> Void
@@ -24,14 +25,17 @@ struct PhoneItemRow: View {
                         .frame(width: 28)
 
                     VStack(alignment: .leading, spacing: 2) {
+                        // At accessibility sizes a title truncates to three words and
+                        // stops being a title. Wrapping costs a taller row, which is
+                        // exactly what someone asking for larger text has asked for.
                         Text(item.title.isEmpty ? "Untitled" : item.title)
                             .font(Theme.Typography.title.weight(.medium))
                             .foregroundStyle(Theme.primaryText)
-                            .lineLimit(1)
+                            .lineLimit(typeSize.isAccessibilitySize ? 3 : 1)
                         Text(subtitle)
                             .font(Theme.Typography.meta)
                             .foregroundStyle(Theme.tertiaryText)
-                            .lineLimit(1)
+                            .lineLimit(typeSize.isAccessibilitySize ? 2 : 1)
                     }
 
                     Spacer(minLength: 0)

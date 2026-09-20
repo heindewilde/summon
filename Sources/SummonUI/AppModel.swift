@@ -1668,6 +1668,41 @@ public final class AppModel {
         runSearch()
     }
 
+    /// Clears out blank snippets nobody is coming back to.
+    ///
+    /// `discardIfEmpty` runs when the editor closes, which covers the ordinary case.
+    /// It cannot cover a device that never opened the editor — the phone created a
+    /// blank on every "New Snippet" tap before the detail view learned to appear — or
+    /// a crash mid-edit, and a blank row syncs to every other device.
+    ///
+    /// The age guard is the important part: an item being written right now on another
+    /// device is untitled and empty until it is committed, and sweeping it from here
+    /// would delete it under the person typing. An hour is far longer than that window
+    /// and far shorter than "forever".
+    @discardableResult
+    public func discardAbandonedBlanks(olderThan age: TimeInterval = 3600) -> Int {
+        let cutoff = Date().addingTimeInterval(-age)
+        var removed = 0
+        for snapshot in store.snapshots where snapshot.kind.isTextual {
+            guard let item = store.item(id: snapshot.id), item.updatedAt < cutoff else { continue }
+            let title = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            let body = (store.resolveBodyText(item, key: vault.currentKey) ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard title.isEmpty || title == "Untitled", body.isEmpty else { continue }
+            // A sealed item is never blank as far as this is concerned: its body is
+            // unreadable while locked, and deleting it would be deleting something
+            // whose contents nobody here can see.
+            guard !snapshot.isLocked, !item.isEffectivelySensitive else { continue }
+            store.delete(item)
+            removed += 1
+        }
+        if removed > 0 {
+            runSearch()
+            Log.app.info("Removed \(removed) abandoned blank snippet(s).")
+        }
+        return removed
+    }
+
     public func beginNewFolder() {
         showMainWindowHandler?()
         let parent: SummonFolder? = {

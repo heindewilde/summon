@@ -43,10 +43,6 @@ public struct PhoneRootView: View {
                         .navigationTitle(model.sidebarTitle)
                         .navigationBarTitleDisplayMode(.inline)
                         .searchable(text: $model.mainSearch, prompt: "Search this view")
-                        .onChange(of: model.mainSelection) { _, new in
-                            guard let new else { return }
-                            path.append(.item(new))
-                        }
                 case .item(let id):
                     ItemDetailView(model: model, itemID: id)
                         .background(GlassBackground(material: .underWindowBackground, bloom: 0.5))
@@ -98,6 +94,15 @@ public struct PhoneRootView: View {
         .sheet(item: Binding(get: { model.lockSheet },
                              set: { if $0 == nil { model.cancelLockSheet() } })) { purpose in
             LockSheet(model: model, purpose: purpose) { model.finishLockSheet() }
+        }
+        // Selecting an item shows it, from wherever the selection was made. Watched
+        // here rather than on the list, because "New Snippet" selects a brand-new item
+        // while the sidebar is on screen — the list is not there to notice.
+        .onChange(of: model.mainSelection) { _, new in
+            guard let new else { return }
+            guard !path.contains(.item(new)) else { return }
+            if !path.contains(.list) { path.append(.list) }
+            path.append(.item(new))
         }
         // Popping back to the list must clear the selection, or choosing the same item
         // again pushes nothing — `onChange` never fires for a value that did not change.

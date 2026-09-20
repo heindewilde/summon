@@ -28,6 +28,11 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         model.hidePanelHandler = { [weak controller] in controller?.hide() }
         model.reregisterHotKeysHandler = { [weak self] in self?.registerHotKeys() }
 
+        // The silent pushes CloudKit sends when another device changes the library.
+        // Without registering, this Mac only discovers the phone's edits when it next
+        // launches — which is exactly how the first two-device test failed.
+        NSApp.registerForRemoteNotifications()
+
         registerHotKeys()
         NSApp.servicesProvider = self
         NSUpdateDynamicServices()
@@ -42,6 +47,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         // means a crash or a force-quit took the exit paths away from it. Decrypted
         // copies of sealed files are exactly what should not outlive a session.
         FileStore.clearScratch()
+        model.discardAbandonedBlanks()
 
         // A development launcher can take the launch over for a runtime harness. The
         // App Store build links no harness, so there this is always nil.

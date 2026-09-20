@@ -97,7 +97,10 @@ public final class LibraryStore {
         migrateUsage()
         refresh()
 
-        if mirrors { observeRemoteChanges() }
+        if mirrors {
+            observeRemoteChanges()
+            observeSyncEvents()
+        }
     }
 
     /// Someone else's device changed the library.
@@ -112,6 +115,62 @@ public final class LibraryStore {
     /// rebuild re-ranks the whole library.
     @ObservationIgnored private var remoteChangeObserver: (any NSObjectProtocol)?
     @ObservationIgnored private var pendingRemoteRefresh: Task<Void, Never>?
+
+    /// What sync last did, in the app's own words.
+    ///
+    /// Sync is the one part of this app with no visible surface of its own: it either
+    /// quietly works or quietly does not, and "my phone hasn't got it yet" is
+    /// otherwise unanswerable without a developer's log. CloudKit reports every setup,
+    /// import and export through this notification; the last one is kept for Settings.
+    public struct SyncStatus: Equatable, Sendable {
+        public enum Kind: String, Sendable { case setup = "Set up", importing = "Received", exporting = "Sent" }
+        public var kind: Kind
+        public var finished: Bool
+        public var succeeded: Bool
+        public var error: String?
+        public var at: Date
+
+        public var summary: String {
+            if !finished { return "\(kind.rawValue)…" }
+            if succeeded { return "\(kind.rawValue) \(at.formatted(date: .omitted, time: .shortened))" }
+            return "\(kind.rawValue) failed"
+        }
+    }
+
+    public private(set) var syncStatus: SyncStatus?
+
+    @ObservationIgnored private var syncEventObserver: (any NSObjectProtocol)?
+
+    private func observeSyncEvents() {
+        syncEventObserver = NotificationCenter.default.addObserver(
+            forName: NSPersistentCloudKitContainer.eventChangedNotification,
+            object: nil, queue: .main
+        ) { [weak self] note in
+            guard let event = note.userInfo?[
+                NSPersistentCloudKitContainer.eventNotificationUserInfoKey
+            ] as? NSPersistentCloudKitContainer.Event else { return }
+            let kind: SyncStatus.Kind = switch event.type {
+            case .setup: .setup
+            case .import: .importing
+            case .export: .exporting
+            @unknown default: .setup
+            }
+            let status = SyncStatus(kind: kind,
+                                    finished: event.endDate != nil,
+                                    succeeded: event.succeeded,
+                                    error: event.error?.localizedDescription,
+                                    at: event.endDate ?? event.startDate)
+            // Everything needed is read off the event here; the event itself is not
+            // Sendable and must not cross into the isolated closure below.
+            let failure = status.error
+            MainActor.assumeIsolated {
+                self?.syncStatus = status
+                if let failure {
+                    Log.store.error("CloudKit \(kind.rawValue, privacy: .public) failed: \(failure, privacy: .public)")
+                }
+            }
+        }
+    }
 
     private func observeRemoteChanges() {
         remoteChangeObserver = NotificationCenter.default.addObserver(

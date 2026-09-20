@@ -13,6 +13,7 @@ public struct AddMenu: View {
     @Bindable var model: AppModel
 
     @State private var choosingFiles = false
+    @State private var choosingPhoto = false
     @State private var photo: PhotosPickerItem?
     @State private var busy = false
 
@@ -26,9 +27,10 @@ public struct AddMenu: View {
             }
             Divider()
             Button("Choose Files…", systemImage: "folder") { choosingFiles = true }
-            PhotosPicker(selection: $photo, matching: .images) {
-                Label("Choose a Photo…", systemImage: "photo")
-            }
+            // A `PhotosPicker` placed inside a `Menu` renders but never presents: the
+            // menu dismisses itself before the picker it was holding can appear. The
+            // button sets a flag and the modifier below does the presenting.
+            Button("Choose a Photo…", systemImage: "photo") { choosingPhoto = true }
         } label: {
             Label("Add", systemImage: "plus")
         }
@@ -43,6 +45,7 @@ public struct AddMenu: View {
                                  tone: .danger, detail: error.localizedDescription))
             }
         }
+        .photosPicker(isPresented: $choosingPhoto, selection: $photo, matching: .images)
         .onChange(of: photo) { _, picked in
             guard let picked else { return }
             Task { await savePhoto(picked) }

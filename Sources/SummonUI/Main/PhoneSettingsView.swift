@@ -78,11 +78,27 @@ struct PhoneSettingsView: View {
                     }
                 }
 
+                Section("iCloud") {
+                    LabeledContent("Sync", value: model.store.syncStatus?.summary ?? "Waiting…")
+                    if let error = model.store.syncStatus?.error {
+                        Text(error)
+                            .font(.footnote)
+                            .foregroundStyle(.red)
+                    }
+                }
+
                 Section("About") {
                     LabeledContent("Items", value: "\(model.store.snapshots.count)")
                     Link("summon.technology", destination: URL(string: "https://summon.technology")!)
                     Link("Support", destination: URL(string: "https://summon.technology/support")!)
                 }
+            }
+            // Presented here rather than by the root: a view can only present one
+            // sheet at a time, and the root is covered by this one — which is why
+            // "Set a PIN" appeared to do nothing at all.
+            .sheet(item: Binding(get: { model.lockSheet },
+                                 set: { if $0 == nil { model.cancelLockSheet() } })) { purpose in
+                LockSheet(model: model, purpose: purpose) { model.finishLockSheet() }
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)

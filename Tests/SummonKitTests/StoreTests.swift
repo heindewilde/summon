@@ -434,3 +434,25 @@ struct EncryptEverythingTests {
         #expect(throws: VaultError.locked) { try store.setEncryptEverything(true) }
     }
 }
+
+@Suite("Blank snippets")
+@MainActor
+struct BlankSnippetTests {
+    /// The store-level half of `AppModel.discardAbandonedBlanks`: a blank that is old
+    /// enough to be abandoned is distinguishable from one being written right now.
+    @Test("An untouched blank is recognisable by its age")
+    func ageDistinguishesAbandoned() throws {
+        let paths = LibraryPaths.temporary()
+        defer { paths.destroy() }
+        let store = try LibraryStore(paths: paths, vault: Vault(paths: paths, syncsMasterKey: false),
+                                     syncs: false)
+
+        let fresh = store.createSnippet(title: "", body: "")
+        let stale = store.createSnippet(title: "", body: "")
+        stale.updatedAt = Date().addingTimeInterval(-7200)
+
+        let cutoff = Date().addingTimeInterval(-3600)
+        #expect(fresh.updatedAt >= cutoff, "a blank just created is still being written")
+        #expect(stale.updatedAt < cutoff, "a blank untouched for two hours is abandoned")
+    }
+}

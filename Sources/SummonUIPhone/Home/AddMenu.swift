@@ -1,6 +1,9 @@
+// SwiftPM builds every target for the host, so the guard stays even though this
+// target is only ever linked by the iOS app.
 #if !canImport(AppKit)
 import PhotosUI
 import SummonKit
+import SummonUI
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -16,6 +19,10 @@ public struct AddMenu: View {
     @State private var choosingPhoto = false
     @State private var photo: PhotosPickerItem?
     @State private var busy = false
+
+    /// Where a file chosen from here is filed. The sidebar's "Add Files…" and the
+    /// empty state both ask for a folder; the toolbar button does not.
+    @State private var destination: SummonFolder?
 
     public init(model: AppModel) { self.model = model }
 
@@ -39,13 +46,22 @@ public struct AddMenu: View {
                       allowedContentTypes: [.item],
                       allowsMultipleSelection: true) { result in
             switch result {
-            case .success(let urls): model.importPickedFiles(urls)
+            case .success(let urls): model.importPickedFiles(urls, into: destination)
             case .failure(let error):
                 model.show(Toast(text: "Couldn’t open that", symbol: "exclamationmark.triangle",
                                  tone: .danger, detail: error.localizedDescription))
             }
         }
         .photosPicker(isPresented: $choosingPhoto, selection: $photo, matching: .images)
+        // Every other way into the importer — the folder menu, an empty state —
+        // routes here, so a phone has one file picker rather than several that
+        // disagree. `presentImportPanel` was an empty function on iOS before this.
+        .onAppear {
+            model.presentImportHandler = { folder in
+                destination = folder
+                choosingFiles = true
+            }
+        }
         .onChange(of: photo) { _, picked in
             guard let picked else { return }
             Task { await savePhoto(picked) }
@@ -63,7 +79,7 @@ public struct AddMenu: View {
 
     private func savePhoto(_ picked: PhotosPickerItem) async {
         busy = true
-        defer { busy = false; photo = nil }
+        defer { busy = false; photo = nil; destination = nil }
         guard let data = try? await picked.loadTransferable(type: Data.self) else {
             model.show(Toast(text: "Couldn’t read that photo", symbol: "photo", tone: .danger))
             return

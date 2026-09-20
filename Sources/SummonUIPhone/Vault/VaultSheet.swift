@@ -1,5 +1,8 @@
+// SwiftPM builds every target for the host, so the guard stays even though this
+// target is only ever linked by the iOS app.
 #if !canImport(AppKit)
 import SummonKit
+import SummonUI
 import SwiftUI
 
 /// Unlocking, on a phone.

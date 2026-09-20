@@ -12,6 +12,19 @@ import AppKit
 import CoreGraphics
 import Foundation
 
+/// iOS 18 asks for three icons: the normal one, a dark one the system puts on its own
+/// dark background, and a tinted one it recolours itself. The dark variant drops the
+/// tile and keeps the glyph; the tinted variant is the glyph in grey, since the system
+/// applies the hue.
+enum IOSVariant: String { case standard, dark, tinted }
+
+let iosVariant: IOSVariant = {
+    let args = CommandLine.arguments
+    guard let flag = args.firstIndex(of: "--variant"), flag + 1 < args.count,
+          let variant = IOSVariant(rawValue: args[flag + 1]) else { return .standard }
+    return variant
+}()
+
 let iosOutput: String? = {
     let args = CommandLine.arguments
     guard let flag = args.firstIndex(of: "--ios"), flag + 1 < args.count else { return nil }
@@ -131,12 +144,17 @@ func spiralPath(center: CGPoint, rInner: CGFloat, rOuter: CGFloat, turns: CGFloa
 /// `fullBleed` draws the tile edge to edge with no shadow, corners or rim — the iOS
 /// icon, which the system masks itself. The artwork is the same: the canvas is
 /// scaled so the macOS tile's 824-point body fills it exactly.
-func drawIcon(size: CGFloat, fullBleed: Bool = false) -> CGImage? {
+func drawIcon(size: CGFloat, fullBleed: Bool = false,
+              variant: IOSVariant = .standard) -> CGImage? {
     let s = fullBleed ? size / 824.0 : size / 1024.0
+    let transparent = variant != .standard
+    let violet = variant == .tinted ? CGColor(gray: 0.62, alpha: 1) : violet
+    let violetBright = variant == .tinted ? CGColor(gray: 0.86, alpha: 1) : violetBright
+    let violetDeep = variant == .tinted ? CGColor(gray: 0.40, alpha: 1) : violetDeep
     guard let ctx = CGContext(data: nil, width: Int(size), height: Int(size),
                               bitsPerComponent: 8, bytesPerRow: 0,
                               space: CGColorSpace(name: CGColorSpace.sRGB)!,
-                              bitmapInfo: fullBleed
+                              bitmapInfo: (fullBleed && !transparent)
                                   ? CGImageAlphaInfo.noneSkipLast.rawValue
                                   : CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
     if fullBleed { ctx.translateBy(x: -100 * s, y: -90 * s) }
@@ -154,17 +172,21 @@ func drawIcon(size: CGFloat, fullBleed: Bool = false) -> CGImage? {
         ctx.setShadow(offset: CGSize(width: 0, height: -10 * s), blur: 28 * s,
                       color: CGColor(gray: 0, alpha: 0.35))
     }
-    ctx.addPath(shape); ctx.setFillColor(tileBottom); ctx.fillPath()
+    if !transparent {
+        ctx.addPath(shape); ctx.setFillColor(tileBottom); ctx.fillPath()
+    }
     ctx.restoreGState()
 
     ctx.saveGState()
     ctx.addPath(shape); ctx.clip()
 
     // Near-black tile, top-lit just enough to have a direction.
-    let tile = CGGradient(colorsSpace: space, colors: [tileTop, tileBottom] as CFArray,
-                          locations: [0, 1])!
-    ctx.drawLinearGradient(tile, start: CGPoint(x: body.minX, y: body.maxY),
-                           end: CGPoint(x: body.maxX, y: body.minY), options: [])
+    if !transparent {
+        let tile = CGGradient(colorsSpace: space, colors: [tileTop, tileBottom] as CFArray,
+                              locations: [0, 1])!
+        ctx.drawLinearGradient(tile, start: CGPoint(x: body.minX, y: body.maxY),
+                               end: CGPoint(x: body.maxX, y: body.minY), options: [])
+    }
 
     let center = CGPoint(x: body.midX, y: body.midY)
     // The pitch, (rOuter - rInner) / turns, is the budget every coil spends: it has to
@@ -179,16 +201,24 @@ func drawIcon(size: CGFloat, fullBleed: Bool = false) -> CGImage? {
 
     // Violet bloom on the tile behind the glyph, so the mark looks lit from within
     // rather than pasted on. Drawn inside the clip so it never spills past the edge.
-    let bloom = CGGradient(colorsSpace: space,
-                           colors: [violetDeep.copy(alpha: 0.06)!,
-                                    violetDeep.copy(alpha: 0.26)!,
-                                    violetDeep.copy(alpha: 0)!] as CFArray,
-                           locations: [0, 0.52, 1])!
-    ctx.drawRadialGradient(bloom, startCenter: center, startRadius: 0,
-                           endCenter: center, endRadius: 400 * s, options: [])
+    //
+    // Only where there is a tile to bloom on. On the transparent variants the glow has
+    // nothing to sit against, so it becomes the icon: the first dark variant came out
+    // as a violet disc with a spiral faintly visible inside it.
+    if !transparent {
+        let bloom = CGGradient(colorsSpace: space,
+                               colors: [violetDeep.copy(alpha: 0.06)!,
+                                        violetDeep.copy(alpha: 0.26)!,
+                                        violetDeep.copy(alpha: 0)!] as CFArray,
+                               locations: [0, 0.52, 1])!
+        ctx.drawRadialGradient(bloom, startCenter: center, startRadius: 0,
+                               endCenter: center, endRadius: 400 * s, options: [])
+    }
 
-    // Two shadow passes: a wide halo, then a tight one that sharpens the edge.
-    for (blur, alpha) in [(64 * s, 0.50), (22 * s, 0.60)] {
+    // Two shadow passes: a wide halo, then a tight one that sharpens the edge. The
+    // wide halo is the tile's lighting, so it goes with the tile.
+    let passes = transparent ? [(18 * s, 0.35)] : [(64 * s, 0.50), (22 * s, 0.60)]
+    for (blur, alpha) in passes {
         ctx.saveGState()
         ctx.setShadow(offset: .zero, blur: blur, color: violet.copy(alpha: alpha)!)
         ctx.addPath(spiral)
@@ -227,7 +257,9 @@ func write(_ image: CGImage, to path: String) {
 }
 
 if let iosOutput {
-    if let image = drawIcon(size: 1024, fullBleed: true) { write(image, to: iosOutput) }
+    if let image = drawIcon(size: 1024, fullBleed: true, variant: iosVariant) {
+        write(image, to: iosOutput)
+    }
     print("iOS icon written to \(iosOutput)")
     exit(0)
 }

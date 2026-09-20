@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- The app's own ground rather than the blank white the generated launch screen
+         gives, which read as a flash of the wrong app every time Summon opened. -->
+    <!-- CloudKit's silent pushes arrive as background notifications; without this the
+         phone only learns of the Mac's changes when it is next opened. Declared here
+         rather than through INFOPLIST_KEY_UIBackgroundModes, which did not reach the
+         built plist. -->
+    <key>UIBackgroundModes</key>
+    <array><string>remote-notification</string></array>
+
+    <key>UILaunchScreen</key>
+    <dict>
+        <key>UIColorName</key><string>LaunchBackground</string>
+    </dict>
+</dict>
+</plist>

@@ -1,5 +1,8 @@
+// SwiftPM builds every target for the host, so the guard stays even though this
+// target is only ever linked by the iOS app.
 #if !canImport(AppKit)
 import SummonKit
+import SummonUI
 import SwiftUI
 
 /// The library on a phone.
@@ -18,6 +21,10 @@ public struct PhoneRootView: View {
     @State private var showingSettings = false
 
     public init(model: AppModel) { self.model = model }
+
+    /// `sheet(item:)` needs something `Identifiable`; `PanelMode` is not, and should
+    /// not become so for one call site.
+    private struct FillTarget: Identifiable { let id: UUID }
 
     enum Route: Hashable {
         case list
@@ -81,6 +88,26 @@ public struct PhoneRootView: View {
                     AddMenu(model: model)
                 }
             }
+        }
+        // A snippet with blanks asks for them before it is copied. Driven by the
+        // model's mode, which `use()` already sets, so the phone and the Mac's panel
+        // agree about when filling is required.
+        .sheet(item: Binding(
+            get: { if case .fill(let id) = model.mode { FillTarget(id: id) } else { nil } },
+            set: { if $0 == nil { model.dismissPanel() } })
+        ) { target in
+            FillFieldsSheet(model: model, itemID: target.id) { model.dismissPanel() }
+        }
+        // Deleting asks first, wherever it was asked for. The confirmation used to
+        // exist only on the Mac's window, so Delete in the phone's detail view set a
+        // pending id that nothing ever presented — it looked like nothing happened.
+        .alert("Delete “\(model.pendingDeleteTitle)”?",
+               isPresented: Binding(get: { model.pendingDeleteID != nil },
+                                    set: { if !$0 { model.pendingDeleteID = nil } })) {
+            Button("Delete", role: .destructive) { model.confirmPendingDelete() }
+            Button("Cancel", role: .cancel) { model.pendingDeleteID = nil }
+        } message: {
+            Text("This cannot be undone.")
         }
         .sheet(isPresented: $showingSettings) {
             PhoneSettingsView(model: model) { showingSettings = false }

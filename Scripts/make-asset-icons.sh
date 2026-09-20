@@ -9,4 +9,6 @@ mkdir -p "$SET"
 swift "$ROOT/Scripts/make-icon.swift" "$SET" >/dev/null
 rm -f "$SET/../summon-icon-1024.png"
 swift "$ROOT/Scripts/make-icon.swift" --ios "$SET/icon_ios_1024.png" >/dev/null
+swift "$ROOT/Scripts/make-icon.swift" --ios "$SET/icon_ios_1024_dark.png" --variant dark >/dev/null
+swift "$ROOT/Scripts/make-icon.swift" --ios "$SET/icon_ios_1024_tinted.png" --variant tinted >/dev/null
 echo "Icons written to $SET"

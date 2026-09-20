@@ -1719,7 +1719,15 @@ public final class AppModel {
     ///
     /// iOS wants `fileImporter` rather than a modal panel, which is a presentation
     /// decision for the companion's UI rather than something to decide here.
+    /// Set by the iOS root, which owns the file importer. Nil on the Mac, which has a
+    /// panel it can run itself.
+    @ObservationIgnored public var presentImportHandler: ((SummonFolder?) -> Void)?
+
     public func presentImportPanel(into folder: SummonFolder? = nil) {
+        if let presentImportHandler {
+            presentImportHandler(folder)
+            return
+        }
         #if canImport(AppKit)
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = true

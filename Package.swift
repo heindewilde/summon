@@ -8,6 +8,8 @@ let package = Package(
         .executable(name: "Summon", targets: ["Summon"]),
         .library(name: "SummonKit", targets: ["SummonKit"]),
         .library(name: "SummonUI", targets: ["SummonUI"]),
+        // The phone and iPad views. A product because the iOS app target links it.
+        .library(name: "SummonUIPhone", targets: ["SummonUIPhone"]),
         // The Mac app itself, for the Xcode target that archives it for the App Store.
         .library(name: "SummonMacApp", targets: ["SummonMacApp"]),
     ],
@@ -26,6 +28,15 @@ let package = Package(
 
         // The panel, the menu bar, and the views that reach into AppKit.
         .target(name: "SummonUIMac", dependencies: ["SummonUI", "SummonKitMac"]),
+
+        // The touch half of the view layer, and the mirror image of SummonUIMac.
+        //
+        // A separate target rather than `#if os(iOS)` inside the shared views: the
+        // Mac's list, sidebar and rows are built around hover, drag and a 32pt row,
+        // and threading a second platform through them is how both ends rot. What is
+        // genuinely shared — the design system, the model, the small components —
+        // stays in SummonUI and is used by both.
+        .target(name: "SummonUIPhone", dependencies: ["SummonUI", "SummonKit"]),
 
         // The Mac app: window/panel lifecycle and wiring. A library rather than an
         // executable, because an Xcode app target cannot link an executable — and the

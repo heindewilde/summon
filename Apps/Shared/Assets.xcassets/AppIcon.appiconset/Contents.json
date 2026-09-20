@@ -7,6 +7,30 @@
       "filename": "icon_ios_1024.png"
     },
     {
+      "idiom": "universal",
+      "platform": "ios",
+      "size": "1024x1024",
+      "filename": "icon_ios_1024_dark.png",
+      "appearances": [
+        {
+          "appearance": "luminosity",
+          "value": "dark"
+        }
+      ]
+    },
+    {
+      "idiom": "universal",
+      "platform": "ios",
+      "size": "1024x1024",
+      "filename": "icon_ios_1024_tinted.png",
+      "appearances": [
+        {
+          "appearance": "luminosity",
+          "value": "tinted"
+        }
+      ]
+    },
+    {
       "idiom": "mac",
       "size": "16x16",
       "scale": "1x",

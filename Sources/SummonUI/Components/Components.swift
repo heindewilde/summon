@@ -543,3 +543,38 @@ public struct PlaceholderHighlightedText: View {
         return result
     }
 }
+
+/// The system's own glass, where the platform has it.
+///
+/// `GlassBackground` is the app's ground — a blurred backdrop that fills a window.
+/// This is the other half: a raised element that floats *above* that ground, which on
+/// iOS 26 is a material the system draws better than any hand-rolled stack of blurs
+/// and gradients. On macOS it falls back to the app's own chrome, so a call site can
+/// ask for glass without asking which platform it is on.
+public struct SummonGlass: ViewModifier {
+    public var shape: AnyShape
+    public var tinted: Bool
+
+    public init(shape: some Shape = Capsule(), tinted: Bool = false) {
+        self.shape = AnyShape(shape)
+        self.tinted = tinted
+    }
+
+    public func body(content: Content) -> some View {
+        #if canImport(AppKit)
+        content
+            .background(Theme.surfaceRaised, in: shape)
+            .overlay(shape.stroke(Theme.hairline, lineWidth: 1))
+        #else
+        content.glassEffect(tinted ? .regular.tint(Theme.accent.opacity(0.5)) : .regular,
+                            in: shape)
+        #endif
+    }
+}
+
+public extension View {
+    /// Floats this above the ground on iOS 26's glass; a raised surface elsewhere.
+    func summonGlass(shape: some Shape = Capsule(), tinted: Bool = false) -> some View {
+        modifier(SummonGlass(shape: shape, tinted: tinted))
+    }
+}

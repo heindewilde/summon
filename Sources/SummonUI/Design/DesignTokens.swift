@@ -202,22 +202,68 @@ public enum Theme {
 
     public enum Typography {
         // The scale. Eight rungs, and nothing between them.
-        public static let micro = Font.system(size: 10)
-        public static let caption = Font.system(size: 11)
-        public static let body = Font.system(size: 12)
-        public static let title = Font.system(size: 13)
-        public static let heading = Font.system(size: 15)
-        public static let field = Font.system(size: 18)
-        public static let display = Font.system(size: 21)
-        public static let statement = Font.system(size: 25)
+        //
+        // The Mac's rungs are fixed point sizes, because its surfaces are dense and a
+        // 750pt panel has to hold a list at a glance. A phone is the opposite: text is
+        // read at arm's length, one thing at a time, and someone who has asked the
+        // system for larger text means it. So iOS maps each rung onto the nearest
+        // system text style, which scales with Dynamic Type for free — and lands a
+        // little larger than the Mac at the default setting, which is right.
+        public static let micro = rung(10, .caption2)
+        public static let caption = rung(11, .caption)
+        public static let body = rung(12, .footnote)
+        public static let title = rung(13, .subheadline)
+        public static let heading = rung(15, .body)
+        public static let field = rung(18, .title3)
+        public static let display = rung(21, .title2)
+        public static let statement = rung(25, .title)
 
         // Roles, in terms of the scale.
         /// Matched characters. Emphasis by weight and tier, never by hue.
-        public static let titleMatch = Font.system(size: 13, weight: .semibold)
+        public static let titleMatch = rung(13, .subheadline, weight: .semibold)
         public static let subtitle = title
         public static let meta = caption
-        public static let section = Font.system(size: 11, weight: .semibold)
-        public static let key = Font.system(size: 11, weight: .medium)
+        public static let section = rung(11, .caption, weight: .semibold)
+        public static let key = rung(11, .caption, weight: .medium)
+
+        /// One rung, spelled for whichever platform is asking.
+        private static func rung(_ size: CGFloat, _ style: Font.TextStyle,
+                                 weight: Font.Weight = .regular) -> Font {
+            #if canImport(AppKit)
+            .system(size: size, weight: weight)
+            #else
+            .system(style, design: .default, weight: weight)
+            #endif
+        }
+    }
+
+    // MARK: - Haptics
+    //
+    // A phone confirms with a tap as much as with a toast: copying is the one action
+    // that otherwise leaves no trace, since the result lands in another app entirely.
+    // Nothing here does anything on a Mac, so call sites stay platform-free.
+
+    public enum Haptics {
+        /// Something completed — an item copied, an import finished.
+        public static func success() {
+            #if canImport(UIKit) && !os(macOS)
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            #endif
+        }
+
+        /// Something refused, politely.
+        public static func warning() {
+            #if canImport(UIKit) && !os(macOS)
+            UINotificationFeedbackGenerator().notificationOccurred(.warning)
+            #endif
+        }
+
+        /// A selection moved under the finger.
+        public static func selection() {
+            #if canImport(UIKit) && !os(macOS)
+            UISelectionFeedbackGenerator().selectionChanged()
+            #endif
+        }
     }
 
     // MARK: - Iconography

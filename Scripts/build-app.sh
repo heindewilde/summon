@@ -105,19 +105,22 @@ cat > "$CONTENTS/Info.plist" <<PLIST
 </plist>
 PLIST
 
-cat > "$DIST/Summon.entitlements" <<'ENT'
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>com.apple.security.app-sandbox</key><false/>
-    <key>com.apple.security.automation.apple-events</key><true/>
-    <!-- No keychain-access-groups: without an Apple Team ID prefix the kernel
-         rejects the entitlement outright and the app will not launch. That is why
-         Touch ID unlock needs a Developer ID; see Vault.biometricStorageAvailable. -->
-</dict>
-</plist>
-ENT
+# The same entitlements the Xcode target ships with, rather than a second copy that
+# can drift: this build exists to exercise the shipping configuration, sandbox and
+# all, with the runtime harness added on top.
+cp "$ROOT/Apps/SummonMac/SummonMac.entitlements" "$DIST/Summon.entitlements"
+
+# A sandboxed app with App Group, iCloud and keychain entitlements only launches if
+# the signature carries a provisioning profile that grants them. Xcode fetches one
+# when it builds the SummonMac target, so borrow that rather than managing a second.
+PROFILE="$(ls -t "$ROOT/.build/xcode/Build/Products/"*/Summon.app/Contents/embedded.provisionprofile 2>/dev/null | head -1)"
+if [[ -n "$PROFILE" ]]; then
+  cp "$PROFILE" "$CONTENTS/embedded.provisionprofile"
+  echo "==> Embedded provisioning profile"
+else
+  echo "    WARNING: no provisioning profile found. Build the SummonMac scheme in"
+  echo "    Xcode once (it fetches one), or this build will not launch."
+fi
 
 printf 'APPL????' > "$CONTENTS/PkgInfo"
 

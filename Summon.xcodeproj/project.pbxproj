@@ -21,6 +21,7 @@
 		B0000002 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		B0000003 /* SummonMac.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SummonMac.entitlements; sourceTree = "<group>"; };
 		B0000004 /* Summon.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Summon.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B0000008 /* SummonPhone.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SummonPhone.entitlements; sourceTree = "<group>"; };
 		B0000005 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A1000001 /* SummonPhoneApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SummonPhoneApp.swift; sourceTree = "<group>"; };
 		A1000002 /* SummonPhone.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SummonPhone.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -61,6 +62,7 @@
 			isa = PBXGroup;
 			children = (
 				A1000001 /* SummonPhoneApp.swift */,
+				B0000008 /* SummonPhone.entitlements */,
 			);
 			path = Apps/SummonPhone;
 			sourceTree = "<group>";
@@ -266,6 +268,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = "";
+				CODE_SIGN_ENTITLEMENTS = Apps/SummonPhone/SummonPhone.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -292,6 +295,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = "";
+				CODE_SIGN_ENTITLEMENTS = Apps/SummonPhone/SummonPhone.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;

@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import Carbon.HIToolbox
 import SwiftUI
 import SummonKit
 import SummonMacApp
@@ -38,6 +39,36 @@ enum PasteTest {
             try? text.write(toFile: path, atomically: true, encoding: .utf8)
         }
         print(text)
+    }
+
+    /// ⌘ plus one key, into whatever is frontmost. Only ever used on the document
+    /// this test opened itself, after the frontmost check above.
+    private static func postCommandKey(_ key: Int) {
+        let source = CGEventSource(stateID: .combinedSessionState)
+        guard let down = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(key), keyDown: true),
+              let up = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(key), keyDown: false)
+        else { return }
+        down.flags = .maskCommand
+        up.flags = .maskCommand
+        down.post(tap: .cghidEventTap)
+        up.post(tap: .cghidEventTap)
+    }
+
+    /// Empties the scratch document, so TextEdit quits without a save prompt.
+    private static func tidyUp(app: NSRunningApplication, target: URL) async {
+        postCommandKey(kVK_ANSI_A)
+        try? await Task.sleep(for: .milliseconds(200))
+        if let source = CGEventSource(stateID: .combinedSessionState),
+           let down = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(kVK_Delete), keyDown: true),
+           let up = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(kVK_Delete), keyDown: false) {
+            down.post(tap: .cghidEventTap)
+            up.post(tap: .cghidEventTap)
+        }
+        try? await Task.sleep(for: .milliseconds(200))
+        postCommandKey(kVK_ANSI_S)
+        try? await Task.sleep(for: .milliseconds(600))
+        app.terminate()
+        try? FileManager.default.removeItem(at: target)
     }
 
     static func run() async {
@@ -127,20 +158,30 @@ enum PasteTest {
 
         try? await Task.sleep(for: .seconds(1))
 
-        // Read back what actually landed, through the Accessibility API.
+        // Read back what actually landed. Preferably through the Accessibility API,
+        // which also reports where the caret ended up — but a *sandboxed* build may
+        // not inspect another app's UI, even with the Accessibility grant that lets
+        // it post the keystroke. (Posting and inspecting are separate powers; only
+        // the second is denied.) So fall back to saving the document and reading the
+        // file, which tests the same thing minus the caret.
         let axApp = AXUIElementCreateApplication(app.processIdentifier)
         var focusedRef: CFTypeRef?
         AXUIElementCopyAttributeValue(axApp, kAXFocusedUIElementAttribute as CFString, &focusedRef)
-        guard let focusedRef, CFGetTypeID(focusedRef) == AXUIElementGetTypeID() else {
-            check("Could read the focused text area in TextEdit", false)
-            flush()
-            exit(1)
-        }
-        let focused = focusedRef as! AXUIElement
+        let focused: AXUIElement? = (focusedRef.flatMap {
+            CFGetTypeID($0) == AXUIElementGetTypeID() ? ($0 as! AXUIElement) : nil
+        })
+        info("Read back via", focused == nil ? "saving the file (the sandbox hides other apps' UI)" : "the Accessibility API")
 
-        var valueRef: CFTypeRef?
-        AXUIElementCopyAttributeValue(focused, kAXValueAttribute as CFString, &valueRef)
-        let landed = (valueRef as? String) ?? ""
+        let landed: String
+        if let focused {
+            var valueRef: CFTypeRef?
+            AXUIElementCopyAttributeValue(focused, kAXValueAttribute as CFString, &valueRef)
+            landed = (valueRef as? String) ?? ""
+        } else {
+            postCommandKey(kVK_ANSI_S)
+            try? await Task.sleep(for: .seconds(2))
+            landed = (try? String(contentsOf: target, encoding: .utf8)) ?? ""
+        }
 
         check("Text arrived in TextEdit", !landed.isEmpty,
               detail: "\(landed.count) characters")
@@ -150,6 +191,13 @@ enum PasteTest {
         check("No unresolved placeholders were pasted", !landed.contains("{{"))
 
         // And the caret: {{cursor}} should have positioned it, not left it at the end.
+        guard let focused else {
+            info("Caret position", "not checkable under the sandbox")
+            await tidyUp(app: app, target: target)
+            report.append("=== \(report.filter { $0.contains("PASS") }.count) passed, \(failures) failed ===")
+            flush()
+            exit(failures == 0 ? 0 : 1)
+        }
         var rangeRef: CFTypeRef?
         AXUIElementCopyAttributeValue(focused, kAXSelectedTextRangeAttribute as CFString, &rangeRef)
         var range = CFRange()
@@ -168,8 +216,7 @@ enum PasteTest {
         // Leave the document empty so TextEdit quits without a save prompt.
         AXUIElementSetAttributeValue(focused, kAXValueAttribute as CFString, "" as CFTypeRef)
         try? await Task.sleep(for: .milliseconds(400))
-        app.terminate()
-        try? FileManager.default.removeItem(at: target)
+        await tidyUp(app: app, target: target)
 
         report.append("=== \(report.filter { $0.contains("PASS") }.count) passed, \(failures) failed ===")
         flush()

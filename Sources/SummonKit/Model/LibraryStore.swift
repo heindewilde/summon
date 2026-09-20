@@ -625,6 +625,12 @@ public final class LibraryStore {
     /// Best-effort by design. Failing to compact loses no data and breaks nothing —
     /// it only leaves the residue — so it warns rather than throwing into a save path.
     public func compactStore() {
+        // Only the container app compacts. `VACUUM` and a truncating checkpoint want
+        // the store to themselves, and once the share and action extensions can open
+        // it, a second process meets SQLITE_BUSY — or races a writer mid-import. An
+        // extension is short-lived and writes one item; the app does the tidying.
+        guard Bundle.main.bundleURL.pathExtension != "appex" else { return }
+
         var handle: OpaquePointer?
         guard sqlite3_open(paths.storeURL.path, &handle) == SQLITE_OK, let handle else {
             if handle != nil { sqlite3_close(handle) }

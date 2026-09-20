@@ -4,9 +4,13 @@ import SummonKit
 
 /// Grabs whatever is selected right now, wherever you are.
 ///
-/// In Finder that means the selected files, read over Apple Events. Everywhere else
-/// it synthesises ⌘C and reads the pasteboard back, restoring the previous contents
-/// so the hotkey does not quietly destroy what you had copied.
+/// Synthesises ⌘C and reads the pasteboard back, restoring the previous contents so
+/// the hotkey does not quietly destroy what you had copied.
+///
+/// Finder used to be special-cased: its selection was read over Apple Events, which
+/// needed a temporary exception the App Store does not allow (docs/sandbox-spike.md).
+/// Files now come in through the Services menu, Finder's Quick Actions, and drag and
+/// drop — all of which hand over the files rather than asking for them.
 @MainActor
 public struct SelectionCapture {
     private let inserter: Inserter
@@ -24,37 +28,7 @@ public struct SelectionCapture {
     }
 
     public func capture() async -> CapturedSelection {
-        let front = NSWorkspace.shared.frontmostApplication
-        if front?.bundleIdentifier == "com.apple.finder" {
-            let files = SelectionCapture.finderSelection()
-            if !files.isEmpty { return .files(files) }
-        }
-        return await captureViaCopy()
-    }
-
-    /// Reads the Finder selection without needing Accessibility.
-    public static func finderSelection() -> [URL] {
-        let source = """
-        tell application "Finder"
-            set theSelection to selection as alias list
-            set output to ""
-            repeat with anItem in theSelection
-                set output to output & POSIX path of (anItem as text) & linefeed
-            end repeat
-            return output
-        end tell
-        """
-        var error: NSDictionary?
-        guard let script = NSAppleScript(source: source) else { return [] }
-        let result = script.executeAndReturnError(&error)
-        if let error {
-            Log.capture.warning("Finder selection unavailable: \(String(describing: error), privacy: .public)")
-            return []
-        }
-        return (result.stringValue ?? "")
-            .split(separator: "\n")
-            .map { URL(fileURLWithPath: String($0)) }
-            .filter { FileManager.default.fileExists(atPath: $0.path) }
+        await captureViaCopy()
     }
 
     private func captureViaCopy() async -> CapturedSelection {

@@ -40,11 +40,31 @@ public final class Inserter {
 
     // MARK: - Accessibility
 
+    /// Whether this build is allowed to paste into another app at all.
+    ///
+    /// Pasting means synthesising ⌘V, which needs the Accessibility permission. If App
+    /// Review refuses that for a sandboxed app, building with `SUMMON_COPY_ONLY`
+    /// turns the whole path off: Summon then copies and shows "Press ⌘V", which the
+    /// `.copiedOnly` outcome and its toast already handle. One switch rather than a
+    /// setting, because it is a property of the build, not a preference.
+    public static var directPasteSupported: Bool {
+        #if SUMMON_COPY_ONLY
+        false
+        #else
+        true
+        #endif
+    }
+
     /// Whether we may synthesise the paste keystroke. Never blocks; never prompts.
-    public static var hasAccessibility: Bool { AXIsProcessTrusted() }
+    ///
+    /// Gated on `directPasteSupported` so a copy-only build reports no Accessibility
+    /// everywhere at once — the insert path, the Settings toggle, the onboarding step
+    /// and the panel's banner all read this one answer.
+    public static var hasAccessibility: Bool { directPasteSupported && AXIsProcessTrusted() }
 
     /// Shows the system prompt. Call at the moment it would first help, not at launch.
     public static func requestAccessibility() {
+        guard directPasteSupported else { return }
         // The key is a global `var` in the C header, so read it under a nonisolated
         // shim rather than touching shared mutable state from an isolated context.
         let key = "AXTrustedCheckOptionPrompt" as CFString

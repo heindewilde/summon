@@ -48,7 +48,6 @@ enum VerifyPaths {
         model.store.refresh()
 
         await verifyHotKey(model: model, controller: controller)
-        await verifyFinderSelection(model: model)
         verifyServices()
         verifyLoginItem()
         await verifyBiometrics(model: model)
@@ -106,52 +105,7 @@ enum VerifyPaths {
         up.post(tap: .cghidEventTap)
     }
 
-    // MARK: - 2. Reading the Finder selection
-
-    private static func verifyFinderSelection(model: AppModel) async {
-        let dir = URL(fileURLWithPath: NSTemporaryDirectory())
-            .appending(path: "summon-finder-\(UUID().uuidString)")
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let file = dir.appending(path: "Quarterly report.txt")
-        try? "quarterly figures".write(to: file, atomically: true, encoding: .utf8)
-        defer { try? FileManager.default.removeItem(at: dir) }
-
-        // Selecting in Finder is itself an Apple Event, so the first run prompts for
-        // Automation permission.
-        let script = """
-        tell application "Finder"
-            activate
-            reveal POSIX file "\(file.path)" as alias
-        end tell
-        """
-        var error: NSDictionary?
-        NSAppleScript(source: script)?.executeAndReturnError(&error)
-        if let error {
-            check("Finder can be driven over Apple Events", false,
-                  detail: "\(error[NSAppleScript.errorMessage] ?? "denied — approve the Automation prompt")")
-            return
-        }
-        check("Finder can be driven over Apple Events", true)
-        try? await Task.sleep(for: .seconds(2))
-
-        let selection = SelectionCapture.finderSelection()
-        check("The Finder selection is readable",
-              selection.contains { $0.lastPathComponent == file.lastPathComponent },
-              detail: selection.map(\.lastPathComponent).joined(separator: ", "))
-
-        if !selection.isEmpty {
-            let capture = SelectionCapture(inserter: Inserter())
-            let grabbed = await capture.capture()
-            var imported = 0
-            if case .files(let urls) = grabbed { imported = urls.count }
-            check("Save-selection captures it as files", imported > 0)
-        }
-
-        NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.finder")
-            .first?.hide()
-    }
-
-    // MARK: - 3. The Services menu entry
+    // MARK: - 2. The Services menu entry
 
     private static func verifyServices() {
         NSUpdateDynamicServices()
@@ -171,7 +125,7 @@ enum VerifyPaths {
               detail: dump.isEmpty ? "pbs returned nothing" : "found in the Services registry")
     }
 
-    // MARK: - 4. Launch at login
+    // MARK: - 3. Launch at login
 
     private static func verifyLoginItem() {
         let service = SMAppService.mainApp

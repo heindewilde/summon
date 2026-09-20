@@ -15,6 +15,7 @@ public struct PhoneRootView: View {
     @Bindable var model: AppModel
     @State private var path: [Route] = []
     @State private var showingVault = false
+    @State private var showingSettings = false
 
     public init(model: AppModel) { self.model = model }
 
@@ -61,6 +62,13 @@ public struct PhoneRootView: View {
             }
             .animation(Theme.panelIn, value: model.toast)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        showingSettings = true
+                    } label: {
+                        Label("Settings", systemImage: "gearshape")
+                    }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         showingVault = true
@@ -73,7 +81,13 @@ public struct PhoneRootView: View {
                     .opacity(model.vault.isConfigured ? 1 : 0)
                     .disabled(!model.vault.isConfigured)
                 }
+                ToolbarItem(placement: .topBarTrailing) {
+                    AddMenu(model: model)
+                }
             }
+        }
+        .sheet(isPresented: $showingSettings) {
+            PhoneSettingsView(model: model) { showingSettings = false }
         }
         .sheet(isPresented: $showingVault) {
             VaultSheet(model: model) { showingVault = false }

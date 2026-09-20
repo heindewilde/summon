@@ -1155,6 +1155,10 @@ public final class AppModel {
     /// that closes the moment you look away, which is the wrong place to be typing a
     /// PIN — and a panel arriving unbidden over the window you are working in is
     /// startling regardless of what it wants.
+    /// Change the secret from a settings screen, which on a phone is the only place
+    /// it can be done — there is no Settings window to open.
+    public func beginChangeSecret() { presentLockSheet(.change) }
+
     private func presentLockSheet(_ purpose: LockSheet.Purpose) {
         dismissPanel()
         showMainWindowHandler?()
@@ -1366,6 +1370,80 @@ public final class AppModel {
             return
         }
         saveClipboardEntry(entry)
+    }
+
+    /// Files chosen in the system picker on iOS.
+    ///
+    /// Unlike a drop, these arrive outside the app's sandbox and have to be opened
+    /// through a security-scoped claim — without it every read fails with a
+    /// permission error that looks, from the toast, exactly like a corrupt file.
+    public func importPickedFiles(_ urls: [URL], into folder: SummonFolder? = nil) {
+        Task {
+            var opened: [URL] = []
+            var scoped: [URL] = []
+            for url in urls {
+                if url.startAccessingSecurityScopedResource() { scoped.append(url) }
+                opened.append(url)
+            }
+            defer { scoped.forEach { $0.stopAccessingSecurityScopedResource() } }
+            let created = await importer.importFiles(opened, into: folder)
+            runSearch()
+            if created.isEmpty {
+                show(Toast(text: urls.count == 1 ? "Couldn’t add that file" : "Couldn’t add those files",
+                           symbol: "exclamationmark.triangle", tone: .danger))
+            } else if created.count == 1 {
+                show(Toast(text: "Saved “\(created[0].title)”", symbol: "sparkles", tone: .success))
+            } else {
+                show(Toast(text: "Saved \(created.count) items", symbol: "sparkles", tone: .success))
+            }
+        }
+    }
+
+    /// An image picked from Photos.
+    public func importImageData(_ data: Data, into folder: SummonFolder? = nil) async {
+        guard let item = await importer.importImage(data, into: folder) else {
+            show(Toast(text: "Couldn’t add that photo", symbol: "photo", tone: .danger))
+            return
+        }
+        runSearch()
+        show(Toast(text: "Saved “\(item.title)”", symbol: "sparkles", tone: .success))
+    }
+
+    /// The pasteboard's image, if it has one. Platform-shaped, and small enough to
+    /// keep here rather than widen `InsertionService` for one caller.
+    private func pasteboardImageData() -> Data? {
+        #if canImport(AppKit)
+        NSPasteboard.general.data(forType: .png) ?? NSPasteboard.general.data(forType: .tiff)
+        #elseif canImport(UIKit)
+        UIPasteboard.general.image?.pngData()
+        #else
+        nil
+        #endif
+    }
+
+    /// Whatever is on the pasteboard right now.
+    ///
+    /// The phone's answer to clipboard history, which it cannot have: reading the
+    /// pasteboard is a deliberate act here, prompted by a menu item, rather than a
+    /// background watch that would ask permission on every launch.
+    public func saveClipboard() async {
+        let board = services.insertion
+        if let image = pasteboardImageData() {
+            await importImageData(image)
+            return
+        }
+        let text = board.currentClipboardText()
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            show(Toast(text: "Nothing copied", symbol: "clipboard", tone: .warning,
+                       detail: "Copy something first, then try again"))
+            return
+        }
+        guard let item = await importer.importText(text, rtf: nil) else {
+            show(Toast(text: "Couldn’t save that", symbol: "exclamationmark.triangle", tone: .danger))
+            return
+        }
+        runSearch()
+        show(Toast(text: "Saved “\(item.title)”", symbol: "sparkles", tone: .success))
     }
 
     public func importDroppedFiles(_ urls: [URL], into folder: SummonFolder? = nil) {

@@ -46,7 +46,7 @@ struct SummonPhoneApp: App {
                 if let model {
                     #if os(iOS)
                     if UIDevice.current.userInterfaceIdiom == .phone {
-                        PhoneRootView(model: model)
+                        PhoneHomeView(model: model)
                     } else {
                         MainWindowView(model: model)
                     }

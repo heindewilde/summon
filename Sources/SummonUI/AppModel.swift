@@ -436,6 +436,12 @@ public final class AppModel {
         pendingDeleteID.flatMap { id in store.snapshots.first { $0.id == id }?.title } ?? "this item"
     }
 
+    /// Ask to delete a particular item. The phone's rows each carry their own delete,
+    /// so there is nothing "selected" to act on.
+    public func requestDelete(_ id: UUID) {
+        pendingDeleteID = id
+    }
+
     public func requestDeleteSelected() {
         guard let id = mainSelection ?? actionTarget?.id else { return }
         pendingDeleteID = id
@@ -1755,6 +1761,8 @@ public final class AppModel {
     // MARK: - Preview resolution
 
     public struct PreviewData {
+        public init() {}
+
         public var body: String?
         public var fileURL: URL?
         public var thumbnailURL: URL?

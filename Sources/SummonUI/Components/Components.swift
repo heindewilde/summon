@@ -402,10 +402,18 @@ public struct GlassBackground: View {
 
     public var body: some View {
         ZStack {
+            #if canImport(AppKit)
             VisualEffectBackground(material: material, blending: .behindWindow)
             LinearGradient(colors: [tint.opacity(0.88), tint],
                            startPoint: .top, endPoint: .bottom)
-            if bloom > 0 { Bloom(intensity: bloom) }
+            #else
+            // iOS has no behind-window blending to sample, so the Mac's stack of a
+            // material *and* a tint *and* a bloom compounded into a flat lavender
+            // wash. The system's grouped background is the right ground here; the
+            // bloom then reads as a glow on it rather than as the colour of the app.
+            Color(uiColor: .systemGroupedBackground)
+            #endif
+            if bloom > 0 { Bloom(intensity: bloom * 0.6) }
         }
         .ignoresSafeArea()
     }

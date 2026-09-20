@@ -13,7 +13,13 @@ import SwiftUI
 /// there is one iOS app rather than two.
 public struct PadRootView: View {
     @Bindable var model: AppModel
-    @State private var columns = NavigationSplitViewVisibility.all
+    // The list is always on screen; the sidebar is a toggle away.
+    //
+    // `.all` made the sidebar an overlay in portrait, covering the list it is meant to
+    // filter. `.automatic` went the other way and opened on the empty detail pane,
+    // which is a blank screen saying "nothing selected" before you have had a chance
+    // to select anything. Two columns is the one that is right in both orientations.
+    @State private var columns = NavigationSplitViewVisibility.doubleColumn
     @State private var detail: UUID?
     @State private var showingSettings = false
     @State private var showingVault = false

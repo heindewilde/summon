@@ -70,9 +70,14 @@ struct SummonPhoneApp: App {
             .task {
                 guard model == nil, failure == nil else { return }
                 do {
+                    // Timed because this is the whole of the launch as far as anyone
+                    // waiting for it is concerned: opening the store, migrating what
+                    // needs it, and building the first ranking.
+                    let started = ContinuousClock.now
                     let opened = try AppModel(services: .iOS())
                     opened.discardAbandonedBlanks()
                     model = opened
+                    Log.app.info("Library opened in \(started.duration(to: .now).milliseconds, privacy: .public) ms")
                 } catch {
                     failure = error.localizedDescription
                 }

@@ -25,6 +25,7 @@ public struct PadRootView: View {
     @State private var showingVault = false
     @State private var organising = false
     @Environment(\.scenePhase) private var scenePhase
+    @FocusState private var searchFocused: Bool
 
     public init(model: AppModel) { self.model = model }
 
@@ -147,7 +148,24 @@ public struct PadRootView: View {
         .navigationTitle(model.sidebarTitle)
         .navigationBarTitleDisplayMode(.inline)
         .searchable(text: $model.mainSearch, prompt: "Search your library")
+        .searchFocused($searchFocused)
         .onChange(of: model.mainSearch) { _, _ in model.runSearch() }
+        // An iPad with a keyboard attached is a Mac-shaped thing, and the Mac's
+        // shortcuts are already a tested map. These four are the ones that make sense
+        // without a panel to route the rest through.
+        .background {
+            Group {
+                Button("Search") { searchFocused = true }
+                    .keyboardShortcut("f", modifiers: .command)
+                Button("New Snippet") { model.beginNewSnippet() }
+                    .keyboardShortcut("n", modifiers: .command)
+                Button("Settings") { showingSettings = true }
+                    .keyboardShortcut(",", modifiers: .command)
+                Button("Organise") { organising = true }
+                    .keyboardShortcut("o", modifiers: [.command, .shift])
+            }
+            .hidden()
+        }
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 Button { showingSettings = true } label: {

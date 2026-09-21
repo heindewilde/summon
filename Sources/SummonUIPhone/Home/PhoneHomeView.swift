@@ -173,6 +173,12 @@ public struct PhoneHomeView: View {
         }
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
+        // Sync has no visible moment of its own. Pulling down is the gesture everyone
+        // already tries when they think a list might be stale.
+        .refreshable {
+            model.store.refresh()
+            model.runSearch()
+        }
         .scrollDismissesKeyboard(.immediately)
     }
 

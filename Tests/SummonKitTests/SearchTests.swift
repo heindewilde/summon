@@ -293,3 +293,56 @@ struct SpotlightExclusionTests {
         #expect(SpotlightIndexer.isIndexable(snapshot(sensitive: false, locked: true)) == false)
     }
 }
+
+@Suite("Library sections")
+struct LibrarySectionsTests {
+    private func item(_ title: String, pinned: Bool = false, used: Date? = nil,
+                      updated: Date = .distantPast) -> ItemSnapshot {
+        ItemSnapshot(id: UUID(), title: title, kind: .text,
+                     isPinned: pinned, lastUsedAt: used, updatedAt: updated)
+    }
+
+    @Test("Pinned, then recent, then the rest")
+    func splitsInOrder() {
+        let sections = LibrarySections.split([
+            item("Address", updated: .now),
+            item("IBAN", pinned: true),
+            item("Reply", used: .now),
+        ])
+        #expect(sections.map(\.title) == ["Pinned", "Recent", "More"])
+        #expect(sections[0].items.map(\.title) == ["IBAN"])
+        #expect(sections[1].items.map(\.title) == ["Reply"])
+        #expect(sections[2].items.map(\.title) == ["Address"])
+    }
+
+    @Test("A pinned item appears once, under Pinned")
+    func pinnedWinsOverRecent() {
+        // Pinning is a promise about where a thing will be. An item that is pinned and
+        // was also used this morning belongs in one place, or the promise is noise.
+        let sections = LibrarySections.split([item("IBAN", pinned: true, used: .now)])
+        #expect(sections.count == 1)
+        #expect(sections[0].title == "Pinned")
+    }
+
+    @Test("Recent is capped, newest first")
+    func recentIsCapped() {
+        let items = (0..<12).map { index in
+            item("Item \(index)", used: Date(timeIntervalSince1970: TimeInterval(index)))
+        }
+        let sections = LibrarySections.split(items, recentLimit: 3)
+        #expect(sections[0].title == "Recent")
+        #expect(sections[0].items.map(\.title) == ["Item 11", "Item 10", "Item 9"])
+        #expect(sections[1].items.count == 9, "the rest are not lost, only demoted")
+    }
+
+    @Test("With nothing pinned or recent, the tail is the whole library")
+    func tailIsNamedForWhatIsAboveIt() {
+        let sections = LibrarySections.split([item("Address"), item("Terms")])
+        #expect(sections.map(\.title) == ["Everything"])
+    }
+
+    @Test("An empty library has no sections at all")
+    func emptyLibrary() {
+        #expect(LibrarySections.split([]).isEmpty)
+    }
+}

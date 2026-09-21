@@ -17,11 +17,7 @@ import SwiftUI
 struct PhoneSections {
     let model: AppModel
 
-    struct Section: Identifiable {
-        let id: String
-        let title: String
-        let items: [ItemSnapshot]
-    }
+    typealias Section = LibrarySections.Section
 
     /// The filter written into the search field, if any: a folder, a tag, or a kind.
     /// Everything below is filtered by it, so the chips and the query stay one thing.
@@ -36,27 +32,14 @@ struct PhoneSections {
     /// While searching, one ranked list. The sections are for the resting state:
     /// splitting ranked results into groups hides the ranking, which is the thing
     /// doing the work.
+    ///
+    /// The split itself lives in `LibrarySections`, where it can be tested — the same
+    /// rule a widget and a Shortcuts suggestion ask for.
     var sections: [Section] {
         if isSearching {
             return [Section(id: "results", title: "Results", items: filtered)]
         }
-
-        let pinned = filtered.filter(\.isPinned)
-        let recent = filtered
-            .filter { $0.lastUsedAt != nil && !$0.isPinned }
-            .sorted { ($0.lastUsedAt ?? .distantPast) > ($1.lastUsedAt ?? .distantPast) }
-            .prefix(8)
-        let pinnedOrRecent = Set(pinned.map(\.id)).union(recent.map(\.id))
-        let rest = filtered
-            .filter { !pinnedOrRecent.contains($0.id) }
-            .sorted { $0.updatedAt > $1.updatedAt }
-
-        return [
-            Section(id: "pinned", title: "Pinned", items: pinned),
-            Section(id: "recent", title: "Recent", items: Array(recent)),
-            Section(id: "everything", title: pinnedOrRecent.isEmpty ? "Everything" : "More",
-                    items: rest),
-        ].filter { !$0.items.isEmpty }
+        return LibrarySections.split(filtered)
     }
 
     var isEmpty: Bool { sections.isEmpty }

@@ -1,4 +1,8 @@
+#if canImport(AppKit)
 import AppKit
+#else
+import UIKit
+#endif
 import SwiftUI
 import Testing
 @testable import SummonUI
@@ -29,9 +33,10 @@ struct ContrastTests {
     /// providers, and resolving one outside the block would silently bake in whatever
     /// appearance the test process happened to be in.
     static func resolve(_ token: @autoclosure () -> Color, dark: Bool) -> (RGB, Double) {
-        let appearance = NSAppearance(named: dark ? .darkAqua : .aqua)!
         var rgb = RGB(r: 0, g: 0, b: 0)
         var alpha = 1.0
+        #if canImport(AppKit)
+        let appearance = NSAppearance(named: dark ? .darkAqua : .aqua)!
         appearance.performAsCurrentDrawingAppearance {
             let resolved = NSColor(token()).usingColorSpace(.sRGB)!
             rgb = RGB(r: resolved.redComponent * 255,
@@ -39,6 +44,17 @@ struct ContrastTests {
                       b: resolved.blueComponent * 255)
             alpha = resolved.alphaComponent
         }
+        #else
+        // UIKit resolves against a trait collection rather than a current-drawing
+        // appearance, but the requirement is the same: build the colour inside the
+        // resolution, never outside it.
+        let traits = UITraitCollection(userInterfaceStyle: dark ? .dark : .light)
+        let resolved = UIColor(token()).resolvedColor(with: traits)
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        resolved.getRed(&r, green: &g, blue: &b, alpha: &a)
+        rgb = RGB(r: r * 255, g: g * 255, b: b * 255)
+        alpha = a
+        #endif
         return (rgb, alpha)
     }
 

@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- The Mac App Store requires the sandbox. What that costs is recorded in
+         docs/sandbox-spike.md: the Finder selection over Apple Events had to go, and
+         the library moves into the App Group container. -->
+    <key>com.apple.security.app-sandbox</key><true/>
+
+    <!-- Import panel and dragged-in files. Read-only: an import copies the bytes into
+         the store, so nothing is ever written back to where it came from. -->
+    <key>com.apple.security.files.user-selected.read-only</key><true/>
+
+    <!-- CloudKit sync, performed by the system on the app's behalf. -->
+    <key>com.apple.security.network.client</key><true/>
+
+    <!-- One library, reachable by the app and (from Phase G) its extensions. -->
+    <key>com.apple.security.application-groups</key>
+    <array><string>JV4MVRB77Q.group.com.heindewilde.summon</string></array>
+
+    <key>com.apple.developer.icloud-services</key>
+    <array><string>CloudKit</string></array>
+    <key>com.apple.developer.icloud-container-identifiers</key>
+    <array><string>iCloud.com.heindewilde.summon</string></array>
+    <!-- Release has its own copy of this file with `production`. A production build
+         carrying a development token gets no pushes, and sync would then look broken
+         for everyone but the developer. -->
+    <key>com.apple.developer.aps-environment</key><string>production</string>
+
+    <!-- Shared with the iOS app so the vault's master key can live in one keychain
+         group. Needs the Team ID prefix; without it the kernel rejects the
+         entitlement outright and the app will not launch. -->
+    <key>keychain-access-groups</key>
+    <array><string>JV4MVRB77Q.com.heindewilde.summon</string></array>
+</dict>
+</plist>

@@ -1,4 +1,11 @@
+#if canImport(AppKit)
 import AppKit
+/// `NSFont` on macOS, `UIFont` on iOS. The same `.font` attribute, two names.
+typealias PlatformFont = NSFont
+#else
+import UIKit
+typealias PlatformFont = UIFont
+#endif
 import Foundation
 
 /// RTF conversion. The only place in SummonKit that touches AppKit, and only for
@@ -35,9 +42,21 @@ public enum RTF {
         var interesting = false
         attributed.enumerateAttributes(in: NSRange(location: 0, length: attributed.length)) { attrs, _, stop in
             for key in attrs.keys where [.font, .foregroundColor, .underlineStyle, .link].contains(key) {
-                if key == .font, let font = attrs[.font] as? NSFont {
+                if key == .font, let font = attrs[.font] as? PlatformFont {
+                    // The two frameworks spell these differently: AppKit strips the
+                    // `trait` prefix off the C enum, UIKit does not.
+                    #if canImport(AppKit)
+                    let bolded = NSFontDescriptor.SymbolicTraits.bold
+                    let italicised = NSFontDescriptor.SymbolicTraits.italic
+                    #else
+                    let bolded = UIFontDescriptor.SymbolicTraits.traitBold
+                    let italicised = UIFontDescriptor.SymbolicTraits.traitItalic
+                    #endif
                     let traits = font.fontDescriptor.symbolicTraits
-                    if traits.contains(.bold) || traits.contains(.italic) { interesting = true; stop.pointee = true }
+                    if traits.contains(bolded) || traits.contains(italicised) {
+                        interesting = true
+                        stop.pointee = true
+                    }
                 } else if key != .font {
                     interesting = true
                     stop.pointee = true

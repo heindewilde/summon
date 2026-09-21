@@ -1,0 +1,901 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		F1000010 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = F1000001 /* PrivacyInfo.xcprivacy */; };
+		F1000011 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = F1000001 /* PrivacyInfo.xcprivacy */; };
+		F1000012 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = F1000001 /* PrivacyInfo.xcprivacy */; };
+		F1000013 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = F1000001 /* PrivacyInfo.xcprivacy */; };
+		F1000014 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = F1000001 /* PrivacyInfo.xcprivacy */; };
+		E1000010 /* ActionViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000001 /* ActionViewController.swift */; };
+		E1000011 /* SummonKit in Frameworks */ = {isa = PBXBuildFile; productRef = E1000012 /* SummonKit */; };
+		E1000013 /* SummonQuickAction.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = E1000002 /* SummonQuickAction.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		D1000010 /* SummonWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000001 /* SummonWidgets.swift */; };
+		D1000011 /* SummonKit in Frameworks */ = {isa = PBXBuildFile; productRef = D1000012 /* SummonKit */; };
+		D1000013 /* SummonWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = D1000002 /* SummonWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		C1000010 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1000001 /* ShareViewController.swift */; };
+		C1000011 /* SummonKit in Frameworks */ = {isa = PBXBuildFile; productRef = C1000012 /* SummonKit */; };
+		C1000013 /* SummonShare.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = C1000002 /* SummonShare.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		A1000023 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B0000005 /* Assets.xcassets */; };
+		B0000010 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000001 /* main.swift */; };
+		B0000011 /* SummonMacApp in Frameworks */ = {isa = PBXBuildFile; productRef = B0000018 /* SummonMacApp */; };
+		B0000012 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B0000005 /* Assets.xcassets */; };
+		A1000010 /* SummonPhoneApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000001 /* SummonPhoneApp.swift */; };
+		A1000020 /* SummonKit in Frameworks */ = {isa = PBXBuildFile; productRef = A1000018 /* SummonKit */; };
+		A1000021 /* SummonUI in Frameworks */ = {isa = PBXBuildFile; productRef = A1000019 /* SummonUI */; };
+		B0000040 /* SummonUIPhone in Frameworks */ = {isa = PBXBuildFile; productRef = B0000041 /* SummonUIPhone */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		C1000030 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				C1000013 /* SummonShare.appex in Embed Foundation Extensions */,
+				D1000013 /* SummonWidgets.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E1000030 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				E1000013 /* SummonQuickAction.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		F1000001 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		E1000001 /* ActionViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionViewController.swift; sourceTree = "<group>"; };
+		E1000002 /* SummonQuickAction.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = SummonQuickAction.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		E1000003 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		E1000004 /* SummonQuickAction.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SummonQuickAction.entitlements; sourceTree = "<group>"; };
+		D1000001 /* SummonWidgets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SummonWidgets.swift; sourceTree = "<group>"; };
+		D1000002 /* SummonWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = SummonWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		D1000003 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		D1000004 /* SummonWidgets.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SummonWidgets.entitlements; sourceTree = "<group>"; };
+		C1000001 /* ShareViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
+		C1000002 /* SummonShare.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = SummonShare.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		C1000003 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		C1000004 /* SummonShare.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SummonShare.entitlements; sourceTree = "<group>"; };
+		B0000001 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		B0000002 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		B0000003 /* SummonMac.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SummonMac.entitlements; sourceTree = "<group>"; };
+		B0000004 /* Summon.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Summon.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B0000008 /* SummonPhone.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SummonPhone.entitlements; sourceTree = "<group>"; };
+		B0000005 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		A1000001 /* SummonPhoneApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SummonPhoneApp.swift; sourceTree = "<group>"; };
+		A1000002 /* SummonPhone.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SummonPhone.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		A1000003 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A1000020 /* SummonKit in Frameworks */,
+				A1000021 /* SummonUI in Frameworks */,
+				B0000040 /* SummonUIPhone in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B0000022 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B0000011 /* SummonMacApp in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C1000020 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C1000011 /* SummonKit in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D1000020 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D1000011 /* SummonKit in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E1000020 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E1000011 /* SummonKit in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		A1000004 = {
+			isa = PBXGroup;
+			children = (
+				A1000005 /* SummonPhone */,
+				B0000006 /* SummonMac */,
+				C1000005 /* SummonShare */,
+				D1000005 /* SummonWidgets */,
+				E1000005 /* SummonQuickAction */,
+				B0000007 /* Shared */,
+				A1000006 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		A1000005 /* SummonPhone */ = {
+			isa = PBXGroup;
+			children = (
+				A1000001 /* SummonPhoneApp.swift */,
+				B0000008 /* SummonPhone.entitlements */,
+			);
+			path = Apps/SummonPhone;
+			sourceTree = "<group>";
+		};
+		D1000005 /* SummonWidgets */ = {
+			isa = PBXGroup;
+			children = (
+				D1000001 /* SummonWidgets.swift */,
+				D1000003 /* Info.plist */,
+				D1000004 /* SummonWidgets.entitlements */,
+			);
+			path = Apps/SummonWidgets;
+			sourceTree = "<group>";
+		};
+		E1000005 /* SummonQuickAction */ = {
+			isa = PBXGroup;
+			children = (
+				E1000001 /* ActionViewController.swift */,
+				E1000003 /* Info.plist */,
+				E1000004 /* SummonQuickAction.entitlements */,
+			);
+			path = Apps/SummonQuickAction;
+			sourceTree = "<group>";
+		};
+		C1000005 /* SummonShare */ = {
+			isa = PBXGroup;
+			children = (
+				C1000001 /* ShareViewController.swift */,
+				C1000003 /* Info.plist */,
+				C1000004 /* SummonShare.entitlements */,
+			);
+			path = Apps/SummonShare;
+			sourceTree = "<group>";
+		};
+		B0000006 /* SummonMac */ = {
+			isa = PBXGroup;
+			children = (
+				B0000001 /* main.swift */,
+				B0000002 /* Info.plist */,
+				B0000003 /* SummonMac.entitlements */,
+			);
+			path = Apps/SummonMac;
+			sourceTree = "<group>";
+		};
+		B0000007 /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				B0000005 /* Assets.xcassets */,
+				F1000001 /* PrivacyInfo.xcprivacy */,
+			);
+			path = Apps/Shared;
+			sourceTree = "<group>";
+		};
+		A1000006 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				A1000002 /* SummonPhone.app */,
+				B0000004 /* Summon.app */,
+				C1000002 /* SummonShare.appex */,
+				D1000002 /* SummonWidgets.appex */,
+				E1000002 /* SummonQuickAction.appex */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A1000007 /* SummonPhone */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A1000011 /* Build configuration list for PBXNativeTarget "SummonPhone" */;
+			buildPhases = (
+				A1000008 /* Sources */,
+				A1000003 /* Frameworks */,
+				A1000009 /* Resources */,
+				C1000030 /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				C1000040 /* PBXTargetDependency */,
+				D1000040 /* PBXTargetDependency */,
+			);
+			name = SummonPhone;
+			packageProductDependencies = (
+				A1000018 /* SummonKit */,
+				A1000019 /* SummonUI */,
+				B0000041 /* SummonUIPhone */,
+			);
+			productName = SummonPhone;
+			productReference = A1000002 /* SummonPhone.app */;
+			productType = "com.apple.product-type.application";
+		};
+		B0000020 /* SummonMac */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B0000030 /* Build configuration list for PBXNativeTarget "SummonMac" */;
+			buildPhases = (
+				B0000021 /* Sources */,
+				B0000022 /* Frameworks */,
+				B0000023 /* Resources */,
+				E1000030 /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				E1000040 /* PBXTargetDependency */,
+			);
+			name = SummonMac;
+			packageProductDependencies = (
+				B0000018 /* SummonMacApp */,
+			);
+			productName = Summon;
+			productReference = B0000004 /* Summon.app */;
+			productType = "com.apple.product-type.application";
+		};
+		C1000050 /* SummonShare */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C1000060 /* Build configuration list for PBXNativeTarget "SummonShare" */;
+			buildPhases = (
+				C1000021 /* Sources */,
+				C1000020 /* Frameworks */,
+				C1000022 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = SummonShare;
+			packageProductDependencies = (
+				C1000012 /* SummonKit */,
+			);
+			productName = SummonShare;
+			productReference = C1000002 /* SummonShare.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		D1000050 /* SummonWidgets */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D1000060 /* Build configuration list for PBXNativeTarget "SummonWidgets" */;
+			buildPhases = (
+				D1000021 /* Sources */,
+				D1000020 /* Frameworks */,
+				D1000022 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = SummonWidgets;
+			packageProductDependencies = (
+				D1000012 /* SummonKit */,
+			);
+			productName = SummonWidgets;
+			productReference = D1000002 /* SummonWidgets.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		E1000050 /* SummonQuickAction */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E1000060 /* Build configuration list for PBXNativeTarget "SummonQuickAction" */;
+			buildPhases = (
+				E1000021 /* Sources */,
+				E1000020 /* Frameworks */,
+				E1000022 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = SummonQuickAction;
+			packageProductDependencies = (
+				E1000012 /* SummonKit */,
+			);
+			productName = SummonQuickAction;
+			productReference = E1000002 /* SummonQuickAction.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXTargetDependency section */
+		C1000040 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = C1000050 /* SummonShare */;
+			targetProxy = C1000041 /* PBXContainerItemProxy */;
+		};
+		D1000040 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = D1000050 /* SummonWidgets */;
+			targetProxy = D1000041 /* PBXContainerItemProxy */;
+		};
+		E1000040 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = E1000050 /* SummonQuickAction */;
+			targetProxy = E1000041 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin PBXContainerItemProxy section */
+		C1000041 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A1000012 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = C1000050;
+			remoteInfo = SummonShare;
+		};
+		D1000041 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A1000012 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = D1000050;
+			remoteInfo = SummonWidgets;
+		};
+		E1000041 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A1000012 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E1000050;
+			remoteInfo = SummonQuickAction;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXProject section */
+		A1000012 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2600;
+				LastUpgradeCheck = 2600;
+				TargetAttributes = {
+					A1000007 = {
+						CreatedOnToolsVersion = 26.0;
+					};
+					B0000020 = {
+						CreatedOnToolsVersion = 26.0;
+					};
+				};
+			};
+			buildConfigurationList = A1000013 /* Build configuration list for PBXProject "Summon" */;
+			compatibilityVersion = "Xcode 15.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = A1000004;
+			packageReferences = (
+				A1000017 /* XCLocalSwiftPackageReference "." */,
+			);
+			productRefGroup = A1000006 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				A1000007 /* SummonPhone */,
+				B0000020 /* SummonMac */,
+				C1000050 /* SummonShare */,
+				D1000050 /* SummonWidgets */,
+				E1000050 /* SummonQuickAction */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A1000009 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A1000023 /* Assets.xcassets in Resources */,
+				F1000010 /* PrivacyInfo.xcprivacy in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B0000023 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B0000012 /* Assets.xcassets in Resources */,
+				F1000011 /* PrivacyInfo.xcprivacy in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C1000022 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F1000012 /* PrivacyInfo.xcprivacy in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D1000022 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F1000013 /* PrivacyInfo.xcprivacy in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E1000022 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F1000014 /* PrivacyInfo.xcprivacy in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		A1000008 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A1000010 /* SummonPhoneApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B0000021 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B0000010 /* main.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C1000021 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C1000010 /* ShareViewController.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D1000021 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D1000010 /* SummonWidgets.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E1000021 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E1000010 /* ActionViewController.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		A1000014 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				DEVELOPMENT_TEAM = JV4MVRB77Q;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		A1000015 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				DEVELOPMENT_TEAM = JV4MVRB77Q;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_VERSION = 6.0;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		A1000016 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Apps/SummonPhone/SummonPhone.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Summon;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "Face ID unlocks the items you have marked sensitive.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_FILE = Apps/SummonPhone/Info.plist;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.heindewilde.summon;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		A1000022 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Apps/SummonPhone/SummonPhone-Release.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Summon;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "Face ID unlocks the items you have marked sensitive.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_FILE = Apps/SummonPhone/Info.plist;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.heindewilde.summon;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		B0000031 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Apps/SummonMac/SummonMac.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Apps/SummonMac/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Summon;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				INFOPLIST_KEY_NSHumanReadableCopyright = Summon;
+				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.heindewilde.summon;
+				PRODUCT_NAME = Summon;
+				SDKROOT = macosx;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+			};
+			name = Debug;
+		};
+		B0000032 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Apps/SummonMac/SummonMac-Release.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Apps/SummonMac/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Summon;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				INFOPLIST_KEY_NSHumanReadableCopyright = Summon;
+				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.heindewilde.summon;
+				PRODUCT_NAME = Summon;
+				SDKROOT = macosx;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+			};
+			name = Release;
+		};
+		C1000061 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Apps/SummonShare/SummonShare.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Apps/SummonShare/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Add to Summon";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.heindewilde.summon.share;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		C1000062 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Apps/SummonShare/SummonShare.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Apps/SummonShare/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Add to Summon";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.heindewilde.summon.share;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		D1000061 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Apps/SummonWidgets/SummonWidgets.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Apps/SummonWidgets/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Summon;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.heindewilde.summon.widgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		D1000062 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Apps/SummonWidgets/SummonWidgets.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Apps/SummonWidgets/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Summon;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.heindewilde.summon.widgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		E1000061 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Apps/SummonQuickAction/SummonQuickAction.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Apps/SummonQuickAction/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Add to Summon";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.heindewilde.summon.quickaction;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+			};
+			name = Debug;
+		};
+		E1000062 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Apps/SummonQuickAction/SummonQuickAction.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Apps/SummonQuickAction/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Add to Summon";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.heindewilde.summon.quickaction;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		A1000011 /* Build configuration list for PBXNativeTarget "SummonPhone" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A1000016 /* Debug */,
+				A1000022 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A1000013 /* Build configuration list for PBXProject "Summon" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A1000014 /* Debug */,
+				A1000015 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B0000030 /* Build configuration list for PBXNativeTarget "SummonMac" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B0000031 /* Debug */,
+				B0000032 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		C1000060 /* Build configuration list for PBXNativeTarget "SummonShare" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C1000061 /* Debug */,
+				C1000062 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		D1000060 /* Build configuration list for PBXNativeTarget "SummonWidgets" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D1000061 /* Debug */,
+				D1000062 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E1000060 /* Build configuration list for PBXNativeTarget "SummonQuickAction" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E1000061 /* Debug */,
+				E1000062 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		A1000017 /* XCLocalSwiftPackageReference "." */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = .;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		A1000018 /* SummonKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = SummonKit;
+		};
+		A1000019 /* SummonUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = SummonUI;
+		};
+		B0000041 /* SummonUIPhone */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = SummonUIPhone;
+		};
+		B0000018 /* SummonMacApp */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = SummonMacApp;
+		};
+		C1000012 /* SummonKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = SummonKit;
+		};
+		D1000012 /* SummonKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = SummonKit;
+		};
+		E1000012 /* SummonKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = SummonKit;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = A1000012 /* Project object */;
+}

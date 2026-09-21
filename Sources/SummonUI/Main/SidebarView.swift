@@ -1,4 +1,3 @@
-import AppKit
 import SummonKit
 import SwiftUI
 
@@ -15,7 +14,18 @@ public struct SidebarView: View {
     @State private var renameText = ""
     @State private var rootTargeted = false
 
-    public init(model: AppModel) { self.model = model }
+    /// Called when a section is chosen, even if it was already the current one.
+    ///
+    /// A three-column window shows the result of a tap immediately, so setting the
+    /// selection is the whole interaction. A phone has to push, and it has to push
+    /// when you tap the section you are already on — which observing the selection
+    /// cannot see.
+    var onSelect: ((SidebarSelection) -> Void)?
+
+    public init(model: AppModel, onSelect: ((SidebarSelection) -> Void)? = nil) {
+        self.model = model
+        self.onSelect = onSelect
+    }
 
     /// The sidebar's denser row. Reads the token rather than defining a third row
     /// height beside `Theme.rowHeight` and the action menu's — the folder drop delegate
@@ -37,8 +47,10 @@ public struct SidebarView: View {
                 if model.vault.isConfigured {
                     row(.locked, "Sensitive", "lock", count: counts.sensitive)
                 }
-                row(.clipboard, "Clipboard", "doc.on.clipboard",
-                    count: model.clipboard.entries.count)
+                if model.clipboard.isSupported {
+                    row(.clipboard, "Clipboard", "doc.on.clipboard",
+                        count: model.clipboard.entries.count)
+                }
 
                 header("Folders")
                 ForEach(model.sidebarFolderRows) { entry in
@@ -93,8 +105,10 @@ public struct SidebarView: View {
         // A drop target, so a ring — not `Theme.selection`, which would say this row is
         // the one you are on. Same fix as the folder rows a few screens down.
         .rowSurface(rootTargeted ? .dropTarget : .idle)
+        #if canImport(AppKit)
         .onDrop(of: SummonDragType.all,
                 delegate: RootFolderDropDelegate(model: model, isTargeted: $rootTargeted))
+        #endif
         .help("Drag a folder or an item here to take it out of its folder")
     }
 
@@ -136,7 +150,7 @@ public struct SidebarView: View {
         // left the window showing two chosen things and no way to tell them apart.
         .rowSurface(isSelected ? .navActive : .idle)
         .contentShape(.rect)
-        .onTapGesture { model.sidebarSelection = selection }
+        .onTapGesture { model.sidebarSelection = selection; onSelect?(selection) }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(count > 0 ? "\(title), \(count) items" : title)
         .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
@@ -171,7 +185,11 @@ struct TagRow: View {
                     .font(Theme.Typography.title)
                     .focused($nameFocused)
                     .onSubmit(commitRename)
+                    // ⎋ to abandon a rename. No iOS equivalent — there is no
+                    // escape key to press, and losing focus already commits.
+                    #if canImport(AppKit)
                     .onExitCommand { model.renamingTagID = nil }
+                    #endif
                     .onAppear { renameText = tag.name; nameFocused = true }
                     .onChange(of: nameFocused) { _, focused in if !focused { commitRename() } }
             } else {
@@ -280,7 +298,11 @@ struct FolderRow: View {
                     .font(Theme.Typography.title)
                     .focused($nameFocused)
                     .onSubmit(commitRename)
+                    // ⎋ to abandon a rename. No iOS equivalent — there is no
+                    // escape key to press, and losing focus already commits.
+                    #if canImport(AppKit)
                     .onExitCommand { model.renamingFolderID = nil }
+                    #endif
                     .onAppear { renameText = entry.name; nameFocused = true }
                     .onChange(of: nameFocused) { _, focused in if !focused { commitRename() } }
             } else {
@@ -317,6 +339,7 @@ struct FolderRow: View {
         .overlay(alignment: .bottom) { if dropZone == .after { DropLine() } }
         .contentShape(.rect)
         .onTapGesture { model.sidebarSelection = .folder(entry.id) }
+        #if canImport(AppKit)
         .onDrag {
             model.sidebarSelection = .folder(entry.id)
             let provider = NSItemProvider()
@@ -330,6 +353,7 @@ struct FolderRow: View {
         .onDrop(of: FolderDropTypes,
                 delegate: FolderDropDelegate(folder: folderForDrop, model: model,
                                              rowHeight: SidebarView.rowHeight))
+        #endif
         .contextMenu { menu }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(entry.itemCount > 0 ? "\(entry.name), \(entry.itemCount) items"

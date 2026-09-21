@@ -1,6 +1,16 @@
+#if canImport(AppKit)
 import AppKit
+#else
+import UIKit
+#endif
 import Observation
 import SwiftUI
+#if canImport(CoreSpotlight)
+import CoreSpotlight
+#endif
+#if canImport(WidgetKit)
+import WidgetKit
+#endif
 import SummonKit
 
 public struct FolderDropTarget: Equatable, Sendable {
@@ -123,9 +133,12 @@ public final class AppModel {
     public let vault: Vault
     public let store: LibraryStore
     public let intelligence: Intelligence
-    public let clipboard: ClipboardMonitor
-    public let inserter: Inserter
-    public let focus: FocusTracker
+    /// What this machine can do. Protocols rather than the AppKit-backed classes
+    /// this used to construct itself — see `PlatformServices`.
+    @ObservationIgnored public let services: PlatformServices
+    public var clipboard: any ClipboardService { services.clipboard }
+    public var inserter: any InsertionService { services.insertion }
+    public var focus: any FocusService { services.focus }
     public let importer: Importer
     public let settings: AppSettings
 
@@ -182,7 +195,9 @@ public final class AppModel {
     public private(set) var folderDropTarget: FolderDropTarget?
 
     /// The same, for the item list's insertion line.
+    #if canImport(AppKit)
     public private(set) var itemDropTarget: ItemDropTarget?
+    #endif
 
     /// When a drop delegate last said anything. Not observed: it exists to notice
     /// silence, and waking every row to say "still dragging" is exactly the cost this
@@ -216,11 +231,13 @@ public final class AppModel {
         folderDropTarget = target
     }
 
+    #if canImport(AppKit)
     public func setItemDropTarget(_ target: ItemDropTarget?) {
         dropHeartbeat = Date()
         if itemDropTarget != target { itemDropTarget = target }
         if target != nil { startDropWatchdog() }
     }
+    #endif
 
     /// Clears a stranded indicator.
     ///
@@ -235,10 +252,16 @@ public final class AppModel {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .milliseconds(120))
                 guard let live = self else { return }
+                #if canImport(AppKit)
                 guard live.folderDropTarget != nil || live.itemDropTarget != nil else { return }
+                #else
+                guard live.folderDropTarget != nil else { return }
+                #endif
                 guard Date().timeIntervalSince(live.dropHeartbeat) > 0.4 else { continue }
                 live.folderDropTarget = nil
+                #if canImport(AppKit)
                 live.itemDropTarget = nil
+                #endif
                 return
             }
         }
@@ -301,7 +324,16 @@ public final class AppModel {
 
     /// Cached TCC answer. Reading `Inserter.hasAccessibility` directly from a view
     /// body meant a TCC round trip twice per render.
-    public let accessibility = AccessibilityStatus()
+    public let accessibility: AccessibilityStatus
+
+    /// How this platform says "summon" and "save what's selected", already rendered.
+    ///
+    /// Nil where there is no such gesture. The shortcut itself is a `HotKeyCombo`,
+    /// which is Carbon to its core and lives in the macOS target; only the string
+    /// crosses over, so an empty state can name the shortcut without this file
+    /// knowing what a virtual key code is.
+    public var summonShortcutLabel: String?
+    public var quickSaveShortcutLabel: String?
 
     /// Held modifiers, on their own observable object so that watching them redraws
     /// the footer and nothing else. See `PanelModifierState`.
@@ -310,16 +342,15 @@ public final class AppModel {
     private var toastTask: Task<Void, Never>?
     private var autoLockTimer: Timer?
 
-    public init() throws {
+    public init(services: PlatformServices) throws {
+        self.services = services
         let paths = LibraryPaths.standard()
         self.paths = paths
         let vault = Vault(paths: paths)
         self.vault = vault
         self.store = try LibraryStore(paths: paths, vault: vault)
         self.intelligence = Intelligence()
-        self.clipboard = ClipboardMonitor(paths: paths)
-        self.inserter = Inserter()
-        self.focus = FocusTracker()
+        self.accessibility = AccessibilityStatus(probe: services.hasAccessibility)
         self.settings = AppSettings()
         self.importer = Importer(store: store, intelligence: intelligence)
 
@@ -354,12 +385,36 @@ public final class AppModel {
         return parsed
     }
 
+    /// Keeps Spotlight and the widgets in step with the library.
+    ///
+    /// Debounced, because it is called from `runSearch` — which runs on every
+    /// keystroke as well as every change — and reindexing a library on each letter
+    /// typed would be absurd. Spotlight's exclusion rule lives in `SpotlightIndexer`
+    /// and is asserted there; this only decides *when* to ask.
+    @ObservationIgnored private var publishTask: Task<Void, Never>?
+
+    public func publishToSystem() {
+        guard !isHarness else { return }
+        publishTask?.cancel()
+        let snapshots = store.snapshots
+        publishTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled else { return }
+            #if canImport(CoreSpotlight)
+            try? await SpotlightIndexer.reindex(snapshots)
+            #endif
+            #if canImport(WidgetKit)
+            WidgetCenter.shared.reloadAllTimelines()
+            #endif
+        }
+    }
+
     public func runSearch() {
         let ranked = searchEngine.sections(parsedQueryWithScope,
                                            snapshots: store.snapshots,
                                            revision: store.revision,
                                            frontmostBundleID: focus.previousBundleID,
-                                           frontmostAppName: focus.previousApp?.localizedName)
+                                           frontmostAppName: focus.previousAppName)
         results = ranked.allResults
 
         // Absolute positions assigned once, here, so ⌘-numbering runs across sections
@@ -373,6 +428,7 @@ public final class AppModel {
             return DisplaySection(title: section.title, rows: rows)
         }
         if selectedIndex >= results.count { selectedIndex = max(0, results.count - 1) }
+        publishToSystem()
     }
 
     // MARK: - Main window keyboard
@@ -409,6 +465,12 @@ public final class AppModel {
 
     public var pendingDeleteTitle: String {
         pendingDeleteID.flatMap { id in store.snapshots.first { $0.id == id }?.title } ?? "this item"
+    }
+
+    /// Ask to delete a particular item. The phone's rows each carry their own delete,
+    /// so there is nothing "selected" to act on.
+    public func requestDelete(_ id: UUID) {
+        pendingDeleteID = id
     }
 
     public func requestDeleteSelected() {
@@ -474,22 +536,9 @@ public final class AppModel {
         return true
     }
 
-    /// The field editor's path. Unmodified editing keys arrive as selectors.
-    @discardableResult
-    public func routeFieldSelector(_ selector: Selector, fieldIsEmpty: Bool) -> Bool {
-        guard let key = PanelKeyRouter.key(for: selector) else { return false }
-        let modifiers = KeyModifiers(NSApp.currentEvent?.modifierFlags ?? [])
-        guard let command = PanelKeyMap.command(for: KeyChord(key, modifiers),
-                                                in: keyContext,
-                                                queryIsEmpty: fieldIsEmpty,
-                                                selectionIsFolder: selectionHasFolder) else { return false }
-        perform(command)
-        return true
-    }
-
     /// ⇥ needs somewhere to go: the selected item must sit in a folder, and we must
     /// not already be scoped to one.
-    private var selectionHasFolder: Bool {
+    public var selectionHasFolder: Bool {
         folderScope == nil && selectedResult?.item.folderPath.isEmpty == false
     }
 
@@ -785,7 +834,9 @@ public final class AppModel {
         switch style {
         case .open:
             if let url = payload.fileURL {
+                #if canImport(AppKit)
                 NSWorkspace.shared.open(url)
+                #endif
                 store.recordUse(id: id, inApp: bundleID)
                 dismissPanel()
             } else {
@@ -795,7 +846,7 @@ public final class AppModel {
 
         case .copy:
             clipboard.ignoreNextChange()
-            inserter.writeToPasteboard(payload)
+            inserter.writeToPasteboard(payload, plainOnly: false)
             store.recordUse(id: id, inApp: bundleID)
             dismissPanel()
             show(Toast(text: "Copied", symbol: "doc.on.clipboard", tone: .success,
@@ -824,7 +875,7 @@ public final class AppModel {
     }
 
     private func offerAccessibilityOrConfirmCopy() {
-        if Inserter.hasAccessibility || !settings.autoPaste {
+        if services.hasAccessibility() || !settings.autoPaste {
             show(Toast(text: "Copied", symbol: "doc.on.clipboard", tone: .success,
                        detail: "Press ⌘V wherever you need it"))
         } else {
@@ -833,13 +884,14 @@ public final class AppModel {
             // Ask once per launch, and only after it would have helped.
             if !accessibilityPromptShown {
                 accessibilityPromptShown = true
-                Inserter.requestAccessibility()
+                services.requestAccessibility()
             }
         }
     }
 
     // MARK: - Dragging
 
+    #if canImport(AppKit)
     /// The provider behind a dragged row. Files drag as files; snippets drag as their
     /// rendered text, with formatting when they have it. Locked items refuse to drag,
     /// which is the same rule the insert path follows.
@@ -852,7 +904,9 @@ public final class AppModel {
         }
         return DragProvider.make(for: payload, title: snapshot.title, itemID: id)
     }
+    #endif
 
+    #if canImport(AppKit)
     /// A drag that carries the row's identity but none of its contents.
     ///
     /// For a locked item, and for anything whose payload cannot be built. Refusing to
@@ -864,6 +918,7 @@ public final class AppModel {
         provider.registerSummonID(id, as: SummonDragType.item)
         return provider
     }
+    #endif
 
     // MARK: - Vault
 
@@ -965,6 +1020,7 @@ public final class AppModel {
     /// starting a countdown — and the README already claimed the key was discarded on
     /// sleep, which until now it was not.
     private func startLockOnAwayObservers() {
+        #if canImport(AppKit)
         let workspace = NSWorkspace.shared.notificationCenter
         for name in [NSWorkspace.willSleepNotification, NSWorkspace.sessionDidResignActiveNotification] {
             workspace.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
@@ -978,6 +1034,7 @@ public final class AppModel {
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.lockIfUnlocked() }
         }
+        #endif
     }
 
     /// Locks without a toast: nobody is looking at the screen when this fires.
@@ -1013,11 +1070,18 @@ public final class AppModel {
         let pinned = store.snapshots.first { $0.id == id }?.isPinned ?? false
         show(Toast(text: pinned ? "Pinned" : "Unpinned", symbol: pinned ? "pin.fill" : "pin.slash", tone: .neutral))
     }
-
+    /// Shows the item's file in the file manager.
+    ///
+    /// The method stays on both platforms and its body does not: six views offer this
+    /// and guarding each of them would put the platform test in the UI rather than
+    /// behind it. iOS has no Finder to reveal into — a Files-app equivalent is a
+    /// question for the companion, not a gap to paper over here.
     public func revealInFinder(_ id: UUID) {
+        #if canImport(AppKit)
         guard let item = store.item(id: id), let blob = item.storedBlob,
-              let url = try? store.files.materialize(blob, itemID: id, key: vault.currentKey) else { return }
+              let url = try? store.materialize(blob, itemID: id, key: vault.currentKey) else { return }
         NSWorkspace.shared.activateFileViewerSelecting([url])
+        #endif
     }
 
     public func deleteItem(_ id: UUID) {
@@ -1128,6 +1192,10 @@ public final class AppModel {
     /// that closes the moment you look away, which is the wrong place to be typing a
     /// PIN — and a panel arriving unbidden over the window you are working in is
     /// startling regardless of what it wants.
+    /// Change the secret from a settings screen, which on a phone is the only place
+    /// it can be done — there is no Settings window to open.
+    public func beginChangeSecret() { presentLockSheet(.change) }
+
     private func presentLockSheet(_ purpose: LockSheet.Purpose) {
         dismissPanel()
         showMainWindowHandler?()
@@ -1239,6 +1307,35 @@ public final class AppModel {
     /// This used to be its own three lines, which drifted: it dropped the key but left
     /// the decrypted scratch copies on disk and the decoded thumbnails in memory. The
     /// one lock a person asks for explicitly was the one that protected least.
+    /// Seals the whole library, or unseals what only this setting sealed.
+    ///
+    /// Needs the vault open, like every other re-keying, so a locked vault asks for
+    /// the secret first and comes back here. The warning on the way in is the honest
+    /// one: sealing from now on cannot recall a copy that already synced as plaintext.
+    public func setEncryptEverything(_ on: Bool) {
+        guard vault.isConfigured else {
+            presentLockSheet(.create)
+            return
+        }
+        guard vault.isUnlocked else {
+            presentLockSheet(.unlock(reason: on ? "to encrypt your whole library"
+                                                : "to decrypt the items only that setting sealed"))
+            return
+        }
+        do {
+            let changed = try store.setEncryptEverything(on)
+            settings.encryptEverything = on
+            runSearch()
+            show(Toast(text: on ? "Everything is encrypted" : "Only marked items stay encrypted",
+                       symbol: on ? "lock.fill" : "lock.open.fill",
+                       tone: .success,
+                       detail: changed == 1 ? "1 item" : "\(changed) items"))
+        } catch {
+            show(Toast(text: "Couldn’t change that", symbol: "exclamationmark.triangle",
+                       tone: .danger, detail: error.localizedDescription))
+        }
+    }
+
     public func lockVaultNow() {
         lockVault()
     }
@@ -1281,15 +1378,12 @@ public final class AppModel {
 
     public func quickSaveSelection() {
         Task {
-            let capture = SelectionCapture(inserter: inserter) { [weak self] in
-                self?.clipboard.ignoreNextChange()
-            }
-            let selection = await capture.capture()
+            let selection = await services.captureSelection()
             let created = await importer.importSelection(selection)
             runSearch()
             if created.isEmpty {
                 show(Toast(text: "Nothing selected to save", symbol: "questionmark.circle", tone: .warning,
-                           detail: "Select text or files, then press \(settings.quickSaveHotKey.displayString)"))
+                           detail: quickSaveShortcutLabel.map { "Select text or files, then press \($0)" }))
             } else if created.count == 1 {
                 show(Toast(text: "Saved “\(created[0].title)”", symbol: "sparkles", tone: .success))
             } else {
@@ -1298,7 +1392,7 @@ public final class AppModel {
         }
     }
 
-    public func saveClipboardEntry(_ entry: ClipboardMonitor.Entry) {
+    public func saveClipboardEntry(_ entry: ClipboardEntry) {
         Task {
             if let item = await importer.importClipboardEntry(entry) {
                 runSearch()
@@ -1313,6 +1407,80 @@ public final class AppModel {
             return
         }
         saveClipboardEntry(entry)
+    }
+
+    /// Files chosen in the system picker on iOS.
+    ///
+    /// Unlike a drop, these arrive outside the app's sandbox and have to be opened
+    /// through a security-scoped claim — without it every read fails with a
+    /// permission error that looks, from the toast, exactly like a corrupt file.
+    public func importPickedFiles(_ urls: [URL], into folder: SummonFolder? = nil) {
+        Task {
+            var opened: [URL] = []
+            var scoped: [URL] = []
+            for url in urls {
+                if url.startAccessingSecurityScopedResource() { scoped.append(url) }
+                opened.append(url)
+            }
+            defer { scoped.forEach { $0.stopAccessingSecurityScopedResource() } }
+            let created = await importer.importFiles(opened, into: folder)
+            runSearch()
+            if created.isEmpty {
+                show(Toast(text: urls.count == 1 ? "Couldn’t add that file" : "Couldn’t add those files",
+                           symbol: "exclamationmark.triangle", tone: .danger))
+            } else if created.count == 1 {
+                show(Toast(text: "Saved “\(created[0].title)”", symbol: "sparkles", tone: .success))
+            } else {
+                show(Toast(text: "Saved \(created.count) items", symbol: "sparkles", tone: .success))
+            }
+        }
+    }
+
+    /// An image picked from Photos.
+    public func importImageData(_ data: Data, into folder: SummonFolder? = nil) async {
+        guard let item = await importer.importImage(data, into: folder) else {
+            show(Toast(text: "Couldn’t add that photo", symbol: "photo", tone: .danger))
+            return
+        }
+        runSearch()
+        show(Toast(text: "Saved “\(item.title)”", symbol: "sparkles", tone: .success))
+    }
+
+    /// The pasteboard's image, if it has one. Platform-shaped, and small enough to
+    /// keep here rather than widen `InsertionService` for one caller.
+    private func pasteboardImageData() -> Data? {
+        #if canImport(AppKit)
+        NSPasteboard.general.data(forType: .png) ?? NSPasteboard.general.data(forType: .tiff)
+        #elseif canImport(UIKit)
+        UIPasteboard.general.image?.pngData()
+        #else
+        nil
+        #endif
+    }
+
+    /// Whatever is on the pasteboard right now.
+    ///
+    /// The phone's answer to clipboard history, which it cannot have: reading the
+    /// pasteboard is a deliberate act here, prompted by a menu item, rather than a
+    /// background watch that would ask permission on every launch.
+    public func saveClipboard() async {
+        let board = services.insertion
+        if let image = pasteboardImageData() {
+            await importImageData(image)
+            return
+        }
+        let text = board.currentClipboardText()
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            show(Toast(text: "Nothing copied", symbol: "clipboard", tone: .warning,
+                       detail: "Copy something first, then try again"))
+            return
+        }
+        guard let item = await importer.importText(text, rtf: nil) else {
+            show(Toast(text: "Couldn’t save that", symbol: "exclamationmark.triangle", tone: .danger))
+            return
+        }
+        runSearch()
+        show(Toast(text: "Saved “\(item.title)”", symbol: "sparkles", tone: .success))
     }
 
     public func importDroppedFiles(_ urls: [URL], into folder: SummonFolder? = nil) {
@@ -1460,17 +1628,23 @@ public final class AppModel {
         if info.hasItemsConforming(to: [.fileURL]) {
             let providers = info.itemProviders(for: [.fileURL])
             Task { @MainActor in
+                #if canImport(AppKit)
                 let urls = await FolderDropDelegate.urls(from: providers)
+                #else
+                let urls: [URL] = []
+                #endif
                 guard !urls.isEmpty else { return }
                 importDroppedFiles(urls, into: folder)
             }
             return
         }
+        #if canImport(AppKit)
         let providers = info.itemProviders(for: [.text])
         Task { @MainActor in
             guard let text = await FolderDropDelegate.text(from: providers) else { return }
             acceptDroppedText(text, into: folder)
         }
+        #endif
     }
 
     // MARK: - Creation actions
@@ -1531,6 +1705,41 @@ public final class AppModel {
         runSearch()
     }
 
+    /// Clears out blank snippets nobody is coming back to.
+    ///
+    /// `discardIfEmpty` runs when the editor closes, which covers the ordinary case.
+    /// It cannot cover a device that never opened the editor — the phone created a
+    /// blank on every "New Snippet" tap before the detail view learned to appear — or
+    /// a crash mid-edit, and a blank row syncs to every other device.
+    ///
+    /// The age guard is the important part: an item being written right now on another
+    /// device is untitled and empty until it is committed, and sweeping it from here
+    /// would delete it under the person typing. An hour is far longer than that window
+    /// and far shorter than "forever".
+    @discardableResult
+    public func discardAbandonedBlanks(olderThan age: TimeInterval = 3600) -> Int {
+        let cutoff = Date().addingTimeInterval(-age)
+        var removed = 0
+        for snapshot in store.snapshots where snapshot.kind.isTextual {
+            guard let item = store.item(id: snapshot.id), item.updatedAt < cutoff else { continue }
+            let title = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            let body = (store.resolveBodyText(item, key: vault.currentKey) ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard title.isEmpty || title == "Untitled", body.isEmpty else { continue }
+            // A sealed item is never blank as far as this is concerned: its body is
+            // unreadable while locked, and deleting it would be deleting something
+            // whose contents nobody here can see.
+            guard !snapshot.isLocked, !item.isEffectivelySensitive else { continue }
+            store.delete(item)
+            removed += 1
+        }
+        if removed > 0 {
+            runSearch()
+            Log.app.info("Removed \(removed) abandoned blank snippet(s).")
+        }
+        return removed
+    }
+
     public func beginNewFolder() {
         showMainWindowHandler?()
         let parent: SummonFolder? = {
@@ -1544,7 +1753,19 @@ public final class AppModel {
 
     /// The one place a file chooser is opened, so import behaves identically
     /// whether it arrives by drag, menu, Services, or hotkey.
+    ///
+    /// iOS wants `fileImporter` rather than a modal panel, which is a presentation
+    /// decision for the companion's UI rather than something to decide here.
+    /// Set by the iOS root, which owns the file importer. Nil on the Mac, which has a
+    /// panel it can run itself.
+    @ObservationIgnored public var presentImportHandler: ((SummonFolder?) -> Void)?
+
     public func presentImportPanel(into folder: SummonFolder? = nil) {
+        if let presentImportHandler {
+            presentImportHandler(folder)
+            return
+        }
+        #if canImport(AppKit)
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = true
         panel.canChooseDirectories = true
@@ -1553,11 +1774,7 @@ public final class AppModel {
         panel.message = "Choose files to add to your library. Summon copies them, so moving the originals later is safe."
         guard panel.runModal() == .OK else { return }
         importDroppedFiles(panel.urls, into: folder)
-    }
-
-    public func seedStarterLibraryIfEmpty() async {
-        await StarterLibrary.seed(into: store, importer: importer)
-        runSearch()
+        #endif
     }
 
     // MARK: - Toasts
@@ -1575,6 +1792,8 @@ public final class AppModel {
     // MARK: - Preview resolution
 
     public struct PreviewData {
+        public init() {}
+
         public var body: String?
         public var fileURL: URL?
         public var thumbnailURL: URL?
@@ -1594,8 +1813,8 @@ public final class AppModel {
             data.body = store.resolveBodyText(item, key: key)
         } else if let blob = item.storedBlob {
             data.fileURL = blob.isSealed
-                ? try? store.files.materialize(blob, itemID: id, key: key)
-                : store.files.location(of: blob)
+                ? try? store.materialize(blob, itemID: id, key: key)
+                : try? store.materialize(blob, itemID: id, key: nil)
             if data.body == nil {
                 data.body = store.resolveExtractedText(item, key: key)
             }

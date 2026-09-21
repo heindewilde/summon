@@ -9,11 +9,17 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-DEMO="$HOME/Library/Application Support/Summon-Demo"
+# The demo library follows the real one into the App Group container.
+GROUP="JV4MVRB77Q.group.com.heindewilde.summon"
+DEMO="$HOME/Library/Group Containers/$GROUP/Summon-Demo"
+# The vault's device-local files sit outside the group container — and for the
+# sandboxed build, "outside" means inside the app's own container.
+DEMO_DEVICE="$HOME/Library/Application Support/Summon-Demo"
+DEMO_SANDBOXED="$HOME/Library/Containers/com.heindewilde.summon/Data/Library/Application Support/Summon-Demo"
 
 if [[ "${1:-}" != "--keep" ]]; then
   echo "==> Resetting demo library"
-  rm -rf "$DEMO"
+  rm -rf "$DEMO" "$DEMO_DEVICE" "$DEMO_SANDBOXED"
 fi
 
 # Always rebuild. Building only when the binary is missing means editing a source

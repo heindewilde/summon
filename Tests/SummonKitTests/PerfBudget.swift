@@ -66,6 +66,27 @@ enum PerfBudget {
         ProcessInfo.processInfo.environment["CI"] != nil
     }
 
+    /// Neither is a machine running the rest of the suite alongside you. Swift Testing
+    /// runs tests in parallel in-process, so a wall-clock budget in a full `swift test`
+    /// competes with everything else — including the 14-second Vision extraction. The
+    /// index build measures 13.5ms alone and 33.7ms that way, against a 25ms budget.
+    ///
+    /// Asserting on the minimum does not rescue it. That estimator assumes some sample
+    /// lands in a quiet slot, and under sustained contention none of them does: every
+    /// iteration is slow, so the floor itself moves. The measurement is not noisy —
+    /// it is measuring the wrong machine.
+    ///
+    /// So the wall-clock budgets assert only in their own pass, `Scripts/perf.sh`,
+    /// where `--filter` leaves nothing else running. This is the same call as the one
+    /// above, for the same reason: a budget that fails for reasons unrelated to the
+    /// code gets raised until it means nothing.
+    static var isIsolatedRun: Bool {
+        ProcessInfo.processInfo.environment["SUMMON_PERF_ISOLATED"] == "1"
+    }
+
+    /// Wall-clock is only worth asserting on a machine doing nothing else.
+    static var measuresWallClock: Bool { isIsolatedRun && !isSharedRunner }
+
     /// These numeric loops run 5–20× slower unoptimised. A budget that passes in debug
     /// because it was calibrated for debug asserts nothing at all, so the suite only
     /// runs in release: `swift test -c release`.
@@ -76,12 +97,12 @@ enum PerfBudget {
     }
 }
 
-@Suite("Performance budgets",
+@Suite("Performance budgets", .serialized,
        .enabled(if: PerfBudget.isOptimised, "budgets are asserted in release: swift test -c release"))
 struct PerfBudgetTests {
 
     @Test("A keystroke re-ranks 2,000 items in under 4ms",
-          .enabled(if: !PerfBudget.isSharedRunner, "wall-clock is not measurable on a shared runner"))
+          .enabled(if: PerfBudget.measuresWallClock, "wall-clock needs a pass of its own: Scripts/perf.sh"))
     @MainActor func keystroke() {
         let items = PerfFixture.library(2_000)
         let engine = SearchEngine()
@@ -96,7 +117,7 @@ struct PerfBudgetTests {
     }
 
     @Test("The empty-query path — which runs on every panel open — stays under 4ms",
-          .enabled(if: !PerfBudget.isSharedRunner, "wall-clock is not measurable on a shared runner"))
+          .enabled(if: PerfBudget.measuresWallClock, "wall-clock needs a pass of its own: Scripts/perf.sh"))
     @MainActor func emptyQuery() {
         let items = PerfFixture.library(2_000)
         let engine = SearchEngine()
@@ -110,7 +131,7 @@ struct PerfBudgetTests {
     }
 
     @Test("Building the index for 2,000 items stays under 25ms",
-          .enabled(if: !PerfBudget.isSharedRunner, "wall-clock is not measurable on a shared runner"))
+          .enabled(if: PerfBudget.measuresWallClock, "wall-clock needs a pass of its own: Scripts/perf.sh"))
     func indexBuild() {
         let items = PerfFixture.library(2_000)
         // Inside the loop. Building it outside was the flaw that let the per-keystroke

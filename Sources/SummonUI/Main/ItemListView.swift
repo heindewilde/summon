@@ -1,4 +1,3 @@
-import AppKit
 import SwiftUI
 import SummonKit
 
@@ -34,8 +33,10 @@ public struct ItemListView: View {
         // which is where a new item would go anyway. The delegate refuses Summon's
         // own drags: a row dragged over the empty space below the list still carries
         // its contents, and a content-based handler would duplicate it.
+        #if canImport(AppKit)
         .onDrop(of: [.fileURL, .text, SummonDragType.item, SummonDragType.folder],
                 delegate: LibraryDropDelegate(model: model, folder: { currentFolder }))
+        #endif
     }
 
     /// Whether rows can be dragged into a hand-made order right now.
@@ -152,7 +153,9 @@ public struct ItemListView: View {
         case .pinned: "Pin the handful of things you reach for daily and they’ll be first in the panel, before you type anything."
         case .recents: "Once you start summoning items, the ones you use most will collect here."
         case .locked: "Mark an item or a folder as sensitive to encrypt it behind your PIN, passphrase or Touch ID."
-        default: "Drop files here, paste from the clipboard tray, or press \(model.settings.quickSaveHotKey.displayString) anywhere to save what’s selected."
+        default: model.quickSaveShortcutLabel.map {
+            "Drop files here, paste from the clipboard tray, or press \($0) anywhere to save what’s selected."
+        } ?? "Drop files here, or paste from the clipboard tray."
         }
     }
 }
@@ -166,11 +169,16 @@ struct ItemRow: View {
     /// The row height `LibraryRow` draws, which the drop delegate needs in order to
     /// turn a pointer position into "above" or "below". Read from the token rather
     /// than retyped, so a density change cannot silently break drop hit-testing.
-    static let height: CGFloat = Theme.rowRoomy
+    static let height: CGFloat = LibraryRow.Density.platformDefault == .touch
+        ? Theme.rowTouch : Theme.rowRoomy
 
     private var dropEdge: VerticalAlignment? {
+        #if canImport(AppKit)
         guard let target = model.itemDropTarget, target.itemID == item.id else { return nil }
         return target.placeAfter ? .bottom : .top
+        #else
+        return nil
+        #endif
     }
 
     var body: some View {
@@ -178,7 +186,7 @@ struct ItemRow: View {
         // grown three heights and three type scales; now there is one component.
         LibraryRow(item: item,
                    state: model.mainSelection == item.id ? .selected : .idle,
-                   density: .roomy,
+                   density: LibraryRow.Density.platformDefault == .touch ? .touch : .roomy,
                    onCopy: { model.use(item.id, style: .copy) })
             .contentShape(.rect)
             // Double-click copies. Registered before the single tap so the single
@@ -195,8 +203,10 @@ struct ItemRow: View {
             .overlay(alignment: .top) { if dropEdge == .top { DropLine() } }
             .overlay(alignment: .bottom) { if dropEdge == .bottom { DropLine() } }
             .contextMenu { ItemContextMenu(model: model, item: item) }
+            #if canImport(AppKit)
             .onDrag { model.dragProvider(for: item.id) ?? model.identityOnlyDragProvider(for: item.id) }
             .modifier(ReorderDropTarget(model: model, item: item, enabled: canReorder))
+            #endif
     }
 }
 
@@ -208,6 +218,7 @@ private struct ReorderDropTarget: ViewModifier {
     let enabled: Bool
 
     func body(content: Content) -> some View {
+        #if canImport(AppKit)
         if enabled {
             content.onDrop(of: [SummonDragType.item],
                            delegate: ItemReorderDropDelegate(item: item, model: model,
@@ -215,6 +226,9 @@ private struct ReorderDropTarget: ViewModifier {
         } else {
             content
         }
+        #else
+        content
+        #endif
     }
 }
 
@@ -229,8 +243,8 @@ struct ItemCard: View {
                 RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous)
                     .fill(Theme.color(for: item.kind).opacity(0.10))
                 if !item.isLocked, let url = model.thumbnailURL(for: item.id),
-                   let image = NSImage(contentsOf: url) {
-                    Image(nsImage: image)
+                   let image = PanelPreview.decode(url) {
+                    Image(decorative: image, scale: 1)
                         .resizable()
                         .aspectRatio(contentMode: .fill)
                         .clipShape(.rect(cornerRadius: Theme.Radius.small, style: .continuous))
@@ -268,7 +282,9 @@ struct ItemCard: View {
                 .strokeBorder(isSelected ? Theme.accent : Theme.hairline, lineWidth: 1)
         )
         .contextMenu { ItemContextMenu(model: model, item: item) }
+        #if canImport(AppKit)
         .onDrag { model.dragProvider(for: item.id) ?? model.identityOnlyDragProvider(for: item.id) }
+        #endif
     }
 }
 
@@ -333,7 +349,7 @@ struct ClipboardListView: View {
 /// name — the two are genuinely different shapes, not a duplication to fold together.
 private struct ClipboardEntryRow: View {
     @Bindable var model: AppModel
-    let entry: ClipboardMonitor.Entry
+    let entry: ClipboardEntry
 
     @State private var hovering = false
 

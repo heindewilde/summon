@@ -1,6 +1,8 @@
-import AppKit
 import Foundation
 import UniformTypeIdentifiers
+#if canImport(AppKit)
+import AppKit
+#endif
 
 /// The types Summon uses to recognise its own drags.
 ///
@@ -21,6 +23,22 @@ public enum SummonDragType {
     public static let all: [UTType] = [item, folder]
 }
 
+public extension NSItemProvider {
+    /// Tags a provider with the row it came from, without disturbing the content
+    /// representations an external drop relies on.
+    func registerSummonID(_ id: UUID, as type: UTType) {
+        let data = Data(id.uuidString.utf8)
+        registerDataRepresentation(for: type) { completion in
+            completion(data, nil)
+            return nil
+        }
+    }
+}
+
+#if canImport(AppKit)
+// The pasteboard half. Conditional rather than moved to SummonKitMac because the drop
+// delegates that call it live in views that iPadOS will want too, and deciding their
+// shape means designing the iOS drag story — which is Phase 6's job, not this split's.
 public extension SummonDragType {
     /// Writes a row's identity onto a pasteboard, and reads it back.
     ///
@@ -41,15 +59,4 @@ public extension SummonDragType {
         return UUID(uuidString: String(decoding: data, as: UTF8.self))
     }
 }
-
-public extension NSItemProvider {
-    /// Tags a provider with the row it came from, without disturbing the content
-    /// representations an external drop relies on.
-    func registerSummonID(_ id: UUID, as type: UTType) {
-        let data = Data(id.uuidString.utf8)
-        registerDataRepresentation(for: type) { completion in
-            completion(data, nil)
-            return nil
-        }
-    }
-}
+#endif

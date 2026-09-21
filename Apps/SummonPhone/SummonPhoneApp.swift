@@ -1,0 +1,110 @@
+import SummonKit
+import SummonUI
+import SummonUIPhone
+import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#endif
+
+/// The iOS companion.
+///
+/// Deliberately thin. Everything it draws — the sidebar, the list, the detail pane,
+/// the design system — is the same code the Mac draws, and everything it knows how to
+/// do comes from `PlatformServices.iOS()`. If this file grows much, something that
+/// should have been shared has been rewritten instead.
+/// Registers for the silent pushes CloudKit sends when another device changes the
+/// library.
+///
+/// Without this, sync is one-way in practice: a device only discovers the other's
+/// changes when it next launches, because NSPersistentCloudKitContainer is told to
+/// fetch by a remote notification and nothing else. The app never shows a
+/// notification — the payload is the signal, and the mirroring machinery handles it
+/// once the app is registered.
+final class PushRegistrar: NSObject, UIApplicationDelegate {
+    /// What registration did, for Settings to show.
+    ///
+    /// Worth surfacing because the failure is invisible: the entitlement was spelled
+    /// the macOS way for a while, which iOS drops silently at signing time, and the
+    /// only symptom was that changes from the other device arrived when you next
+    /// opened the app rather than while you watched.
+    static let statusKey = "sync.pushStatus"
+
+    func application(_ application: UIApplication,
+                     didFinishLaunchingWithOptions options: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        application.registerForRemoteNotifications()
+        return true
+    }
+
+    func application(_ application: UIApplication,
+                     didRegisterForRemoteNotificationsWithDeviceToken token: Data) {
+        UserDefaults.standard.set("Registered", forKey: Self.statusKey)
+        Log.app.info("Registered for the pushes CloudKit sends when another device changes the library.")
+    }
+
+    func application(_ application: UIApplication,
+                     didFailToRegisterForRemoteNotificationsWithError error: any Error) {
+        UserDefaults.standard.set("Unavailable — changes arrive when you open Summon",
+                                  forKey: Self.statusKey)
+        Log.app.warning("Push registration failed, so sync will only catch up on launch: \(error.localizedDescription, privacy: .public)")
+    }
+}
+
+@main
+struct SummonPhoneApp: App {
+    @UIApplicationDelegateAdaptor(PushRegistrar.self) private var pushRegistrar
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var model: AppModel?
+    @State private var failure: String?
+
+    var body: some Scene {
+        WindowGroup {
+            Group {
+                if let model, !model.settings.hasCompletedOnboarding {
+                    WelcomeView(model: model) {
+                        model.settings.hasCompletedOnboarding = true
+                    }
+                } else if let model {
+                    #if os(iOS)
+                    if UIDevice.current.userInterfaceIdiom == .phone {
+                        PhoneHomeView(model: model)
+                    } else {
+                        PadRootView(model: model)
+                    }
+                    #else
+                    MainWindowView(model: model)
+                    #endif
+                } else if let failure {
+                    // The same posture the Mac takes: a library that will not open is
+                    // said out loud rather than logged and shrugged at.
+                    ContentUnavailableView("Summon couldn't open your library",
+                                           systemImage: "exclamationmark.triangle",
+                                           description: Text(failure))
+                } else {
+                    ProgressView()
+                }
+            }
+            .task {
+                guard model == nil, failure == nil else { return }
+                do {
+                    // Timed because this is the whole of the launch as far as anyone
+                    // waiting for it is concerned: opening the store, migrating what
+                    // needs it, and building the first ranking.
+                    let started = ContinuousClock.now
+                    let opened = try AppModel(services: .iOS())
+                    opened.discardAbandonedBlanks()
+                    model = opened
+                    Log.app.info("Library opened in \(started.duration(to: .now).milliseconds, privacy: .public) ms")
+                } catch {
+                    failure = error.localizedDescription
+                }
+            }
+            // A push can be missed — the phone was off, or the notification was
+            // dropped — so coming back to the app is its own cue to catch up.
+            .onChange(of: scenePhase) { _, phase in
+                guard phase == .active, let model else { return }
+                model.store.refresh()
+                model.runSearch()
+            }
+        }
+    }
+}

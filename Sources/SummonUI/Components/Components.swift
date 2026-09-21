@@ -1,4 +1,6 @@
+#if canImport(AppKit)
 import AppKit
+#endif
 import SwiftUI
 import SummonKit
 
@@ -286,12 +288,12 @@ public struct ThumbnailView: View {
 
     /// Seeded synchronously from the cache, so an already-decoded thumbnail paints on
     /// the first frame and never flickers through the glyph placeholder.
-    @State private var image: NSImage?
+    @State private var image: CGImage?
 
     public var body: some View {
         Group {
             if !isLocked, let image {
-                Image(nsImage: image)
+                Image(decorative: image, scale: 1)
                     .resizable()
                     .aspectRatio(contentMode: .fill)
                     .frame(width: size, height: size)
@@ -337,12 +339,61 @@ public struct LockPill: View {
 /// The panel had one of these all along and the library window had nothing — it took
 /// the system's opaque window background, which is why the accent and the bloom
 /// arrived everywhere except the surface people spend the most time in.
+/// The blur behind a surface, named by what the surface *is* rather than by AppKit's
+/// taxonomy.
+///
+/// `GlassBackground` is drawn by the library window and by Settings as well as by the
+/// panel and the menu bar, so a shared component was exposing
+/// `SurfaceMaterial` in its public initialiser — which is how a design
+/// system ends up platform-bound one parameter at a time. These five are the ones the
+/// app actually asks for.
+public enum SurfaceMaterial: Sendable {
+    case underWindowBackground
+    case headerView
+    case sidebar
+    case popover
+    case hudWindow
+
+    #if canImport(AppKit)
+    var appKit: NSVisualEffectView.Material {
+        switch self {
+        case .underWindowBackground: .underWindowBackground
+        case .headerView: .headerView
+        case .sidebar: .sidebar
+        case .popover: .popover
+        case .hudWindow: .hudWindow
+        }
+    }
+    #else
+    /// iOS has no material taxonomy of this shape — SwiftUI offers thickness, so the
+    /// mapping is by how much of the surface behind should show through.
+    var swiftUI: Material {
+        switch self {
+        case .underWindowBackground, .sidebar: .regularMaterial
+        case .headerView: .thinMaterial
+        case .popover, .hudWindow: .ultraThinMaterial
+        }
+    }
+    #endif
+}
+
+public enum SurfaceBlending: Sendable {
+    case behindWindow
+    case withinWindow
+
+    #if canImport(AppKit)
+    var appKit: NSVisualEffectView.BlendingMode {
+        self == .behindWindow ? .behindWindow : .withinWindow
+    }
+    #endif
+}
+
 public struct GlassBackground: View {
-    public var material: NSVisualEffectView.Material
+    public var material: SurfaceMaterial
     public var bloom: Double
     public var tint: Color
 
-    public init(material: NSVisualEffectView.Material = .underWindowBackground,
+    public init(material: SurfaceMaterial = .underWindowBackground,
                 bloom: Double = 1, tint: Color = Theme.chrome) {
         self.material = material
         self.bloom = bloom
@@ -351,10 +402,18 @@ public struct GlassBackground: View {
 
     public var body: some View {
         ZStack {
+            #if canImport(AppKit)
             VisualEffectBackground(material: material, blending: .behindWindow)
             LinearGradient(colors: [tint.opacity(0.88), tint],
                            startPoint: .top, endPoint: .bottom)
-            if bloom > 0 { Bloom(intensity: bloom) }
+            #else
+            // iOS has no behind-window blending to sample, so the Mac's stack of a
+            // material *and* a tint *and* a bloom compounded into a flat lavender
+            // wash. The system's grouped background is the right ground here; the
+            // bloom then reads as a glow on it rather than as the colour of the app.
+            Color(uiColor: .systemGroupedBackground)
+            #endif
+            if bloom > 0 { Bloom(intensity: bloom * 0.6) }
         }
         .ignoresSafeArea()
     }
@@ -381,41 +440,51 @@ public struct PanelBackground: View {
 }
 
 public struct VisualEffectBackground: View {
-    public var material: NSVisualEffectView.Material
-    public var blending: NSVisualEffectView.BlendingMode
+    public var material: SurfaceMaterial
+    public var blending: SurfaceBlending
     @Environment(\.isSnapshotting) private var isSnapshotting
 
-    public init(material: NSVisualEffectView.Material, blending: NSVisualEffectView.BlendingMode) {
+    public init(material: SurfaceMaterial, blending: SurfaceBlending) {
         self.material = material
         self.blending = blending
     }
 
     public var body: some View {
         if isSnapshotting {
-            Color(nsColor: .dyn(light: .srgb(0.97, 0.97, 0.98), dark: .srgb(0.15, 0.15, 0.17)))
+            Color(platform: .dyn(light: .srgb(0.97, 0.97, 0.98), dark: .srgb(0.15, 0.15, 0.17)))
         } else {
+            #if canImport(AppKit)
             VisualEffectRepresentable(material: material, blending: blending)
+            #else
+            // UIKit has no NSVisualEffectView equivalent that takes a material and a
+            // blending mode; SwiftUI's own material is the closest thing and is what
+            // an iOS surface would reach for anyway.
+            Rectangle().fill(material.swiftUI)
+            #endif
         }
     }
 }
 
+#if canImport(AppKit)
 struct VisualEffectRepresentable: NSViewRepresentable {
-    var material: NSVisualEffectView.Material
-    var blending: NSVisualEffectView.BlendingMode
+    var material: SurfaceMaterial
+    var blending: SurfaceBlending
 
     func makeNSView(context: Context) -> NSVisualEffectView {
         let view = NSVisualEffectView()
-        view.material = material
-        view.blendingMode = blending
+        view.material = material.appKit
+        view.blendingMode = blending.appKit
         view.state = .active
         return view
     }
 
     func updateNSView(_ view: NSVisualEffectView, context: Context) {
-        view.material = material
-        view.blendingMode = blending
+        view.material = material.appKit
+        view.blendingMode = blending.appKit
     }
 }
+#endif
+
 
 
 /// Renders snippet text with `{{placeholders}}` picked out, so it is obvious at a
@@ -480,5 +549,40 @@ public struct PlaceholderHighlightedText: View {
         if inToken { buffer += token; token = "" }
         flushLiteral()
         return result
+    }
+}
+
+/// The system's own glass, where the platform has it.
+///
+/// `GlassBackground` is the app's ground — a blurred backdrop that fills a window.
+/// This is the other half: a raised element that floats *above* that ground, which on
+/// iOS 26 is a material the system draws better than any hand-rolled stack of blurs
+/// and gradients. On macOS it falls back to the app's own chrome, so a call site can
+/// ask for glass without asking which platform it is on.
+public struct SummonGlass: ViewModifier {
+    public var shape: AnyShape
+    public var tinted: Bool
+
+    public init(shape: some Shape = Capsule(), tinted: Bool = false) {
+        self.shape = AnyShape(shape)
+        self.tinted = tinted
+    }
+
+    public func body(content: Content) -> some View {
+        #if canImport(AppKit)
+        content
+            .background(Theme.surfaceRaised, in: shape)
+            .overlay(shape.stroke(Theme.hairline, lineWidth: 1))
+        #else
+        content.glassEffect(tinted ? .regular.tint(Theme.accent.opacity(0.5)) : .regular,
+                            in: shape)
+        #endif
+    }
+}
+
+public extension View {
+    /// Floats this above the ground on iOS 26's glass; a raised surface elsewhere.
+    func summonGlass(shape: some Shape = Capsule(), tinted: Bool = false) -> some View {
+        modifier(SummonGlass(shape: shape, tinted: tinted))
     }
 }

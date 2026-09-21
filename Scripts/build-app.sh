@@ -105,19 +105,22 @@ cat > "$CONTENTS/Info.plist" <<PLIST
 </plist>
 PLIST
 
-cat > "$DIST/Summon.entitlements" <<'ENT'
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>com.apple.security.app-sandbox</key><false/>
-    <key>com.apple.security.automation.apple-events</key><true/>
-    <!-- No keychain-access-groups: without an Apple Team ID prefix the kernel
-         rejects the entitlement outright and the app will not launch. That is why
-         Touch ID unlock needs a Developer ID; see Vault.biometricStorageAvailable. -->
-</dict>
-</plist>
-ENT
+# The same entitlements the Xcode target ships with, rather than a second copy that
+# can drift: this build exists to exercise the shipping configuration, sandbox and
+# all, with the runtime harness added on top.
+cp "$ROOT/Apps/SummonMac/SummonMac.entitlements" "$DIST/Summon.entitlements"
+
+# A sandboxed app with App Group, iCloud and keychain entitlements only launches if
+# the signature carries a provisioning profile that grants them. Xcode fetches one
+# when it builds the SummonMac target, so borrow that rather than managing a second.
+PROFILE="$(ls -t "$ROOT/.build/xcode/Build/Products/"*/Summon.app/Contents/embedded.provisionprofile 2>/dev/null | head -1)"
+if [[ -n "$PROFILE" ]]; then
+  cp "$PROFILE" "$CONTENTS/embedded.provisionprofile"
+  echo "==> Embedded provisioning profile"
+else
+  echo "    WARNING: no provisioning profile found. Build the SummonMac scheme in"
+  echo "    Xcode once (it fetches one), or this build will not launch."
+fi
 
 printf 'APPL????' > "$CONTENTS/PkgInfo"
 
@@ -125,8 +128,14 @@ printf 'APPL????' > "$CONTENTS/PkgInfo"
 # are bound to the code signature, and an ad-hoc signature is a hash of the binary,
 # so every rebuild looks like a new app and silently loses the permission. Signing
 # with a certificate keeps the grant across rebuilds.
-# Create one with Scripts/create-signing-identity.sh.
-SIGN_IDENTITY="${SUMMON_SIGN_IDENTITY:-Summon Local Dev}"
+#
+# The Apple Development identity when there is one, because the Xcode build signs
+# with it too: two signatures on one bundle ID would each reset the other's
+# Accessibility grant. "Summon Local Dev" (Scripts/create-signing-identity.sh) is
+# the fallback for a machine with no Apple account.
+APPLE_DEV_IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null \
+  | sed -n 's/.*"\(Apple Development: [^"]*\)".*/\1/p' | head -1)"
+SIGN_IDENTITY="${SUMMON_SIGN_IDENTITY:-${APPLE_DEV_IDENTITY:-Summon Local Dev}}"
 
 # `-o runtime` is not optional for this app. Without the Hardened Runtime there is
 # no library validation and no restriction on task_for_pid, so any process running

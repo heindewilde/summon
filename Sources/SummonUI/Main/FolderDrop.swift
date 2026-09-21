@@ -1,3 +1,11 @@
+/// Drag and drop, which is macOS-only until the companion decides its own story.
+///
+/// AppKit and UIKit both do drag and drop, but not the same way: iOS reaches for
+/// `.dropDestination` and `Transferable` rather than `DropDelegate` and an
+/// `NSItemProvider` unpacked by hand. Porting this is designing that, and it belongs
+/// with the iOS UI work rather than with a pass over imports. Guarded rather than
+/// moved to SummonUIMac for the same reason — these views are ones iPadOS will want.
+#if canImport(AppKit)
 import AppKit
 import SummonKit
 import SwiftUI
@@ -270,3 +278,4 @@ public struct RootFolderDropDelegate: DropDelegate {
         return true
     }
 }
+#endif

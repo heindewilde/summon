@@ -1,0 +1,16 @@
+{
+  "_comment": "Pushed to both platform versions by Scripts/asc.py metadata. The prose lives here rather than in a web form so it can be reviewed in a diff. Apple's limits: name 30, subtitle 30, promotionalText 170, keywords 100, description 4000.",
+  "app": {
+    "name": "Summon – Fast Personal Library",
+    "subtitle": "Everything you reuse, fast",
+    "privacyPolicyUrl": "https://summon.technology/privacy"
+  },
+  "version": {
+    "description": "Summon holds the handful of things you reuse — the canned reply, the IBAN, the VAT number, the passport scan, the portfolio PDF — and gets one of them to you in about a second.\n\nOn the Mac, press ⌥Space in any app, type a few letters, press ↩, and it is pasted where your cursor already was. No window to find, no tab to switch to, no clipboard to babysit. On iPhone and iPad, tap an item and it is on the clipboard, ready to paste wherever you were going.\n\nBecause Summon holds less than a notes app, it can be much better at the one moment that matters.\n\nFAST\n• A keystroke re-ranks 2,000 items in about half a millisecond — measured by the test suite, not claimed\n• Results are ranked by what you actually reach for, and by what you have used in this app before\n• Fuzzy search that reaches inside PDFs and images, so a phrase on page four is one search away\n\nEVERYTHING IN ONE PLACE\n• Snippets, rich text, images, PDFs and whole files\n• Nested folders with their own icon and colour, tags that cut across them, pins for what you need most\n• Fill-in fields: “Hi {{first_name}}” turns into a small form. Dates, times and the clipboard fill themselves in\n\nON EVERY DEVICE\n• Your library syncs through your own iCloud — there is no Summon account and no Summon server\n• Save into Summon from any app's share sheet, or from Finder's Quick Actions\n• A widget of pinned items that copies on tap, plus Shortcuts, Siri and a Control Centre button\n• Spotlight finds your items — except the ones you have marked sensitive, which are never indexed\n\nPRIVATE BY DESIGN\n• No account, no analytics, no tracking, no ads\n• Mark anything sensitive and it is encrypted on your device with AES-GCM, under a key Apple never sees\n• A locked item stays findable by name and reveals nothing of its contents, its file, or the text inside a scan\n• Unlock with a PIN, a passphrase, Face ID or Touch ID\n• “Encrypt everything” applies the same protection to your whole library, including what syncs\n\nOPEN SOURCE\nEvery claim here can be checked: the source is on GitHub under the AGPL-3.0 licence.\n\nRequires macOS 26 or iOS 26.",
+    "keywords": "snippets,clipboard,paste,productivity,text,expander,shortcuts,templates,notes,files,pdf,private",
+    "promotionalText": "The reply you keep rewriting, the IBAN, the passport scan. One keystroke on the Mac, one tap on your phone, and it is on the clipboard where you need it.",
+    "marketingUrl": "https://summon.technology",
+    "supportUrl": "https://summon.technology/support",
+    "whatsNew": "The first release. Summon on Mac, iPhone and iPad, with your library syncing through your own iCloud."
+  }
+}

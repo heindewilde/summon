@@ -2,7 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    # The long-lived feature branch too: it carries the iOS app, four extensions and
+    # two archives, and until now nothing on a machine other than mine ever built it.
+    branches: [main, ios-companion]
   pull_request:
   workflow_dispatch:
 
@@ -31,3 +33,65 @@ jobs:
       # a budget calibrated against an unoptimised build asserts nothing.
       - name: Test
         run: swift test -c release
+
+      # The only check that actually proves the platform split. `swift test` compiles
+      # for the host, so an `#if os(iOS)` branch is never built by it and rots in
+      # silence — this caught .docFormat, which AppKit vends and UIKit does not, and
+      # a symbolic-traits case the two frameworks spell differently.
+      #
+      # No signing identity needed, so it runs on a stock runner.
+      - name: Build the libraries for iOS
+        run: |
+          for scheme in SummonKit SummonUI; do
+            echo "==> $scheme"
+            xcodebuild -scheme "$scheme" \
+              -destination 'generic/platform=iOS' \
+              build CODE_SIGNING_ALLOWED=NO | tail -5
+          done
+
+      # The app on top of them. Without this the libraries could stay green while the
+      # thing that uses them stopped building — and the app target is where an
+      # unavailable API or a missing conformance actually shows up.
+      - name: Build the iOS app
+        run: |
+          xcodebuild -project Summon.xcodeproj -scheme SummonPhone \
+            -destination 'generic/platform=iOS Simulator' \
+            build CODE_SIGNING_ALLOWED=NO | tail -5
+
+      # The App Store build of the Mac app. It links the same SummonMacApp as the
+      # development launcher above, but not the harness — so this is the only step
+      # that proves the shipped configuration still builds.
+      - name: Build the Mac app
+        run: |
+          xcodebuild -project Summon.xcodeproj -scheme SummonMac \
+            -destination 'generic/platform=macOS' \
+            build CODE_SIGNING_ALLOWED=NO | tail -5
+
+      # Archiving is where signing and entitlements are actually resolved, and the
+      # only place a missing privacy manifest or a stray capability shows up before
+      # an upload is rejected. Unsigned, so it needs no identity on the runner.
+      - name: Archive both apps
+        run: |
+          for scheme in SummonMac SummonPhone; do
+            destination=$([ "$scheme" = SummonMac ] && echo 'generic/platform=macOS' || echo 'generic/platform=iOS')
+            xcodebuild -project Summon.xcodeproj -scheme "$scheme" \
+              -destination "$destination" \
+              -archivePath "$RUNNER_TEMP/$scheme.xcarchive" \
+              CODE_SIGNING_ALLOWED=NO archive | tail -3
+          done
+
+      # Every bundle that ships needs one, including each extension; App Store Connect
+      # rejects the upload otherwise, which is a slow way to find out.
+      - name: Every shipping bundle carries a privacy manifest
+        run: |
+          missing=0
+          for app in "$RUNNER_TEMP"/*.xcarchive/Products/Applications/*.app; do
+            for bundle in "$app" "$app"/PlugIns/*.appex "$app"/Contents/PlugIns/*.appex; do
+              [ -d "$bundle" ] || continue
+              if ! find "$bundle" -maxdepth 3 -name PrivacyInfo.xcprivacy | grep -q .; then
+                echo "MISSING: $bundle"
+                missing=1
+              fi
+            done
+          done
+          exit $missing

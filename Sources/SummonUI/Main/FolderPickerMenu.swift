@@ -8,11 +8,16 @@ import SwiftUI
 /// branch names itself first, so a folder that has children is still a destination
 /// in its own right — hovering "Clients ▸" and clicking "Clients" files it there,
 /// while its children stay one step further along.
-struct FolderPickerMenu: View {
+public struct FolderPickerMenu: View {
     @Bindable var model: AppModel
     let item: ItemSnapshot
 
-    var body: some View {
+    public init(model: AppModel, item: ItemSnapshot) {
+        self.model = model
+        self.item = item
+    }
+
+    public var body: some View {
         Menu {
             Button("No Folder", systemImage: "tray") {
                 model.fileItem(item.id, intoFolderID: nil)

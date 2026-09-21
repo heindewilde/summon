@@ -1,4 +1,9 @@
+#if canImport(AppKit)
 import AppKit
+#else
+import UIKit
+#endif
+import CoreData
 import Foundation
 import Observation
 import SQLite3
@@ -47,17 +52,162 @@ public final class LibraryStore {
     @ObservationIgnored private var itemsByID: [UUID: SummonItem] = [:]
     @ObservationIgnored private var foldersByID: [UUID: SummonFolder] = [:]
 
-    public init(paths: LibraryPaths, vault: Vault) throws {
+    /// Whether the shared store is mirrored to the owner's private CloudKit database.
+    ///
+    /// Same rule as the vault's shared key: a real library in the App Group container,
+    /// never the demo one and never the temporary ones tests build. A test that
+    /// mirrored would need the network, an account and a container, and would leave
+    /// its fixtures in the developer's iCloud.
+    public static func syncsByDefault(paths: LibraryPaths) -> Bool {
+        !LibraryPaths.isDemoMode && paths.isInAppGroupContainer
+    }
+
+    /// Whether the payload and usage migrations have already run for this library.
+    ///
+    /// An extension opens the store without migrating and needs to know whether it is
+    /// looking at a library this build understands. The question is cheap: both
+    /// migrations are "is there a blob with no payload row", asked with an id-only
+    /// fetch.
+    public private(set) var isMigrated = true
+
+    public init(paths: LibraryPaths, vault: Vault, syncs: Bool? = nil,
+                migrates: Bool = true) throws {
         self.paths = paths
         self.files = FileStore(paths: paths)
         self.vault = vault
         paths.createDirectories()
 
-        let schema = Schema([SummonItem.self, SummonFolder.self, SummonTag.self, AppAffinity.self])
-        let config = ModelConfiguration(schema: schema, url: paths.storeURL, cloudKitDatabase: .none)
-        self.container = try ModelContainer(for: schema, configurations: [config])
+        // Two stores, because "does not sync" is a property of a store rather than of
+        // a record. The shared one is what CloudKit will mirror; the local one holds
+        // what should never leave the device it was learned on.
+        let shared = Schema([SummonItem.self, SummonFolder.self, SummonTag.self,
+                             AppAffinity.self, SummonPayload.self])
+        let local = Schema([UsageStat.self, SummonLocalPayload.self])
+
+        // The shared store mirrors; the local one never does. Items marked sensitive
+        // are sealed before they are written, so what crosses for them is ciphertext
+        // — but everything else crosses as itself, which is what the copy now says
+        // out loud and what "Encrypt everything" exists to change.
+        let mirrors = syncs ?? Self.syncsByDefault(paths: paths)
+        let sharedConfig = ModelConfiguration(
+            "shared", schema: shared, url: paths.storeURL,
+            cloudKitDatabase: mirrors ? .private("iCloud.com.heindewilde.summon") : .none)
+        let localConfig = ModelConfiguration("local", schema: local,
+                                             url: paths.localStoreURL, cloudKitDatabase: .none)
+        self.container = try ModelContainer(
+            for: SummonItem.self, SummonFolder.self, SummonTag.self,
+            AppAffinity.self, SummonPayload.self, UsageStat.self, SummonLocalPayload.self,
+            configurations: sharedConfig, localConfig)
+
+        // Before the first refresh, so ranking never sees a half-moved library. Cheap
+        // after the first run — one id-only fetch that finds nothing to do — and it
+        // needs no key, so it can happen at launch rather than waiting for an unlock.
+        if migrates {
+            migratePayloads()
+            migrateUsage()
+        } else {
+            // Left to the container app. Rewriting every payload is not work to start
+            // in a process that can be killed a second later.
+            isMigrated = !hasUnmigratedPayloads()
+        }
         refresh()
+
+        if mirrors {
+            observeRemoteChanges()
+            observeSyncEvents()
+        }
     }
+
+    /// Someone else's device changed the library.
+    ///
+    /// SwiftData exposes no change hook of its own, so this is Core Data's: the
+    /// coordinator posts once the mirrored changes have landed in the store. The
+    /// snapshots are rebuilt from the store rather than patched, because a remote
+    /// change can be anything — a new item, a deleted folder, a rewritten body — and
+    /// the rebuild is already what every local edit does.
+    ///
+    /// Coalesced, because an initial sync posts this many times in a row and each
+    /// rebuild re-ranks the whole library.
+    @ObservationIgnored private var remoteChangeObserver: (any NSObjectProtocol)?
+    @ObservationIgnored private var pendingRemoteRefresh: Task<Void, Never>?
+
+    /// What sync last did, in the app's own words.
+    ///
+    /// Sync is the one part of this app with no visible surface of its own: it either
+    /// quietly works or quietly does not, and "my phone hasn't got it yet" is
+    /// otherwise unanswerable without a developer's log. CloudKit reports every setup,
+    /// import and export through this notification; the last one is kept for Settings.
+    public struct SyncStatus: Equatable, Sendable {
+        public enum Kind: String, Sendable { case setup = "Set up", importing = "Received", exporting = "Sent" }
+        public var kind: Kind
+        public var finished: Bool
+        public var succeeded: Bool
+        public var error: String?
+        public var at: Date
+
+        public var summary: String {
+            if !finished { return "\(kind.rawValue)…" }
+            if succeeded { return "\(kind.rawValue) \(at.formatted(date: .omitted, time: .shortened))" }
+            return "\(kind.rawValue) failed"
+        }
+    }
+
+    public private(set) var syncStatus: SyncStatus?
+
+    @ObservationIgnored private var syncEventObserver: (any NSObjectProtocol)?
+
+    private func observeSyncEvents() {
+        syncEventObserver = NotificationCenter.default.addObserver(
+            forName: NSPersistentCloudKitContainer.eventChangedNotification,
+            object: nil, queue: .main
+        ) { [weak self] note in
+            guard let event = note.userInfo?[
+                NSPersistentCloudKitContainer.eventNotificationUserInfoKey
+            ] as? NSPersistentCloudKitContainer.Event else { return }
+            let kind: SyncStatus.Kind = switch event.type {
+            case .setup: .setup
+            case .import: .importing
+            case .export: .exporting
+            @unknown default: .setup
+            }
+            let status = SyncStatus(kind: kind,
+                                    finished: event.endDate != nil,
+                                    succeeded: event.succeeded,
+                                    error: event.error?.localizedDescription,
+                                    at: event.endDate ?? event.startDate)
+            // Everything needed is read off the event here; the event itself is not
+            // Sendable and must not cross into the isolated closure below.
+            let failure = status.error
+            MainActor.assumeIsolated {
+                self?.syncStatus = status
+                if let failure {
+                    Log.store.error("CloudKit \(kind.rawValue, privacy: .public) failed: \(failure, privacy: .public)")
+                }
+            }
+        }
+    }
+
+    private func observeRemoteChanges() {
+        remoteChangeObserver = NotificationCenter.default.addObserver(
+            forName: .NSPersistentStoreRemoteChange, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.pendingRemoteRefresh?.cancel()
+                self.pendingRemoteRefresh = Task { @MainActor [weak self] in
+                    try? await Task.sleep(for: .milliseconds(400))
+                    guard !Task.isCancelled, let self else { return }
+                    self.context.processPendingChanges()
+                    self.refresh()
+                    Log.store.info("Refreshed after a change from another device.")
+                }
+            }
+        }
+    }
+
+    // No deinit unregistering the observer: the store lives as long as the app, and
+    // a `deinit` cannot touch main-actor state without hopping off it, which is worse
+    // than the nothing it would save. The closure holds `self` weakly.
 
     // MARK: - Fetching
 
@@ -111,11 +261,16 @@ public final class LibraryStore {
         itemsByID = Dictionary(items.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         foldersByID = Dictionary(allFolders().map { ($0.id, $0) },
                                  uniquingKeysWith: { first, _ in first })
-        snapshots = items.map { snapshot(for: $0, key: key) }
+        let usage = usageByItem()
+        snapshots = items.map { snapshot(for: $0, key: key, usage: usage[$0.id]) }
         revision &+= 1
     }
 
     public func snapshot(for item: SummonItem, key: VaultKey?) -> ItemSnapshot {
+        snapshot(for: item, key: key, usage: usage(for: item.id))
+    }
+
+    private func snapshot(for item: SummonItem, key: VaultKey?, usage: UsageStat?) -> ItemSnapshot {
         let sensitive = item.isEffectivelySensitive
         let locked = sensitive && key == nil
 
@@ -136,8 +291,9 @@ public final class LibraryStore {
             preview = previewLine(for: item, body: body)
         }
 
-        var affinity: [String: Int] = [:]
-        for a in item.affinities ?? [] { affinity[a.bundleID] = a.count }
+        // From the device-local store, not the item. The fields on SummonItem are
+        // left behind by migrateUsage and deliberately no longer read.
+        let affinity = usage?.affinity ?? [:]
 
         return ItemSnapshot(
             id: item.id,
@@ -154,8 +310,8 @@ public final class LibraryStore {
             isSensitive: sensitive,
             isLocked: locked,
             hasPlaceholders: item.kind.isTextual && SnippetTemplate.requiresInput(body),
-            useCount: item.useCount,
-            lastUsedAt: item.lastUsedAt,
+            useCount: usage?.useCount ?? 0,
+            lastUsedAt: usage?.lastUsedAt,
             createdAt: item.createdAt,
             updatedAt: item.updatedAt,
             byteSize: item.byteSize,
@@ -506,6 +662,50 @@ public final class LibraryStore {
         save(); compactStore(); refresh()
     }
 
+    /// Seals every item in the library, or unseals the ones only this setting sealed.
+    ///
+    /// Sync carries titles and bodies as themselves unless an item is sealed, so this
+    /// is the switch that makes the whole library unreadable to anyone but these
+    /// devices — Apple included, without Advanced Data Protection.
+    ///
+    /// Turning it off leaves items marked sensitive by hand, or sitting in a sensitive
+    /// folder, exactly as they were: `sealedByPolicy` is what this owns, and the only
+    /// thing it undoes.
+    ///
+    /// Returns how many items changed.
+    @discardableResult
+    public func setEncryptEverything(_ on: Bool) throws -> Int {
+        guard vault.isUnlocked else { throw VaultError.locked }
+        var changed = 0
+        for item in allItems() {
+            let was = item.isEffectivelySensitive
+            if on {
+                guard !item.sealedByPolicy else { continue }
+                item.sealedByPolicy = true
+            } else {
+                guard item.sealedByPolicy else { continue }
+                item.sealedByPolicy = false
+            }
+            guard item.isEffectivelySensitive != was else { continue }
+            item.updatedAt = Date()
+            try reconcileSensitivity(item, wasSensitive: was)
+            changed += 1
+        }
+        save()
+        // Sealing leaves the plaintext in freed pages until the file is rewritten,
+        // which is the whole point of compacting here rather than at some quiet
+        // moment later.
+        compactStore()
+        refresh()
+        return changed
+    }
+
+    /// True when every item in the library is sealed by the setting.
+    public var encryptsEverything: Bool {
+        let items = allItems()
+        return !items.isEmpty && items.allSatisfy(\.sealedByPolicy)
+    }
+
     public func setFolderSensitive(_ folder: SummonFolder, _ sensitive: Bool) throws {
         guard vault.isUnlocked else { throw VaultError.locked }
         let affected = folder.allItems()
@@ -549,7 +749,12 @@ public final class LibraryStore {
             if let blob = item.storedBlob {
                 item.apply(try files.seal(blob, itemID: item.id, key: key))
             }
+            // The bytes in the store are the ones that matter now, and the ones that
+            // will sync. Sealing the file and not the payload would leave an item
+            // showing a padlock with its plaintext sitting in the database.
+            try resealPayload(for: item, key: key, sealed: true)
             files.deleteThumbnail(itemID: item.id)
+            files.removeCached(itemID: item.id)
         } else {
             if let sealed = item.sealedBody {
                 let data = try key.open(sealed, itemID: item.id)
@@ -572,6 +777,7 @@ public final class LibraryStore {
             if let blob = item.storedBlob {
                 item.apply(try files.unseal(blob, itemID: item.id, key: key))
             }
+            try resealPayload(for: item, key: key, sealed: false)
         }
     }
 
@@ -591,6 +797,12 @@ public final class LibraryStore {
     /// Best-effort by design. Failing to compact loses no data and breaks nothing —
     /// it only leaves the residue — so it warns rather than throwing into a save path.
     public func compactStore() {
+        // Only the container app compacts. `VACUUM` and a truncating checkpoint want
+        // the store to themselves, and once the share and action extensions can open
+        // it, a second process meets SQLITE_BUSY — or races a writer mid-import. An
+        // extension is short-lived and writes one item; the app does the tidying.
+        guard Bundle.main.bundleURL.pathExtension != "appex" else { return }
+
         var handle: OpaquePointer?
         guard sqlite3_open(paths.storeURL.path, &handle) == SQLITE_OK, let handle else {
             if handle != nil { sqlite3_close(handle) }
@@ -629,20 +841,271 @@ public final class LibraryStore {
     // MARK: - Repairs for libraries written by an earlier version
 
     /// What `scrubSensitiveContent` has already done to this library.
-    private struct Migrations: Codable {
+    ///
+    /// `init(from:)` is written out rather than synthesised, and that is not style.
+    /// Swift's synthesised `Decodable` emits `try container.decode` for every
+    /// non-optional stored property and **ignores the declared default** when the key
+    /// is absent. The loader below falls back to `Migrations()` on any decode failure,
+    /// so the moment a second field is added here, every existing `migrations.json`
+    /// fails to decode, silently reports `scrubVersion = 0`, and the whole scrub runs
+    /// again on the next unlock — a full re-seal pass and an unconditional VACUUM,
+    /// with nothing on screen to say why.
+    ///
+    /// It is idempotent, so nothing would corrupt. It would just be slow, once, for
+    /// reasons no one could find. `decodeIfPresent` is what makes adding a field safe.
+    struct Migrations: Codable {
         /// Bumped when a new repair is added. 1: seal plaintext summaries, re-seal
         /// anything a silently-swallowed failure left in the clear, and vacuum once.
         var scrubVersion = 0
+
+        init() {}
+
+        init(from decoder: any Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            scrubVersion = try container.decodeIfPresent(Int.self, forKey: .scrubVersion) ?? 0
+        }
     }
 
-    private func loadMigrations() -> Migrations {
+    /// Brings an item's stored bytes into line with its sensitivity.
+    private func resealPayload(for item: SummonItem, key: VaultKey, sealed: Bool) throws {
+        let id = item.id
+        var shared = FetchDescriptor<SummonPayload>(predicate: #Predicate { $0.itemID == id })
+        shared.fetchLimit = 1
+        var local = FetchDescriptor<SummonLocalPayload>(predicate: #Predicate { $0.itemID == id })
+        local.fetchLimit = 1
+
+        // Both tiers. A large item is exactly the kind that gets marked sensitive —
+        // the scanned passport, the signed contract — so missing this half would
+        // seal only the small ones.
+        if let payload = (try? context.fetch(shared))?.first, payload.isSealed != sealed {
+            payload.bytes = sealed
+                ? try key.seal(payload.bytes, itemID: id)
+                : try key.open(payload.bytes, itemID: id)
+            payload.isSealed = sealed
+        }
+        if let payload = (try? context.fetch(local))?.first, payload.isSealed != sealed {
+            payload.bytes = sealed
+                ? try key.seal(payload.bytes, itemID: id)
+                : try key.open(payload.bytes, itemID: id)
+            payload.isSealed = sealed
+        }
+    }
+
+    // MARK: - Reading payloads
+
+    /// The stored bytes for an item, exactly as stored — ciphertext if it is sealed.
+    public func storedBytes(for itemID: UUID) -> Data? {
+        var descriptor = FetchDescriptor<SummonPayload>(
+            predicate: #Predicate { $0.itemID == itemID })
+        descriptor.fetchLimit = 1
+        if let bytes = (try? context.fetch(descriptor))?.first?.bytes { return bytes }
+
+        // The other tier. Reads do not care which half a payload lives in; only the
+        // writer does.
+        var local = FetchDescriptor<SummonLocalPayload>(
+            predicate: #Predicate { $0.itemID == itemID })
+        local.fetchLimit = 1
+        return (try? context.fetch(local))?.first?.bytes
+    }
+
+    /// An item's content, decrypted if it needs to be.
+    ///
+    /// The store is the source of truth and the files under `Blobs/` and `Vault/` are
+    /// the fallback, not the other way round. The fallback exists because the migration
+    /// deliberately leaves those files in place for a release: a library that has not
+    /// been opened since the upgrade, or a payload the migration could not read, still
+    /// resolves instead of failing.
+    public func read(_ blob: StoredBlob, itemID: UUID, key: VaultKey?) throws -> Data {
+        let raw: Data
+        if let stored = storedBytes(for: itemID) {
+            raw = stored
+        } else {
+            raw = try files.read(rawOnly: blob)
+        }
+        guard blob.isSealed else { return raw }
+        guard let key else { throw FileStoreError.needsUnlock }
+        return try key.open(raw, itemID: itemID)
+    }
+
+    /// A real file another app can open.
+    ///
+    /// Sealed content goes to the scratch directory, which is wiped on lock and on
+    /// quit — unchanged. Unsealed content goes to the cache, which survives launches,
+    /// so opening a file twice does not write it twice and Reveal points at something
+    /// that stays put.
+    public func materialize(_ blob: StoredBlob, itemID: UUID, key: VaultKey?) throws -> URL {
+        let data = try read(blob, itemID: itemID, key: key)
+        return blob.isSealed
+            ? try files.scratch(data, for: blob, itemID: itemID)
+            : try files.cached(data, for: blob, itemID: itemID)
+    }
+
+    // MARK: - Usage, on this device only
+
+    /// Every device-local usage record, by item. Built once per refresh rather than
+    /// fetched per item — `refresh` walks the whole library, and a fetch each time
+    /// turned one query into one per row.
+    private func usageByItem() -> [UUID: UsageStat] {
+        let all = (try? context.fetch(FetchDescriptor<UsageStat>())) ?? []
+        return Dictionary(all.map { ($0.itemID, $0) }, uniquingKeysWith: { a, b in
+            // Two records for one item can only come from a bug, but picking the
+            // busier one loses less than picking arbitrarily.
+            a.useCount >= b.useCount ? a : b
+        })
+    }
+
+    private func usage(for itemID: UUID) -> UsageStat? {
+        var descriptor = FetchDescriptor<UsageStat>(predicate: #Predicate { $0.itemID == itemID })
+        descriptor.fetchLimit = 1
+        return (try? context.fetch(descriptor))?.first
+    }
+
+    /// Moves usage counts out of the synced records and into the local store.
+    ///
+    /// Like the payload migration, the marker is the data: an item is done when a
+    /// `UsageStat` exists for it. The old `useCount`, `lastUsedAt` and `AppAffinity`
+    /// are left in place and simply stop being read — they are the way back, and
+    /// removing them is a later release's decision.
+    @discardableResult
+    public func migrateUsage() -> Int {
+        let existing = Set(((try? context.fetch(FetchDescriptor<UsageStat>())) ?? []).map(\.itemID))
+        var moved = 0
+        for item in allItems() where !existing.contains(item.id) {
+            var affinity: [String: Int] = [:]
+            for a in item.affinities ?? [] { affinity[a.bundleID] = a.count }
+            guard item.useCount > 0 || item.lastUsedAt != nil || !affinity.isEmpty else { continue }
+            context.insert(UsageStat(itemID: item.id,
+                                     useCount: item.useCount,
+                                     lastUsedAt: item.lastUsedAt,
+                                     affinity: affinity))
+            moved += 1
+        }
+        if moved > 0 {
+            do { try context.save() } catch { report(error, while: "Moving usage history") }
+            Log.store.info("Moved \(moved, privacy: .public) usage records off the synced store")
+        }
+        return moved
+    }
+
+    // MARK: - Payload tiering
+
+    /// The largest payload that will be sent to other devices.
+    ///
+    /// Ten megabytes covers what a companion is actually for — the canned reply, the
+    /// portfolio PDF, the headshot, the passport scan — while a scanned book or a
+    /// screen recording never tries to land on a phone. It is a ceiling on what syncs,
+    /// not on what Summon will hold; `FileStore.maximumImportBytes` is still the limit
+    /// on that.
+    public static let cloudPayloadLimit = 10 * 1024 * 1024
+
+    /// Stores an item's bytes in whichever half of the library they belong in.
+    ///
+    /// The one place that decision is made, so import and migration cannot disagree
+    /// about where something lives.
+    func writePayload(for itemID: UUID, blob: StoredBlob, bytes: Data, createdAt: Date) {
+        if bytes.count > LibraryStore.cloudPayloadLimit {
+            context.insert(SummonLocalPayload(itemID: itemID, bytes: bytes,
+                                              originalName: blob.originalName,
+                                              fileExtension: blob.fileExtension,
+                                              isSealed: blob.isSealed,
+                                              contentHash: blob.contentHash,
+                                              createdAt: createdAt))
+        } else {
+            context.insert(SummonPayload(itemID: itemID, bytes: bytes,
+                                         originalName: blob.originalName,
+                                         fileExtension: blob.fileExtension,
+                                         isSealed: blob.isSealed,
+                                         contentHash: blob.contentHash,
+                                         createdAt: createdAt))
+        }
+    }
+
+    /// Whether an item's bytes stay on this device.
+    public func staysOnThisDevice(_ itemID: UUID) -> Bool {
+        var descriptor = FetchDescriptor<SummonLocalPayload>(
+            predicate: #Predicate { $0.itemID == itemID })
+        descriptor.fetchLimit = 1
+        return ((try? context.fetch(descriptor))?.first) != nil
+    }
+
+    // MARK: - Payload migration
+
+    /// Moves blob bytes from `Blobs/` and `Vault/` into `SummonPayload`.
+    ///
+    /// Returns how many items it moved, so a caller can log a real number rather than
+    /// "done".
+    ///
+    /// **The marker is the data, not a counter.** An item is migrated when a payload
+    /// exists for its id, which makes this resumable for free: a crash halfway leaves
+    /// a library that simply has fewer payloads, and the next run picks up exactly
+    /// where it stopped. A version number in `migrations.json` would have to be
+    /// written after the last item and would be wrong for the entire run.
+    ///
+    /// **It never needs the vault.** Sealed blobs are copied as ciphertext, byte for
+    /// byte, so this runs at launch on a locked library and the same key still opens
+    /// the result. That also means it cannot leak: nothing is decrypted to move it.
+    ///
+    /// **The source files are left in place.** They are the orphan detector and the
+    /// way back if anything about the new path proves wrong, and deleting them is a
+    /// separate decision for a later release.
+    ///
+    /// One item per save rather than one batch: `importFile` caps a file at 256 MB and
+    /// reads it whole, so a batch would hold several of those in memory at once.
+    @discardableResult
+    /// Whether any blob still lives outside the store. See `isMigrated`.
+    func hasUnmigratedPayloads() -> Bool {
+        var idsOnly = FetchDescriptor<SummonPayload>()
+        idsOnly.propertiesToFetch = [\.itemID]
+        var localIDsOnly = FetchDescriptor<SummonLocalPayload>()
+        localIDsOnly.propertiesToFetch = [\.itemID]
+        let moved = Set(((try? context.fetch(idsOnly)) ?? []).map(\.itemID))
+            .union(((try? context.fetch(localIDsOnly)) ?? []).map(\.itemID))
+        return allItems().contains { $0.storedBlob != nil && !moved.contains($0.id) }
+    }
+
+    public func migratePayloads() -> Int {
+        // Ids only. A plain fetch would fault in every payload's bytes to build a set
+        // of UUIDs, which on a library of any size is the whole thing read off disk on
+        // every launch to discover there is nothing to do.
+        var idsOnly = FetchDescriptor<SummonPayload>()
+        idsOnly.propertiesToFetch = [\.itemID]
+        var localIDsOnly = FetchDescriptor<SummonLocalPayload>()
+        localIDsOnly.propertiesToFetch = [\.itemID]
+        let alreadyMoved = Set(((try? context.fetch(idsOnly)) ?? []).map(\.itemID))
+            .union(((try? context.fetch(localIDsOnly)) ?? []).map(\.itemID))
+
+        var moved = 0
+        for item in allItems() {
+            guard let blob = item.storedBlob, !alreadyMoved.contains(item.id) else { continue }
+            let source = files.location(of: blob)
+            guard let bytes = try? Data(contentsOf: source) else {
+                // A row pointing at a file that is not there. Left alone deliberately:
+                // it is already broken, and inventing an empty payload for it would
+                // turn a visible missing file into a silently empty one.
+                Log.store.warning("Payload migration skipped \(blob.filename, privacy: .public): unreadable")
+                continue
+            }
+            writePayload(for: item.id, blob: blob, bytes: bytes, createdAt: item.createdAt)
+            do {
+                try context.save()
+                moved += 1
+            } catch {
+                report(error, while: "Moving \(blob.originalName) into the library")
+                context.rollback()
+            }
+        }
+        if moved > 0 { Log.store.info("Moved \(moved, privacy: .public) payloads into the store") }
+        return moved
+    }
+
+    func loadMigrations() -> Migrations {
         guard let data = try? Data(contentsOf: paths.migrationsFile),
               let decoded = try? JSONDecoder().decode(Migrations.self, from: data)
         else { return Migrations() }
         return decoded
     }
 
-    private func save(_ migrations: Migrations) {
+    func save(_ migrations: Migrations) {
         guard let data = try? JSONEncoder().encode(migrations) else { return }
         try? data.write(to: paths.migrationsFile, options: .atomic)
     }
@@ -727,18 +1190,19 @@ public final class LibraryStore {
 
     /// Records that an item was used, optionally while a particular app was frontmost.
     public func recordUse(id: UUID, inApp bundleID: String?) {
-        guard let item = item(id: id) else { return }
-        item.useCount += 1
-        item.lastUsedAt = Date()
+        guard item(id: id) != nil else { return }
 
-        if let bundleID, !bundleID.isEmpty, bundleID != "com.heindewilde.summon" {
-            if let existing = (item.affinities ?? []).first(where: { $0.bundleID == bundleID }) {
-                existing.count += 1
-                existing.lastUsed = Date()
-            } else {
-                let affinity = AppAffinity(bundleID: bundleID, item: item)
-                context.insert(affinity)
-            }
+        // Writes the local store, not the item. This fires on every paste, and the
+        // item record is the one CloudKit mirrors — see UsageStat.
+        let attribution = (bundleID?.isEmpty == false && bundleID != "com.heindewilde.summon")
+            ? bundleID : nil
+
+        if let stat = usage(for: id) {
+            stat.record(inApp: attribution)
+        } else {
+            let stat = UsageStat(itemID: id)
+            stat.record(inApp: attribution)
+            context.insert(stat)
         }
         save(); refresh()
     }
@@ -936,13 +1400,13 @@ public final class LibraryStore {
 
         case .image:
             guard let blob = item.storedBlob else { return nil }
-            let data = try? files.read(blob, itemID: item.id, key: key)
-            let url = try? files.materialize(blob, itemID: item.id, key: key)
+            let data = try? read(blob, itemID: item.id, key: key)
+            let url = try? materialize(blob, itemID: item.id, key: key)
             return InsertPayload(fileURL: url, imageData: data)
 
         case .document, .file:
             guard let blob = item.storedBlob,
-                  let url = try? files.materialize(blob, itemID: item.id, key: key) else { return nil }
+                  let url = try? materialize(blob, itemID: item.id, key: key) else { return nil }
             return InsertPayload(fileURL: url)
         }
     }

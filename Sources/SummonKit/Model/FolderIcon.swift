@@ -101,10 +101,21 @@ public enum FolderIcon {
 
     /// Prepared once. Rebuilding these per keystroke is the mistake the search index
     /// already made and had to be corrected for.
+    ///
+    /// `static let` is what makes that true, so the guarantee is the language's rather
+    /// than this comment's. `prepareCount` exists to catch the one edit that would
+    /// quietly revoke it — turning this into a computed `static var`, which still
+    /// compiles, still returns the right answers, and rebuilds ninety `Prepared`
+    /// tables on every keystroke.
+    nonisolated(unsafe) private(set) static var prepareCount = 0
+
     private static let prepared: [(symbol: Symbol, name: FuzzyMatcher.Prepared,
-                                   keywords: [FuzzyMatcher.Prepared])] = all.map {
-        ($0, FuzzyMatcher.Prepared($0.name), $0.keywords.map(FuzzyMatcher.Prepared.init))
-    }
+                                   keywords: [FuzzyMatcher.Prepared])] = {
+        prepareCount += 1
+        return all.map {
+            ($0, FuzzyMatcher.Prepared($0.name), $0.keywords.map(FuzzyMatcher.Prepared.init))
+        }
+    }()
 
     /// Matches on the symbol's name and on what it means, so "money" finds the
     /// currency symbols and "vat" finds percent, though neither is called that.

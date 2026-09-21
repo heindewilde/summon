@@ -9,6 +9,7 @@ be reviewed in a diff rather than retyped into a web form.
     Scripts/asc.py testflight          # latest build of each platform to the testers
     Scripts/asc.py metadata            # docs/store/metadata.json → the listing
     Scripts/asc.py state               # version state for both platforms
+    Scripts/asc.py screenshots         # docs/screenshots/appstore → the listing
 
 Credentials, which this never prints: the .p8 in ~/.appstoreconnect/private_keys,
 named by SUMMON_ASC_KEY_ID, plus SUMMON_ASC_ISSUER_ID. The key needs the Admin role —
@@ -191,7 +192,90 @@ def cmd_metadata() -> None:
             print(f"app info: updated {info['attributes']['locale']}.")
 
 
-COMMANDS = {"state": cmd_state, "builds": cmd_builds,
+# Which file belongs to which of Apple's display sizes. The name decides, so a new
+# screenshot needs no code — only the right prefix and the right pixels.
+SCREENSHOT_SETS = {
+    "iphone-": ("APP_IPHONE_67", (1320, 2868)),
+    "ipad-": ("APP_IPAD_PRO_3GEN_129", (2064, 2752)),
+    "mac-": ("APP_DESKTOP", (2880, 1800)),
+}
+
+# A set belongs to one platform's version; sending an iPhone frame to the Mac listing
+# is rejected, slowly, after the upload.
+SET_PLATFORMS = {"APP_IPHONE_67": "IOS", "APP_IPAD_PRO_3GEN_129": "IOS",
+                 "APP_DESKTOP": "MAC_OS"}
+
+
+def cmd_screenshots() -> None:
+    """Uploads docs/screenshots/appstore to the listing, replacing what is there.
+
+    Three steps per image, which is why this is a command and not a drag: reserve a
+    slot and get back the pieces to upload, PUT the bytes at each one, then commit with
+    an MD5 of the file so Apple can tell a truncated upload from a finished one.
+    """
+    import hashlib
+
+    directory = Path(__file__).resolve().parent.parent / "docs/screenshots/appstore"
+    images = sorted(p for p in directory.glob("*.png"))
+    if not images:
+        sys.exit(f"No screenshots in {directory}.")
+
+    app = app_id()
+    versions = {v["attributes"]["platform"]: v
+                for v in call("GET", f"apps/{app}/appStoreVersions", limit=10)["data"]}
+
+    for platform, version in versions.items():
+        localization = call("GET", f"appStoreVersions/{version['id']}/appStoreVersionLocalizations")["data"][0]
+        existing = {s["attributes"]["screenshotDisplayType"]: s
+                    for s in call("GET", f"appStoreVersionLocalizations/{localization['id']}/appScreenshotSets")["data"]}
+
+        for prefix, (display_type, size) in SCREENSHOT_SETS.items():
+            if SET_PLATFORMS[display_type] != platform:
+                continue
+            files = [p for p in images if p.name.startswith(prefix)]
+            if not files:
+                continue
+
+            screenshot_set = existing.get(display_type)
+            if screenshot_set is None:
+                screenshot_set = call("POST", "appScreenshotSets", body={"data": {
+                    "type": "appScreenshotSets",
+                    "attributes": {"screenshotDisplayType": display_type},
+                    "relationships": {"appStoreVersionLocalization": {"data": {
+                        "type": "appStoreVersionLocalizations", "id": localization["id"]}}},
+                }})["data"]
+            else:
+                # Replaced rather than added to: uploading twice otherwise leaves the
+                # old frames beside the new ones, in an order nobody chose.
+                for old in call("GET", f"appScreenshotSets/{screenshot_set['id']}/appScreenshots")["data"]:
+                    call("DELETE", f"appScreenshots/{old['id']}")
+
+            for image in files:
+                data = image.read_bytes()
+                reserved = call("POST", "appScreenshots", body={"data": {
+                    "type": "appScreenshots",
+                    "attributes": {"fileSize": len(data), "fileName": image.name},
+                    "relationships": {"appScreenshotSet": {"data": {
+                        "type": "appScreenshotSets", "id": screenshot_set["id"]}}},
+                }})["data"]
+
+                for operation in reserved["attributes"]["uploadOperations"]:
+                    chunk = data[operation["offset"]:operation["offset"] + operation["length"]]
+                    request = urllib.request.Request(operation["url"], method=operation["method"],
+                                                     data=chunk)
+                    for header in operation["requestHeaders"]:
+                        request.add_header(header["name"], header["value"])
+                    urllib.request.urlopen(request).read()
+
+                call("PATCH", f"appScreenshots/{reserved['id']}", body={"data": {
+                    "type": "appScreenshots", "id": reserved["id"],
+                    "attributes": {"uploaded": True,
+                                   "sourceFileChecksum": hashlib.md5(data).hexdigest()},
+                }})
+                print(f"{platform}: {image.name} → {display_type}")
+
+
+COMMANDS = {"state": cmd_state, "builds": cmd_builds, "screenshots": cmd_screenshots,
             "testflight": cmd_testflight, "metadata": cmd_metadata}
 
 if __name__ == "__main__":

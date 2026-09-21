@@ -2,7 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    # The long-lived feature branch too: it carries the iOS app, four extensions and
+    # two archives, and until now nothing on a machine other than mine ever built it.
+    branches: [main, ios-companion]
   pull_request:
   workflow_dispatch:
 

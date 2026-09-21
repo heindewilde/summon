@@ -21,8 +21,22 @@ can be done in any order.
 
 ## Upload
 
-Both apps archive cleanly with automatic signing. Exporting needs an App Store Connect
-session, so it goes through Xcode rather than the command line:
+`Scripts/ship.sh` does all three steps from the command line once the credentials
+exist:
+
+```sh
+Scripts/ship.sh archive          # no credentials needed
+export SUMMON_ASC_KEY_ID=…       # from App Store Connect → Users and Access → Integrations
+export SUMMON_ASC_ISSUER_ID=…
+Scripts/ship.sh upload           # exports with the distribution profile, then uploads
+xcrun cktool save-token --type management   # once, from CloudKit Console → Settings → Tokens
+Scripts/ship.sh promote-schema   # asks before the one-way step
+```
+
+The API key (`AuthKey_<KEY_ID>.p8`) belongs in `~/.appstoreconnect/private_keys/` and
+is downloadable only once.
+
+Or through Xcode, which uses your own session instead:
 
 1. **Product → Archive** with the `SummonMac` scheme, then the `SummonPhone` scheme
    (choose *Any iOS Device* first).

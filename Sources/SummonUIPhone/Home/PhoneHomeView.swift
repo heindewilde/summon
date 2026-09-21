@@ -1,6 +1,7 @@
 // SwiftPM builds every target for the host, so the guard stays even though this
 // target is only ever linked by the iOS app.
 #if !canImport(AppKit)
+import CoreSpotlight
 import SummonKit
 import SummonUI
 import SwiftUI
@@ -70,6 +71,19 @@ public struct PhoneHomeView: View {
             .toolbar { toolbar }
             .navigationDestination(item: $detail) { id in
                 PhoneItemDetailView(model: model, itemID: id)
+            }
+            // A Spotlight result has to land on the item it named. Indexing without
+            // this is a search that finds your things and then shows you a list of
+            // everything, which is worse than not appearing in Spotlight at all.
+            .onContinueUserActivity(CSSearchableItemActionType) { activity in
+                guard let identifier = activity.userInfo?[CSSearchableItemActivityIdentifier] as? String,
+                      let id = UUID(uuidString: identifier),
+                      model.store.snapshots.contains(where: { $0.id == id })
+                else { return }
+                model.mainSearch = ""
+                model.sidebarSelection = .all
+                model.runSearch()
+                detail = id
             }
         }
         .tint(Theme.accent)
@@ -148,6 +162,12 @@ public struct PhoneHomeView: View {
                             PhoneItemMenu(model: model, item: item) { detail = item.id }
                         }
                     }
+                    // Only inside a folder, and only when nothing is typed — see
+                    // `PhoneSections.canReorder`.
+                    .onMove { offsets, destination in
+                        guard sections.canReorder else { return }
+                        sections.move(section.items, from: offsets, to: destination)
+                    }
                 }
             }
         }
@@ -162,6 +182,11 @@ public struct PhoneHomeView: View {
             Button { showingSettings = true } label: {
                 Label("Settings", systemImage: "gearshape")
             }
+        }
+        // Only where there is an order to change; an Edit button over a ranked list
+        // offers a drag that cannot be honoured.
+        if sections.canReorder {
+            ToolbarItem(placement: .topBarLeading) { EditButton() }
         }
         if model.vault.isConfigured {
             ToolbarItem(placement: .topBarTrailing) {

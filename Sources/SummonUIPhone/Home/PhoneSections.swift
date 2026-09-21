@@ -60,5 +60,39 @@ struct PhoneSections {
     }
 
     var isEmpty: Bool { sections.isEmpty }
+
+    /// Whether rows can be dragged into a hand-made order right now.
+    ///
+    /// The same rule the Mac keeps: a folder is the only view with an order of its own
+    /// to write to, and only while nothing is typed — under a search the list is in
+    /// rank order, so a row dropped into place would spring straight back.
+    var canReorder: Bool {
+        if case .folder = model.sidebarSelection { return !isSearching }
+        return false
+    }
+
+    /// Applies a drag within the current folder.
+    ///
+    /// SwiftUI hands over "these rows moved to there"; the store thinks in terms of one
+    /// item placed beside another, which is what survives two devices editing the same
+    /// folder. So the move is resolved to a neighbour before it is written.
+    func move(_ items: [ItemSnapshot], from offsets: IndexSet, to destination: Int) {
+        var reordered = items
+        reordered.move(fromOffsets: offsets, toOffset: destination)
+        guard let movedID = offsets.first.map({ items[$0].id }),
+              let newIndex = reordered.firstIndex(where: { $0.id == movedID }),
+              let moved = model.store.item(id: movedID)
+        else { return }
+
+        if newIndex > 0, let previous = model.store.item(id: reordered[newIndex - 1].id) {
+            model.store.reorderItem(moved, relativeTo: previous, placeAfter: true)
+        } else if newIndex + 1 < reordered.count,
+                  let next = model.store.item(id: reordered[newIndex + 1].id) {
+            model.store.reorderItem(moved, relativeTo: next, placeAfter: false)
+        }
+        model.store.refresh()
+        model.runSearch()
+        Theme.Haptics.selection()
+    }
 }
 #endif

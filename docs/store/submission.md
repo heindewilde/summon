@@ -9,10 +9,10 @@ can be done in any order.
 - [ ] **Version and build numbers.** `MARKETING_VERSION` 1.0 in both apps;
       `CURRENT_PROJECT_VERSION` has to increase with every upload, including TestFlight
       builds that are never released.
-- [ ] **Promote the CloudKit schema to Production** — CloudKit Console → the
-      `iCloud.com.heindewilde.summon` container → Schema → *Deploy Schema Changes*.
-      After this, fields can be added but never removed or renamed, so nothing about the
-      model should still be in flux.
+- [x] **Promote the CloudKit schema to Production** — done on 21 September 2026: six
+      record types, 147 indexes and three security roles, all additions. Fields can be
+      added from here but never removed or renamed, so a model change now means a new
+      field rather than a changed one.
 - [ ] **Check the release entitlements.** A Release build takes
       `Apps/SummonPhone/SummonPhone-Release.entitlements` and
       `Apps/SummonMac/SummonMac-Release.entitlements`, which carry `production` push.
@@ -63,8 +63,10 @@ Already set for version 1.0: categories (Productivity, Utilities), the age
 questionnaire at 4+, price (free, base territory Netherlands), both builds attached to
 their versions, and the review contact and notes.
 
-- [ ] **App privacy:** *Data Not Collected*, every question. The only part of the
-      listing with no API, so it is a browser job: App Store Connect › App Privacy.
+- [x] **App privacy:** published as *Data Not Collected*. The only part of the listing
+      with no API, so it is a browser job: App Store Connect › App Privacy. It stands
+      until the app starts collecting something, which is to say until it stops being
+      this app.
 
 ## TestFlight
 

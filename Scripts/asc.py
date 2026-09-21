@@ -315,9 +315,12 @@ def cmd_ready() -> None:
         print(f"  keywords        {'set' if attributes.get('keywords') else 'MISSING'}")
         print(f"  screenshots     {shots}")
 
-    print("\nNot visible to this API, and both are yours to do in a browser:")
-    print("  · App privacy answers  — App Store Connect › App Privacy › Data Not Collected")
-    print("  · CloudKit schema      — CloudKit Console › Record Types › Deploy Schema Changes")
+    # Both were done on 21 September 2026 and neither needs doing again for 1.0: the
+    # privacy answers stand until the app starts collecting something, and the schema
+    # only needs another deployment when the model gains a field.
+    print("\nNot visible to this API — check by hand if the model or the privacy story changes:")
+    print("  · App privacy answers  — App Store Connect › App Privacy (published: Data Not Collected)")
+    print("  · CloudKit schema      — CloudKit Console › Record Types (deployed to Production)")
 
 
 COMMANDS = {"state": cmd_state, "ready": cmd_ready, "builds": cmd_builds, "screenshots": cmd_screenshots,

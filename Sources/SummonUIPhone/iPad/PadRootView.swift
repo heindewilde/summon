@@ -29,6 +29,22 @@ public struct PadRootView: View {
 
     public init(model: AppModel) { self.model = model }
 
+    #if DEBUG
+    /// The same debug-only hook the phone has, so a screenshot of the split view can
+    /// show an item rather than an empty detail pane. See `PhoneHomeView`.
+    private func openRequestedScreen() {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard let flag = arguments.firstIndex(of: "-SUMMON_SCREEN"), flag + 1 < arguments.count
+        else { return }
+        switch arguments[flag + 1] {
+        case "detail": detail = model.store.snapshots.first(where: { !$0.isLocked })?.id
+        case "settings": showingSettings = true
+        case "organise": organising = true
+        default: break
+        }
+    }
+    #endif
+
     private var sections: PhoneSections { PhoneSections(model: model) }
 
     public var body: some View {
@@ -72,6 +88,9 @@ public struct PadRootView: View {
         .onChange(of: scenePhase) { _, phase in
             if phase != .active, model.vault.isUnlocked { model.lockVaultNow() }
         }
+        #if DEBUG
+        .task { openRequestedScreen() }
+        #endif
     }
 
     /// Folders and tags as a list rather than as chips: an iPad has the width for the

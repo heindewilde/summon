@@ -1,6 +1,11 @@
 # App Store listing
 
-Everything App Store Connect asks for, written out. Paste rather than compose.
+Everything App Store Connect asks for, written out.
+
+The text below lives in `metadata.json` beside this file and is pushed to both
+platforms with `Scripts/asc.py metadata`, so it is reviewed in a diff rather than
+retyped into a web form twice. This file is the annotated version, with the limits and
+the reasoning.
 
 One record, both platforms (universal purchase): **iOS + macOS**, bundle ID
 `com.heindewilde.summon`, price **Free**.
@@ -9,8 +14,10 @@ One record, both platforms (universal purchase): **iOS + macOS**, bundle ID
 
 ## Name (30 characters)
 
+Plain "Summon" was taken, so the record is:
+
 ```
-Summon
+Summon – Fast Personal Library
 ```
 
 ## Subtitle (30 characters)

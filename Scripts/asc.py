@@ -10,6 +10,7 @@ be reviewed in a diff rather than retyped into a web form.
     Scripts/asc.py metadata            # docs/store/metadata.json → the listing
     Scripts/asc.py state               # version state for both platforms
     Scripts/asc.py screenshots         # docs/screenshots/appstore → the listing
+    Scripts/asc.py ready               # what is still missing before submission
 
 Credentials, which this never prints: the .p8 in ~/.appstoreconnect/private_keys,
 named by SUMMON_ASC_KEY_ID, plus SUMMON_ASC_ISSUER_ID. The key needs the Admin role —
@@ -275,7 +276,51 @@ def cmd_screenshots() -> None:
                 print(f"{platform}: {image.name} → {display_type}")
 
 
-COMMANDS = {"state": cmd_state, "builds": cmd_builds, "screenshots": cmd_screenshots,
+def cmd_ready() -> None:
+    """What Apple still wants, asked of Apple rather than remembered.
+
+    Two of these cannot be answered through the API at all — the privacy questionnaire
+    and the CloudKit schema — so they are listed as reminders rather than checked.
+    """
+    app = app_id()
+    info = call("GET", f"apps/{app}/appInfos", limit=5)["data"][0]
+    full = call("GET", f"appInfos/{info['id']}", include="primaryCategory,secondaryCategory")
+    categories = [i["id"] for i in full.get("included", []) if i["type"] == "appCategories"]
+
+    print(f"categories        {', '.join(categories) if categories else 'MISSING'}")
+    for localization in call("GET", f"appInfos/{info['id']}/appInfoLocalizations")["data"]:
+        attributes = localization["attributes"]
+        print(f"name              {attributes.get('name')}")
+        print(f"subtitle          {attributes.get('subtitle')}")
+        print(f"privacy policy    {'set' if attributes.get('privacyPolicyUrl') else 'MISSING'}")
+
+    try:
+        call("GET", f"apps/{app}/appPriceSchedule")
+        print("price             set")
+    except SystemExit:
+        print("price             MISSING")
+
+    for version in call("GET", f"apps/{app}/appStoreVersions", limit=10)["data"]:
+        platform = version["attributes"]["platform"]
+        detail = call("GET", f"appStoreVersions/{version['id']}", include="build,appStoreReviewDetail")
+        included = {item["type"] for item in detail.get("included", [])}
+        localization = call("GET", f"appStoreVersions/{version['id']}/appStoreVersionLocalizations")["data"][0]
+        shots = sum(len(call("GET", f"appScreenshotSets/{s['id']}/appScreenshots")["data"])
+                    for s in call("GET", f"appStoreVersionLocalizations/{localization['id']}/appScreenshotSets")["data"])
+        attributes = localization["attributes"]
+        print(f"\n{platform}  {version['attributes']['appStoreState']}")
+        print(f"  build           {'attached' if 'builds' in included else 'MISSING'}")
+        print(f"  review details  {'set' if 'appStoreReviewDetails' in included else 'MISSING'}")
+        print(f"  description     {len(attributes.get('description') or '')} characters")
+        print(f"  keywords        {'set' if attributes.get('keywords') else 'MISSING'}")
+        print(f"  screenshots     {shots}")
+
+    print("\nNot visible to this API, and both are yours to do in a browser:")
+    print("  · App privacy answers  — App Store Connect › App Privacy › Data Not Collected")
+    print("  · CloudKit schema      — CloudKit Console › Record Types › Deploy Schema Changes")
+
+
+COMMANDS = {"state": cmd_state, "ready": cmd_ready, "builds": cmd_builds, "screenshots": cmd_screenshots,
             "testflight": cmd_testflight, "metadata": cmd_metadata}
 
 if __name__ == "__main__":

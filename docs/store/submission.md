@@ -50,13 +50,21 @@ keychain group.
 
 ## In App Store Connect
 
-- [ ] Paste everything from `listing.md` — name, subtitle, description, keywords, URLs.
-- [ ] Upload the screenshots from `docs/screenshots/appstore/`.
-- [ ] **App privacy:** *Data Not Collected*, every question.
-- [ ] **Age rating:** 4+.
-- [ ] **Review notes:** the block in `listing.md`. The Accessibility explanation is the
-      part reviewers actually need.
-- [ ] Pricing: Free, all territories.
+`Scripts/asc.py` does all of this except the privacy questionnaire, which the API does
+not expose:
+
+```sh
+Scripts/asc.py metadata      # description, keywords, subtitle, URLs — both platforms
+Scripts/asc.py screenshots   # docs/screenshots/appstore → the listing
+Scripts/asc.py ready         # what Apple still wants, asked of Apple
+```
+
+Already set for version 1.0: categories (Productivity, Utilities), the age
+questionnaire at 4+, price (free, base territory Netherlands), both builds attached to
+their versions, and the review contact and notes.
+
+- [ ] **App privacy:** *Data Not Collected*, every question. The only part of the
+      listing with no API, so it is a browser job: App Store Connect › App Privacy.
 
 ## TestFlight
 

@@ -97,6 +97,12 @@ https://summon.technology/privacy
 
 Primary: **Productivity**. Secondary: **Utilities**.
 
+## Copyright and content rights
+
+Copyright: **2026 Hein de Wilde** (set per version; a new version starts without it).
+Content rights: **does not use third-party content** (set once, on the app). Apple
+refuses a submission with either missing, and `asc.py ready` cannot see them.
+
 ## Age rating
 
 4+. No objectionable content, no user-generated content shared between people, no web

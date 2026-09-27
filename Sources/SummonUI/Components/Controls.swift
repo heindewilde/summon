@@ -86,18 +86,6 @@ public extension View {
                     .strokeBorder(Theme.dropTarget, lineWidth: 1.5)
             }
         }
-        .overlay(alignment: .leading) {
-            // "Where you are" needs to differ from "what the keys act on" by more than
-            // four per cent of alpha. Side by side in the gallery the two fills were
-            // indistinguishable, which is a distinction not worth a token — so this one
-            // is structural. A rail reads instantly and survives at any tint.
-            if state == .navActive {
-                Capsule()
-                    .fill(Theme.accent)
-                    .frame(width: 2.5, height: 16)
-                    .padding(.leading, 2)
-            }
-        }
         .animation(Theme.hover, value: state)
     }
 

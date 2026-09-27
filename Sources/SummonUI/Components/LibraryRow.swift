@@ -116,13 +116,6 @@ public struct LibraryRow: View {
                     .foregroundStyle(Theme.tertiaryText)
                     .accessibilityHidden(true)
             }
-            if item.hasPlaceholders {
-                Image(systemName: "square.dashed.inset.filled")
-                    .font(Theme.Icon.micro)
-                    .foregroundStyle(Theme.tertiaryText)
-                    .accessibilityHidden(true)
-                    .help("Has fill-in fields")
-            }
 
             if showsSubtitle {
                 Text(item.previewLine)
@@ -192,7 +185,6 @@ public struct LibraryRow: View {
         var parts = [item.title, item.kind.displayName]
         if item.isPinned { parts.append("pinned") }
         if item.isLocked { parts.append("locked") }
-        if item.hasPlaceholders { parts.append("has fill-in fields") }
         if !item.folderPath.isEmpty { parts.append("in \(item.folderLabel)") }
         if let shortcutIndex, shortcutIndex < 9 { parts.append("command \(shortcutIndex + 1)") }
         return parts.joined(separator: ", ")

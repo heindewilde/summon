@@ -39,7 +39,6 @@ public struct PanelView: View {
             Group {
                 switch model.mode {
                 case .search: searchBody
-                case .fill(let id): FillFieldsPane(model: model, itemID: id)
                 case .unlock(let pending): UnlockPane(model: model, pendingItemID: pending)
                 }
             }
@@ -314,12 +313,6 @@ public struct PanelView: View {
                                  canDrillIn: model.selectedResult?.item.folderPath.isEmpty == false
                                      && model.folderScope == nil)
 
-            case .fill:
-                KeyHint("⇥", "Next field")
-                Spacer()
-                KeyHint("↩", "Insert")
-                KeyHint("⎋", "Back")
-
             case .unlock:
                 Label("Sensitive items stay encrypted until you unlock", systemImage: "lock.shield")
                     .font(Theme.Typography.meta)
@@ -336,7 +329,6 @@ public struct PanelView: View {
     private var pasteHintLabel: String {
         guard let item = model.selectedResult?.item else { return "Insert" }
         if item.isLocked { return "Unlock" }
-        if item.hasPlaceholders { return "Fill in" }
         return model.accessibility.isTrusted && model.settings.autoPaste ? "Paste" : "Copy"
     }
 

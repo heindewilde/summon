@@ -49,7 +49,6 @@ FAST
 EVERYTHING IN ONE PLACE
 • Snippets, rich text, images, PDFs and whole files
 • Nested folders with their own icon and colour, tags that cut across them, pins for what you need most
-• Fill-in fields: "Hi {{first_name}}" turns into a small form. Dates, times and the clipboard fill themselves in
 
 ON EVERY DEVICE
 • Your library syncs through your own iCloud — there is no Summon account and no Summon server

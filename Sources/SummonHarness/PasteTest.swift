@@ -142,14 +142,12 @@ enum PasteTest {
             exit(1)
         }
 
-        let values = ["first_name": "Marieke", "project": "the rebrand"]
-        guard let payload = model.store.payload(for: snippet.id, fieldValues: values) else {
+        guard let payload = model.store.payload(for: snippet.id) else {
             check("The snippet resolves to a payload", false)
             flush()
             exit(1)
         }
         let expected = payload.plainText ?? ""
-        let caretBack = payload.cursorOffsetFromEnd
 
         model.dismissPanel()
         let outcome = await model.inserter.insert(payload, into: model.focus, plainOnly: false, autoPaste: true)
@@ -187,10 +185,8 @@ enum PasteTest {
               detail: "\(landed.count) characters")
         check("The whole snippet arrived intact", landed.contains(expected),
               detail: String(landed.prefix(46)).replacingOccurrences(of: "\n", with: " ") + "…")
-        check("Fill-in values were substituted", landed.contains("Marieke") && landed.contains("the rebrand"))
-        check("No unresolved placeholders were pasted", !landed.contains("{{"))
 
-        // And the caret: {{cursor}} should have positioned it, not left it at the end.
+        // And the caret: it should sit after the pasted text, as after any paste.
         guard let focused else {
             info("Caret position", "not checkable under the sandbox")
             await tidyUp(app: app, target: target)
@@ -204,14 +200,9 @@ enum PasteTest {
         if let rangeRef, CFGetTypeID(rangeRef) == AXValueGetTypeID() {
             AXValueGetValue(rangeRef as! AXValue, .cfRange, &range)
         }
-        if let caretBack {
-            let expectedLocation = landed.utf16.count - caretBack
-            check("The caret landed where {{cursor}} was",
-                  abs(range.location - expectedLocation) <= 1,
-                  detail: "caret at \(range.location), expected \(expectedLocation)")
-        } else {
-            info("Snippet had no {{cursor}} token", "caret check skipped")
-        }
+        check("The caret sits at the end of what was pasted",
+              abs(range.location - landed.utf16.count) <= 1,
+              detail: "caret at \(range.location), expected \(landed.utf16.count)")
 
         // Leave the document empty so TextEdit quits without a save prompt.
         AXUIElementSetAttributeValue(focused, kAXValueAttribute as CFString, "" as CFTypeRef)

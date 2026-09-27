@@ -175,7 +175,7 @@ public struct ItemDetailView: View {
                 .padding(.vertical, Theme.Space.m)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
 
-                if snapshot.hasPlaceholders || snapshot.kind == .richText || rewriteAvailable {
+                if snapshot.kind == .richText || rewriteAvailable {
                     contentAffordances(snapshot)
                 }
             }
@@ -191,11 +191,6 @@ public struct ItemDetailView: View {
     /// none of it does.
     private func contentAffordances(_ snapshot: ItemSnapshot) -> some View {
         HStack(spacing: Theme.Space.m) {
-            if snapshot.hasPlaceholders {
-                Label("Fill-in fields", systemImage: "square.dashed.inset.filled")
-                    .labelStyle(.titleAndIcon)
-                    .help("Use {{name}}, {{name:default}}, {{date}}, {{clipboard}} or {{cursor}}")
-            }
             if snapshot.kind == .richText {
                 Label("Formatted", systemImage: "textformat").labelStyle(.titleAndIcon)
             }

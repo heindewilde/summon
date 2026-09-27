@@ -93,9 +93,6 @@ struct PhoneItemDetailView: View {
                 KindGlyph(kind: snapshot.kind, isLocked: snapshot.isLocked, size: 20)
                 Text(snapshot.kind.displayName)
                 if snapshot.isPinned { Label("Pinned", systemImage: "pin.fill").labelStyle(.iconOnly) }
-                if snapshot.hasPlaceholders {
-                    Label("Fill-in fields", systemImage: "square.dashed.inset.filled")
-                }
             }
             .font(Theme.Typography.meta)
             .foregroundStyle(Theme.tertiaryText)
@@ -177,9 +174,9 @@ struct PhoneItemDetailView: View {
         HStack(spacing: Theme.Space.m) {
             Button {
                 model.use(itemID, style: .copy)
-                if !snapshot.isLocked, !snapshot.hasPlaceholders { Theme.Haptics.success() }
+                if !snapshot.isLocked { Theme.Haptics.success() }
             } label: {
-                Label(snapshot.hasPlaceholders ? "Fill in & Copy" : "Copy", systemImage: "doc.on.doc")
+                Label("Copy", systemImage: "doc.on.doc")
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, Theme.Space.s)
             }

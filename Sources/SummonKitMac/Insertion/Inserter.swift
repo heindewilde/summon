@@ -158,10 +158,6 @@ public final class Inserter {
 
         postCommandV()
 
-        if let back = payload.cursorOffsetFromEnd, back > 0 {
-            try? await Task.sleep(for: .milliseconds(60))
-            postLeftArrow(times: min(back, 2000))
-        }
         return .pasted
     }
 
@@ -185,20 +181,6 @@ public final class Inserter {
         up.flags = []
         down.post(tap: .cghidEventTap)
         up.post(tap: .cghidEventTap)
-    }
-
-    private func postLeftArrow(times: Int) {
-        guard let source = CGEventSource(stateID: .combinedSessionState) else { return }
-        let left = CGKeyCode(kVK_LeftArrow)
-        for _ in 0..<times {
-            guard let down = CGEvent(keyboardEventSource: source, virtualKey: left, keyDown: true),
-                  let up = CGEvent(keyboardEventSource: source, virtualKey: left, keyDown: false)
-            else { return }
-            down.flags = []
-            up.flags = []
-            down.post(tap: .cghidEventTap)
-            up.post(tap: .cghidEventTap)
-        }
     }
 
     /// Synthesises ⌘C in the frontmost app and returns whatever landed on the

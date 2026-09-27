@@ -15,7 +15,7 @@ struct HeuristicsTests {
     @Test("A greeting is skipped, because it says nothing about what the snippet is for")
     func skipsGreeting() {
         let text = """
-        Hi {{first_name}},
+        Hi Sam,
 
         Thanks for getting in touch about the rebrand.
         """
@@ -54,7 +54,6 @@ struct HeuristicsTests {
         #expect(Heuristics.tags(forText: "Write to hein@example.com", kind: .text).contains("email"))
         #expect(Heuristics.tags(forText: "See https://example.com/x", kind: .text).contains("link"))
         #expect(Heuristics.tags(forText: "IBAN: NL91 ABNA 0417 1643 00", kind: .text).contains("banking"))
-        #expect(Heuristics.tags(forText: "Hi {{name}}", kind: .text).contains("template"))
         #expect(Heuristics.tags(forText: "Our invoice is attached", kind: .text).contains("invoice"))
         #expect(Heuristics.tags(forText: "This NDA is binding", kind: .text).contains("legal"))
     }
@@ -68,7 +67,7 @@ struct HeuristicsTests {
     @Test("Never more than four tags, so the UI stays calm")
     func tagsAreCapped() {
         let kitchenSink = "hein@example.com https://example.com IBAN NL91 ABNA 0417 1643 00 " +
-                          "invoice contract proposal meeting password {{name}} +31 6 12345678"
+                          "invoice contract proposal meeting password +31 6 12345678"
         #expect(Heuristics.tags(forText: kitchenSink, kind: .text).count <= 4)
     }
 

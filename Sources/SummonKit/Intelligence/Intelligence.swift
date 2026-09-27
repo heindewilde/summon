@@ -211,8 +211,7 @@ public final class Intelligence {
         return await run {
             let session = LanguageModelSession(instructions: """
             You rewrite short pieces of text the user reuses, such as email replies. \
-            Preserve every placeholder written as {{like_this}} exactly, including its \
-            braces. Return only the rewritten text, with no commentary.
+            Return only the rewritten text, with no commentary.
             """)
             let response = try await session.respond(
                 to: "\(tone.instruction)\n\n---\n\(excerpt)\n---",

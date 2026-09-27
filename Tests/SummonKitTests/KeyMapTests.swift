@@ -86,17 +86,10 @@ struct KeyMapTests {
         #expect(resolve(KeyChord(.delete), queryIsEmpty: false) == nil)
     }
 
-    @Test("Tab means next field while filling in, not drill-in")
-    func tabInFillMode() {
-        #expect(resolve(KeyChord(.tab), context: .fill, selectionIsFolder: true) == .nextField)
-        #expect(resolve(KeyChord(.backTab), context: .fill) == .previousField)
-        #expect(resolve(KeyChord(.tab, .shift), context: .fill) == .previousField)
-    }
-
     // MARK: Escape unwinds one level, everywhere
 
     @Test("Escape resolves to escape in every context",
-          arguments: [PanelContext.results, .actionMenu, .fill, .unlock])
+          arguments: [PanelContext.results, .actionMenu, .unlock])
     func escapeIsUniversal(_ context: PanelContext) {
         #expect(resolve(KeyChord(.escape), context: context) == .escape)
     }

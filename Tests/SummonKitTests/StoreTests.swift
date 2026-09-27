@@ -267,33 +267,15 @@ struct LibraryStoreTests {
         #expect(store.allTags().count == 1)
     }
 
-    @Test("A payload renders placeholders and reports the caret offset")
-    func payloadRendersTemplate() throws {
+    @Test("A payload is the snippet exactly as written, braces and all")
+    func payloadIsVerbatim() throws {
         let (store, _, paths) = try makeStore()
         defer { paths.destroy() }
 
-        let item = store.createSnippet(
-            title: "Reply",
-            body: "Hi {{first_name}},\n\n{{cursor}}\n\nBest"
-        )
-        let payload = try #require(store.payload(for: item.id, fieldValues: ["first_name": "Marieke"]))
-        #expect(payload.plainText?.contains("Hi Marieke,") == true)
-        #expect(payload.plainText?.contains("{{") == false)
-        #expect(payload.cursorOffsetFromEnd == 6) // "\n\nBest"
-    }
-
-    @Test("Only snippets that actually need input report a template")
-    func templateOnlyWhenNeeded() throws {
-        let (store, _, paths) = try makeStore()
-        defer { paths.destroy() }
-
-        let withField = store.createSnippet(title: "A", body: "Hi {{name}}")
-        let autoOnly = store.createSnippet(title: "B", body: "Sent {{date}}")
-        let plain = store.createSnippet(title: "C", body: "Nothing special")
-
-        #expect(store.template(for: withField.id) != nil)
-        #expect(store.template(for: autoOnly.id) == nil)
-        #expect(store.template(for: plain.id) == nil)
+        let body = "Hi {{first_name}},\n\nSent {{date}}\n\nBest"
+        let item = store.createSnippet(title: "Reply", body: body)
+        let payload = try #require(store.payload(for: item.id))
+        #expect(payload.plainText == body)
     }
 
     @Test("Deleting an item removes its blob from disk")

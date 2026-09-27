@@ -68,16 +68,6 @@ enum SnapshotRunner {
             render(PanelView(model: model), name: "panel-search", scheme: scheme,
                    size: CGSize(width: PanelView.width, height: PanelView.height))
 
-            // A snippet with fill-in fields.
-            if let template = model.store.snapshots.first(where: { $0.hasPlaceholders }) {
-                model.query = ""
-                model.runSearch()
-                model.fieldValues = ["first_name": "Marieke", "project": "the rebrand"]
-                model.mode = .fill(itemID: template.id)
-                render(PanelView(model: model), name: "panel-fill", scheme: scheme,
-                       size: CGSize(width: PanelView.width, height: PanelView.height))
-            }
-
             model.mode = .unlock(pendingItemID: nil)
             render(PanelView(model: model), name: "panel-unlock", scheme: scheme,
                    size: CGSize(width: PanelView.width, height: PanelView.height))

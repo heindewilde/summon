@@ -126,17 +126,14 @@ enum SelfTest {
         model.query = ""
         model.runSearch()
         let scratch = NSPasteboard(name: NSPasteboard.Name("com.heindewilde.summon.selftest"))
-        if let template = model.store.snapshots.first(where: { $0.hasPlaceholders }),
-           let payload = model.store.payload(for: template.id,
-                                             fieldValues: ["first_name": "Marieke",
-                                                           "invoice_number": "2026-084"]) {
+        if let snippet = model.store.snapshots.first(where: { $0.kind == .text && !$0.isLocked }),
+           let payload = model.store.payload(for: snippet.id) {
             (model.inserter as? Inserter)?.writeToPasteboard(payload, to: scratch)
             let written = scratch.string(forType: .string) ?? ""
-            check("A filled snippet reaches the pasteboard", !written.isEmpty)
-            check("Placeholders are resolved, not pasted raw", !written.contains("{{"),
+            check("A snippet reaches the pasteboard exactly as written", written == payload.plainText,
                   detail: String(written.prefix(48)).replacingOccurrences(of: "\n", with: " ") + "…")
         } else {
-            check("A snippet with placeholders is available", false)
+            check("A text snippet is available", false)
         }
         scratch.releaseGlobally()
 

@@ -6,21 +6,17 @@ public struct InsertPayload: Sendable {
     public var rtf: Data?
     public var fileURL: URL?
     public var imageData: Data?
-    /// From a `{{cursor}}` token: how many Left presses to send after pasting.
-    public var cursorOffsetFromEnd: Int?
 
     public init(
         plainText: String? = nil,
         rtf: Data? = nil,
         fileURL: URL? = nil,
-        imageData: Data? = nil,
-        cursorOffsetFromEnd: Int? = nil
+        imageData: Data? = nil
     ) {
         self.plainText = plainText
         self.rtf = rtf
         self.fileURL = fileURL
         self.imageData = imageData
-        self.cursorOffsetFromEnd = cursorOffsetFromEnd
     }
 
     public var isEmpty: Bool {

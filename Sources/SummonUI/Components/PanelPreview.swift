@@ -82,7 +82,9 @@ public struct PanelPreview: View {
 
     private var textPreview: some View {
         SnapshotSafeScrollView {
-            PlaceholderHighlightedText(text: bodyText ?? "")
+            Text(bodyText ?? "")
+                .font(.system(size: 12))
+                .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(Theme.Space.m)
         }

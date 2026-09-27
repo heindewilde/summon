@@ -46,10 +46,10 @@ public final class IntentLibrary {
     }
 
     /// The contents of an item, when they can be given without asking a question.
-    /// Nil for a locked item, and for one with fill-in fields still to fill.
+    /// Nil for a locked item.
     public func payload(for id: UUID) -> InsertPayload? {
         guard let snapshot = store.snapshots.first(where: { $0.id == id }),
-              !snapshot.isLocked, !snapshot.hasPlaceholders
+              !snapshot.isLocked
         else { return nil }
         return store.payload(for: id)
     }

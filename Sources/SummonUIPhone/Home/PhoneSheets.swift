@@ -5,20 +5,14 @@ import SummonKit
 import SummonUI
 import SwiftUI
 
-/// The questions the app can ask from anywhere: fill in these blanks, confirm this
-/// deletion, set or prove your PIN.
+/// The questions the app can ask from anywhere: confirm this deletion, set or prove
+/// your PIN.
 ///
 /// Collected in one modifier because a view can only present one sheet at a time, and
 /// scattering them meant whichever screen happened to be on top swallowed the rest —
 /// which is exactly how "Set a PIN" came to do nothing at all.
 struct PhoneSheets: ViewModifier {
     @Bindable var model: AppModel
-
-    private struct FillTarget: Identifiable { let id: UUID }
-
-    private var fillTarget: FillTarget? {
-        if case .fill(let id) = model.mode { FillTarget(id: id) } else { nil }
-    }
 
     /// True while something is waiting on the vault. The model sets this when a locked
     /// item is chosen; on the Mac the panel answers it, and on a phone nothing did —
@@ -35,11 +29,6 @@ struct PhoneSheets: ViewModifier {
                 // Dismisses itself: a successful unlock puts the model back in search
                 // mode and then does the thing that was waiting.
                 VaultSheet(model: model) { model.dismissPanel() }
-            }
-            .sheet(item: Binding(get: { fillTarget },
-                                 set: { if $0 == nil { model.dismissPanel() } })) { target in
-                FillFieldsSheet(model: model, itemID: target.id) { model.dismissPanel() }
-                    .presentationDetents([.medium, .large])
             }
             .sheet(item: Binding(get: { model.lockSheet },
                                  set: { if $0 == nil { model.cancelLockSheet() } })) { purpose in

@@ -32,7 +32,6 @@ public struct ItemSnapshot: Sendable, Identifiable, Hashable {
     public var isPinned: Bool
     public var isSensitive: Bool
     public var isLocked: Bool
-    public var hasPlaceholders: Bool
 
     public var useCount: Int
     public var lastUsedAt: Date?
@@ -57,7 +56,6 @@ public struct ItemSnapshot: Sendable, Identifiable, Hashable {
         isPinned: Bool = false,
         isSensitive: Bool = false,
         isLocked: Bool = false,
-        hasPlaceholders: Bool = false,
         useCount: Int = 0,
         lastUsedAt: Date? = nil,
         createdAt: Date = Date(),
@@ -78,7 +76,6 @@ public struct ItemSnapshot: Sendable, Identifiable, Hashable {
         self.isPinned = isPinned
         self.isSensitive = isSensitive
         self.isLocked = isLocked
-        self.hasPlaceholders = hasPlaceholders
         self.useCount = useCount
         self.lastUsedAt = lastUsedAt
         self.createdAt = createdAt

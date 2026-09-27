@@ -56,7 +56,6 @@ public enum Heuristics {
         if detectors.vat.firstMatch(in: text) { tags.insert("tax") }
         if detectors.phone.firstMatch(in: text) { tags.insert("contact") }
         if text.contains("```") || detectors.code.firstMatch(in: text) { tags.insert("code") }
-        if SnippetTemplate.requiresInput(text) { tags.insert("template") }
 
         for (keyword, tag) in keywordTags where lower.contains(keyword) {
             tags.insert(tag)
@@ -98,7 +97,7 @@ public enum Heuristics {
 
     static func isGreeting(_ line: String) -> Bool {
         let lower = line.lowercased().trimmingCharacters(in: .whitespaces)
-        // Short line that opens with a greeting word, e.g. "Hi {{first_name}},"
+        // Short line that opens with a greeting word, e.g. "Hi Sam,"
         guard lower.count <= 60 else { return false }
         return greetings.contains { lower == $0 || lower.hasPrefix($0 + " ") || lower.hasPrefix($0 + ",") }
     }

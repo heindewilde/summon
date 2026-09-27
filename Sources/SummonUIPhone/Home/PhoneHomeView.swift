@@ -40,10 +40,6 @@ public struct PhoneHomeView: View {
     private func openRequestedScreen() {
         switch requestedScreen {
         case "detail": detail = model.store.snapshots.first(where: { !$0.isLocked })?.id
-        case "fill":
-            if let id = model.store.snapshots.first(where: \.hasPlaceholders)?.id {
-                model.use(id, style: .copy)
-            }
         case "settings": showingSettings = true
         case "organise": organising = true
         case "vault": showingVault = true
@@ -212,7 +208,7 @@ public struct PhoneHomeView: View {
     /// is invisible until you paste it somewhere else.
     private func copy(_ item: ItemSnapshot) {
         model.use(item.id, style: .copy)
-        if !item.isLocked, !item.hasPlaceholders { Theme.Haptics.success() }
+        if !item.isLocked { Theme.Haptics.success() }
     }
 }
 #endif

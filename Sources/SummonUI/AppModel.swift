@@ -99,8 +99,6 @@ public enum SidebarSelection: Hashable, Sendable {
 
 public enum PanelMode: Equatable {
     case search
-    /// A snippet with fill-in fields is being completed before insertion.
-    case fill(itemID: UUID)
     /// A locked item was chosen; authenticate, then continue with it.
     case unlock(pendingItemID: UUID?)
 }
@@ -160,7 +158,6 @@ public final class AppModel {
     public var selectedIndex: Int = 0
     public var mode: PanelMode = .search
     public var isPanelVisible: Bool = false
-    public var fieldValues: [String: String] = [:]
     public var secretEntry: String = ""
     public var secretError: String?
 
@@ -282,7 +279,6 @@ public final class AppModel {
         }
         switch mode {
         case .search: return .results
-        case .fill: return .fill
         case .unlock: return .unlock
         }
     }
@@ -563,7 +559,6 @@ public final class AppModel {
         case .escape: escape()
         case .drillIn: drillIn()
         case .drillOut: drillOut()
-        case .nextField, .previousField: break   // handled by SwiftUI focus in fill mode
         case .action(let action): run(action)
         }
     }
@@ -745,7 +740,6 @@ public final class AppModel {
         // left open when the panel was dismissed.
         folderScope = nil
         overlay = .none
-        fieldValues = [:]
         secretEntry = ""
         secretError = nil
         // No store.refresh() here: every mutating method and both vault transitions
@@ -785,18 +779,6 @@ public final class AppModel {
             return
         }
 
-        if snapshot.hasPlaceholders, style != .open, let template = store.template(for: id) {
-            fieldValues = Dictionary(uniqueKeysWithValues: template.fields.map {
-                ($0.name, $0.defaultValue ?? "")
-            })
-            mode = .fill(itemID: id)
-            return
-        }
-
-        deliver(id, style: style)
-    }
-
-    public func completeFill(for id: UUID, style: UseStyle = .paste) {
         deliver(id, style: style)
     }
 
@@ -823,8 +805,7 @@ public final class AppModel {
             return
         }
 
-        let clipboardText = inserter.currentClipboardText()
-        guard let payload = store.payload(for: id, fieldValues: fieldValues, clipboard: clipboardText) else {
+        guard let payload = store.payload(for: id) else {
             show(Toast(text: "Couldn’t read that item", symbol: "exclamationmark.triangle", tone: .danger))
             return
         }
@@ -899,7 +880,7 @@ public final class AppModel {
         guard let snapshot = store.snapshots.first(where: { $0.id == id }), !snapshot.isLocked else {
             return nil
         }
-        guard let payload = store.payload(for: id, clipboard: inserter.currentClipboardText()) else {
+        guard let payload = store.payload(for: id) else {
             return nil
         }
         return DragProvider.make(for: payload, title: snapshot.title, itemID: id)

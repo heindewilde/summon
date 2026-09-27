@@ -276,16 +276,12 @@ public final class LibraryStore {
 
         var searchable = ""
         var preview = ""
-        // Resolved once and reused below. Resolving again for `hasPlaceholders` meant
-        // a second decrypt of every sealed item on every refresh.
-        var body = ""
-
         if locked {
             // Title and tags stay visible; contents do not. This is the line that
             // stops a locked item being found by searching what is inside it.
             preview = "Locked — unlock to view"
         } else {
-            body = resolveBodyText(item, key: key) ?? ""
+            let body = resolveBodyText(item, key: key) ?? ""
             let extracted = resolveExtractedText(item, key: key) ?? ""
             searchable = [body, extracted].filter { !$0.isEmpty }.joined(separator: "\n")
             preview = previewLine(for: item, body: body)
@@ -309,7 +305,6 @@ public final class LibraryStore {
             isPinned: item.isPinned,
             isSensitive: sensitive,
             isLocked: locked,
-            hasPlaceholders: item.kind.isTextual && SnippetTemplate.requiresInput(body),
             useCount: usage?.useCount ?? 0,
             lastUsedAt: usage?.lastUsedAt,
             createdAt: item.createdAt,
@@ -1372,7 +1367,7 @@ public final class LibraryStore {
     // MARK: - Payload resolution
 
     /// Everything needed to put an item on the pasteboard. Nil when locked.
-    public func payload(for id: UUID, fieldValues: [String: String] = [:], clipboard: String = "") -> InsertPayload? {
+    public func payload(for id: UUID) -> InsertPayload? {
         guard let item = item(id: id) else { return nil }
         let key = vault.currentKey
         if item.isEffectivelySensitive && key == nil { return nil }
@@ -1380,10 +1375,6 @@ public final class LibraryStore {
         switch item.kind {
         case .text, .richText:
             guard let body = resolveBodyText(item, key: key) else { return nil }
-            let rendered = SnippetTemplate.parse(body).render(
-                values: fieldValues,
-                context: RenderContext(clipboard: clipboard)
-            )
             var rtf: Data?
             if item.kind == .richText {
                 if let sealed = item.sealedBody, let key {
@@ -1391,12 +1382,8 @@ public final class LibraryStore {
                 } else {
                     rtf = item.bodyRTF
                 }
-                // A rich snippet with placeholders is rendered as plain text, since
-                // splicing values into RTF runs would corrupt the formatting.
-                if SnippetTemplate.parse(body).hasPlaceholders { rtf = nil }
             }
-            return InsertPayload(plainText: rendered.text, rtf: rtf,
-                                 cursorOffsetFromEnd: rendered.cursorOffsetFromEnd)
+            return InsertPayload(plainText: body, rtf: rtf)
 
         case .image:
             guard let blob = item.storedBlob else { return nil }
@@ -1409,14 +1396,6 @@ public final class LibraryStore {
                   let url = try? materialize(blob, itemID: item.id, key: key) else { return nil }
             return InsertPayload(fileURL: url)
         }
-    }
-
-    /// The template for an item that needs filling in before it can be inserted.
-    public func template(for id: UUID) -> SnippetTemplate? {
-        guard let item = item(id: id), item.kind.isTextual else { return nil }
-        guard let body = resolveBodyText(item, key: vault.currentKey) else { return nil }
-        let template = SnippetTemplate.parse(body)
-        return template.requiresInput ? template : nil
     }
 
     // MARK: - Persistence

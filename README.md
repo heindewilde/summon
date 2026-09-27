@@ -61,8 +61,8 @@ Text, rich text, images, PDFs, whole files. Dropped in, copied in, or grabbed fr
 </td>
 <td width="33%" valign="top">
 
-### 📝 Fill in the blanks
-`Hi {{first_name}},` turns the panel into a small form. Dates, the clipboard, and where the caret lands are placeholders too.
+### 📋 Exactly as written
+What you saved is what gets pasted. Formatting survives where the app you paste into can take it; `⇧↩` drops it when it can't.
 
 </td>
 </tr>
@@ -112,24 +112,6 @@ Four ways, because the friction of saving is what decides whether a tool like th
 - **⌥⇧S** saves whatever is selected right now, without leaving the app you're in. In Finder it reads the selection directly; elsewhere it copies, reads the pasteboard, and puts your previous clipboard contents back.
 - **Clipboard history** keeps the last 40 things you copied so you can promote one into the library. It skips anything a password manager marks as concealed, and ignores 1Password, Bitwarden and Keychain Access entirely.
 - **"Add to Summon"** registers in the system Services menu, so it appears in the right-click menu of every app.
-
-### 📝 Fill-in fields
-
-A snippet can have blanks:
-
-```
-Hi {{first_name}},
-
-Thanks for getting in touch about {{topic:your enquiry}}. I will come back to you
-by {{date:+3d}}.
-
-{{cursor}}
-
-Best,
-Hein
-```
-
-Choose it and the panel becomes a small form — Tab between fields, ↩ to insert. Repeating a name reuses the value you already typed. `{{date}}`, `{{time}}` and `{{clipboard}}` fill themselves in, and the caret ends up exactly where `{{cursor}}` was.
 
 ### 🗂 Folders, tags and pins
 
@@ -242,7 +224,7 @@ Requires **macOS 26** and **Xcode 26** (Swift 6.1+). There are **no dependencies
 Scripts/run.sh              # debug build, then launch
 Scripts/run.sh --demo       # …against a throwaway library
 Scripts/selftest.sh         # 90 runtime checks on a fresh demo library
-swift test                  # 287 tests over the logic layer
+swift test                  # 285 tests over the logic layer
 swift test -c release       # the same, in an optimised build
 Scripts/perf.sh             # the wall-clock budgets, on a quiet machine
 ```
@@ -325,7 +307,6 @@ Sources/
     Storage/       Managed blob store, content hashing, scratch materialisation
     Search/        Fuzzy scorer, frecency, app affinity, query parser, index cache
     Keyboard/      PanelKeyMap — every binding, as pure data
-    Snippets/      Placeholder parsing and rendering
     Intelligence/  Heuristics, Vision and PDF extraction, on-device model
     Capture/       Clipboard monitor, selection capture, importer
     Insertion/     Pasteboard writing, focus restore, synthetic paste
@@ -361,7 +342,7 @@ Sources/
 
 | | |
 |---|---|
-| **287 tests** across 45 suites | The whole logic layer: vault round-trips and wrong-secret rejection, the cooldown holding against a clock set backwards, that extraction opens no socket and that a seal leaves no plaintext in the store file, ranking and frecency, placeholder parsing, folder trees and cycle refusal, every keyboard binding *and* the keys the panel deliberately declines, contrast ratios, and content edge cases from empty titles to right-to-left text |
+| **285 tests** across 50 suites | The whole logic layer: vault round-trips and wrong-secret rejection, the cooldown holding against a clock set backwards, that extraction opens no socket and that a seal leaves no plaintext in the store file, ranking and frecency, folder trees and cycle refusal, every keyboard binding *and* the keys the panel deliberately declines, contrast ratios, and content edge cases from empty titles to right-to-left text |
 | **90 runtime checks** | `Scripts/selftest.sh` drives the real app: hot key registration, panel window configuration, search reaching inside a PDF, the vault lifecycle end to end, and each keyboard binding actually reaching behaviour |
 | **Performance budgets** | Structural ones — "typing never rebuilds the index" — run everywhere and fail the build. The wall-clock ones run only in `Scripts/perf.sh`, which refuses outright if the machine is busy, because a budget measured beside a running test suite or a busy editor measures the scheduler rather than the code |
 | **A paste round trip** | Opens a scratch document in TextEdit, summons a snippet into it, and reads the result back through the Accessibility API — refusing to run unless TextEdit is genuinely frontmost |

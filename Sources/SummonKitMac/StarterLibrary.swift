@@ -24,15 +24,13 @@ public enum StarterLibrary {
         store.createSnippet(
             title: "New enquiry — first reply",
             body: """
-            Hi {{first_name}},
+            Hi there,
 
-            Thanks for getting in touch about {{project:your project}}. I'd be glad to help.
+            Thanks for getting in touch about your project. I'd be glad to help.
 
             I've attached an overview of how I usually work, along with indicative timings. \
-            If it looks like a fit, I have availability from {{date:+7d}} and can put together \
+            If it looks like a fit, I have availability from next week and can put together \
             a proper proposal.
-
-            {{cursor}}
 
             Best,
             Hein
@@ -43,14 +41,14 @@ public enum StarterLibrary {
         store.createSnippet(
             title: "Meeting follow-up",
             body: """
-            Hi {{first_name}},
+            Hi there,
 
             Good to speak just now. To summarise what we agreed:
 
-            • {{point_one}}
-            • {{point_two}}
+            •
+            •
 
-            I'll come back to you by {{date:+3d}}. Shout if I've missed anything.
+            I'll come back to you within three days. Shout if I've missed anything.
 
             Best,
             Hein
@@ -61,11 +59,11 @@ public enum StarterLibrary {
         store.createSnippet(
             title: "Politely declining new work",
             body: """
-            Hi {{first_name}},
+            Hi there,
 
             Thank you for thinking of me for this — it sounds like a genuinely interesting piece of work.
 
-            Unfortunately my calendar is full through {{date:+30d}}, so I'd rather say no now than \
+            Unfortunately my calendar is full for the next month, so I'd rather say no now than \
             hold you up. If timings shift on your side, do come back to me.
 
             Best of luck with it,
@@ -81,7 +79,7 @@ public enum StarterLibrary {
             IBAN: NL91 ABNA 0417 1643 00
             BIC: ABNANL2A
             VAT: NL001234567B01
-            Reference: {{invoice_number}}
+            Reference: please quote the invoice number
             """,
             folder: details, tags: ["banking", "invoice"], pinned: true
         )

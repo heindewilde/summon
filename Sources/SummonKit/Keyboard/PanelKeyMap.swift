@@ -10,7 +10,6 @@ public enum ActivationStyle: Sendable, Equatable {
 public enum PanelContext: Sendable, Equatable {
     case results
     case actionMenu
-    case fill
     case unlock
 }
 
@@ -28,8 +27,6 @@ public enum PanelCommand: Sendable, Equatable {
     case escape
     case drillIn
     case drillOut
-    case nextField
-    case previousField
     case action(PanelActionID)
 }
 
@@ -118,8 +115,6 @@ public enum PanelKeyMap {
             return resultsCommand(chord, queryIsEmpty: queryIsEmpty, selectionIsFolder: selectionIsFolder)
         case .actionMenu:
             return actionMenuCommand(chord)
-        case .fill:
-            return fillCommand(chord)
         case .unlock:
             return chord == KeyChord(.enter) ? .activate(.paste) : nil
         }
@@ -167,15 +162,6 @@ public enum PanelKeyMap {
         case (.down, []): return .move(1)
         case (.enter, []): return .runSelectedAction
         case (.character("k"), .command): return .toggleActionMenu
-        default: return nil
-        }
-    }
-
-    private static func fillCommand(_ chord: KeyChord) -> PanelCommand? {
-        switch (chord.key, chord.modifiers) {
-        case (.tab, []): return .nextField
-        case (.backTab, []), (.tab, .shift): return .previousField
-        case (.enter, []): return .activate(.paste)
         default: return nil
         }
     }

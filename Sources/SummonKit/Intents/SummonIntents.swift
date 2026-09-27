@@ -87,8 +87,7 @@ public struct SummonItemIntent: AppIntent {
     public func perform() async throws -> some IntentResult & ProvidesDialog {
         let library = try IntentLibrary.shared()
         guard let payload = library.payload(for: item.id) else {
-            // Either it is sealed, or it wants fill-in values. Both are questions, and
-            // an intent has nowhere to ask them.
+            // It is sealed, and unlocking is a question an intent has nowhere to ask.
             return .result(dialog: "Open Summon to use “\(item.title)”.")
         }
         Pasteboard.write(payload)

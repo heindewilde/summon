@@ -100,7 +100,9 @@ public struct SnippetEditor: View {
 
     public var body: some View {
         if isSnapshotting {
-            PlaceholderHighlightedText(text: attributed.string)
+            Text(attributed.string)
+                .font(.system(size: 12))
+                .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(Theme.Space.xs)
         } else {

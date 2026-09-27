@@ -22,7 +22,7 @@ public enum StarterLibrary {
         // MARK: Snippets
 
         store.createSnippet(
-            title: "New enquiry — first reply",
+            title: "Reply to a new enquiry",
             body: """
             Hi there,
 
@@ -61,7 +61,7 @@ public enum StarterLibrary {
             body: """
             Hi there,
 
-            Thank you for thinking of me for this — it sounds like a genuinely interesting piece of work.
+            Thank you for thinking of me for this. It sounds like a genuinely interesting piece of work.
 
             Unfortunately my calendar is full for the next month, so I'd rather say no now than \
             hold you up. If timings shift on your side, do come back to me.

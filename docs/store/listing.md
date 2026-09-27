@@ -35,14 +35,14 @@ The reply you keep rewriting, the IBAN, the passport scan. One keystroke on the 
 ## Description (4,000 characters)
 
 ```
-Summon holds the handful of things you reuse — the canned reply, the IBAN, the VAT number, the passport scan, the portfolio PDF — and gets one of them to you in about a second.
+Summon holds the handful of things you reuse: the canned reply, the IBAN, the VAT number, the passport scan, the portfolio PDF. It gets any of them to you in about a second.
 
 On the Mac, press ⌥Space in any app, type a few letters, press ↩, and it is pasted where your cursor already was. No window to find, no tab to switch to, no clipboard to babysit. On iPhone and iPad, tap an item and it is on the clipboard, ready to paste wherever you were going.
 
 Because Summon holds less than a notes app, it can be much better at the one moment that matters.
 
 FAST
-• A keystroke re-ranks 2,000 items in about half a millisecond — measured by the test suite, not claimed
+• Instant, even with thousands of items. Results keep up with your typing
 • Results are ranked by what you actually reach for, and by what you have used in this app before
 • Fuzzy search that reaches inside PDFs and images, so a phrase on page four is one search away
 
@@ -51,10 +51,10 @@ EVERYTHING IN ONE PLACE
 • Nested folders with their own icon and colour, tags that cut across them, pins for what you need most
 
 ON EVERY DEVICE
-• Your library syncs through your own iCloud — there is no Summon account and no Summon server
+• Your library syncs through your own iCloud. No account to create, and no server of ours in between
 • Save into Summon from any app's share sheet, or from Finder's Quick Actions
 • A widget of pinned items that copies on tap, plus Shortcuts, Siri and a Control Centre button
-• Spotlight finds your items — except the ones you have marked sensitive, which are never indexed
+• Spotlight finds your items, except the ones you mark sensitive, which are never indexed
 
 PRIVATE BY DESIGN
 • No account, no analytics, no tracking, no ads

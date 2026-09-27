@@ -10,10 +10,9 @@ screenshot until someone opens it. `asc.py screenshots` cannot tell the differen
 
 - `iphone-*.png` — iPhone 17 Pro (6.9"), dark
 - `ipad-home.png` — iPad Pro 13", dark
-- `main-window-dark.png`, `panel-search-dark.png` — Mac, 2160 × 1360, from the Mac's own
-  snapshot harness (`SUMMON_DEMO=1 SUMMON_SNAPSHOT=<dir> dist/Summon.app/Contents/MacOS/Summon`).
-  The Mac App Store wants 2880 × 1800; scale up or re-render at that size. The harness
-  writes inside the app's container now that the app is sandboxed, and says where.
+- `mac-library-dark.png`, `mac-panel-dark.png` — Mac, 2880 × 1800: a real window from
+  the live-capture harness, grabbed with `screencapture -l` and centred on a dark canvas.
+  See "The Mac frames" below.
 
 Re-capture after a UI change:
 
@@ -24,7 +23,7 @@ Scripts/selftest.sh
 DEVICE=<simulator udid>
 xcrun simctl status_bar "$DEVICE" override --time "9:41" --batteryState charged \
   --batteryLevel 100 --wifiBars 3
-for screen in home detail fill settings; do
+for screen in home detail settings; do
   xcrun simctl terminate "$DEVICE" com.heindewilde.summon
   xcrun simctl launch "$DEVICE" com.heindewilde.summon -app.onboarded YES -SUMMON_SCREEN $screen
   sleep 6
@@ -48,9 +47,19 @@ xcrun simctl spawn "$DEVICE" defaults write com.apple.keyboard.preferences \
 
 ## The Mac frames
 
-`SUMMON_SNAPSHOT` renders them, but only from a build with Screen Recording permission:
-without it macOS substitutes a yellow "restricted" placeholder for anything backed by a
-window server surface, and the harness writes that out as happily as it would write the
-real thing. The signing change cost the old grant, so `mac-*.png` here are padded from
-`docs/screenshots/*.png`, which were rendered while it held. Re-grant Screen Recording
-to `dist/Summon.app` to render fresh ones.
+`SUMMON_LIVE` opens the real view in a real window without taking focus, and writes
+that window's number to `SUMMON_LIVE_INFO`, so `screencapture -l` grabs exactly it.
+The capturing process (the terminal) needs Screen Recording; the app does not. The
+panel goes on the sharpest screen, not the pointer's, so the frame is never 1x.
+
+```sh
+INFO="$HOME/Library/Containers/com.heindewilde.summon/Data/tmp/live.txt"
+SUMMON_DEMO=1 SUMMON_APPEARANCE=dark SUMMON_LIVE=panel SUMMON_LIVE_QUERY=invoice \
+  SUMMON_LIVE_INFO="$INFO" dist/Summon.app/Contents/MacOS/Summon &
+sleep 6; screencapture -x -l"$(cat "$INFO")" panel.png; kill %1
+# SUMMON_LIVE=library SUMMON_LIVE_KIND=document for the library window
+```
+
+The iPhone and iPad apps do not seed a starter library, so copy the Mac demo library
+(`~/Library/Group Containers/JV4MVRB77Q.group.com.heindewilde.summon/Summon-Demo`)
+into the simulator's app group as `Summon` before capturing them.

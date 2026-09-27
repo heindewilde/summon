@@ -78,7 +78,9 @@ public final class PanelController: NSObject, NSWindowDelegate {
     public func showForCapture() {
         let panel = panel ?? makePanel()
         self.panel = panel
-        position(panel)
+        // On the sharpest screen rather than the pointer's: a capture should not
+        // depend on where someone's mouse happens to be, nor come out at 1x.
+        position(panel, on: NSScreen.screens.max { $0.backingScaleFactor < $1.backingScaleFactor })
         panel.orderFrontRegardless()
     }
 
@@ -153,9 +155,9 @@ public final class PanelController: NSObject, NSWindowDelegate {
 
     /// Centred horizontally and set high on the screen the pointer is on — where the
     /// eye already is, rather than dead centre.
-    private func position(_ panel: SummonPanel) {
+    private func position(_ panel: SummonPanel, on chosen: NSScreen? = nil) {
         let mouse = NSEvent.mouseLocation
-        let screen = NSScreen.screens.first { $0.frame.contains(mouse) } ?? NSScreen.main
+        let screen = chosen ?? NSScreen.screens.first { $0.frame.contains(mouse) } ?? NSScreen.main
         guard let frame = screen?.visibleFrame else { return }
 
         let x = frame.midX - PanelView.width / 2

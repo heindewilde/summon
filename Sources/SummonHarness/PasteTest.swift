@@ -135,7 +135,7 @@ enum PasteTest {
         try? await Task.sleep(for: .milliseconds(700))
 
         guard let snippet = model.store.snapshots.first(where: {
-            $0.kind == .text && $0.title == "New enquiry — first reply"
+            $0.kind == .text && $0.title == "Reply to a new enquiry"
         }) ?? model.store.snapshots.first(where: { $0.kind == .text }) else {
             check("A snippet is available to insert", false)
             flush()

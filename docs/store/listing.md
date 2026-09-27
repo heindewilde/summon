@@ -72,7 +72,7 @@ Requires macOS 26 or iOS 26.
 ## Keywords (100 characters, comma-separated, no spaces)
 
 ```
-snippets,clipboard,paste,productivity,text,expander,shortcuts,templates,notes,files,pdf,private
+snippets,clipboard,paste,productivity,text,expander,shortcuts,vault,notes,files,pdf,private
 ```
 
 ## Support URL

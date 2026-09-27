@@ -547,7 +547,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Apps/SummonPhone/SummonPhone.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Summon;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
@@ -575,7 +575,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Apps/SummonPhone/SummonPhone-Release.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Summon;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
@@ -604,7 +604,7 @@
 				CODE_SIGN_ENTITLEMENTS = Apps/SummonMac/SummonMac.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Apps/SummonMac/Info.plist;
@@ -633,7 +633,7 @@
 				CODE_SIGN_ENTITLEMENTS = Apps/SummonMac/SummonMac-Release.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Apps/SummonMac/Info.plist;
@@ -659,7 +659,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = Apps/SummonShare/SummonShare.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Apps/SummonShare/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Add to Summon";
@@ -683,7 +683,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = Apps/SummonShare/SummonShare.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Apps/SummonShare/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Add to Summon";
@@ -707,7 +707,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = Apps/SummonWidgets/SummonWidgets.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Apps/SummonWidgets/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Summon;
@@ -731,7 +731,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = Apps/SummonWidgets/SummonWidgets.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Apps/SummonWidgets/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Summon;
@@ -755,7 +755,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = Apps/SummonQuickAction/SummonQuickAction.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Apps/SummonQuickAction/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Add to Summon";
@@ -780,7 +780,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = Apps/SummonQuickAction/SummonQuickAction.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Apps/SummonQuickAction/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Add to Summon";

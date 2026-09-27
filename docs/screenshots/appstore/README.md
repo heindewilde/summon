@@ -10,7 +10,7 @@ screenshot until someone opens it. `asc.py screenshots` cannot tell the differen
 
 - `iphone-*.png` — iPhone 17 Pro (6.9"), dark
 - `ipad-home.png` — iPad Pro 13", dark
-- `mac-library-dark.png`, `mac-panel-dark.png` — Mac, 2880 × 1800: a real window from
+- `mac-1-panel-dark.png`, `mac-2-library-dark.png` — Mac, 2880 × 1800: a real window from
   the live-capture harness, grabbed with `screencapture -l` and centred on a dark canvas.
   See "The Mac frames" below.
 
@@ -27,7 +27,7 @@ for screen in home detail settings; do
   xcrun simctl terminate "$DEVICE" com.heindewilde.summon
   xcrun simctl launch "$DEVICE" com.heindewilde.summon -app.onboarded YES -SUMMON_SCREEN $screen
   sleep 6
-  xcrun simctl io "$DEVICE" screenshot iphone-$screen.png
+  xcrun simctl io "$DEVICE" screenshot iphone-$screen.png  # then number them: the store shows them in name order
 done
 ```
 

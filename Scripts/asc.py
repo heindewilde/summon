@@ -10,6 +10,7 @@ be reviewed in a diff rather than retyped into a web form.
     Scripts/asc.py metadata            # docs/store/metadata.json → the listing
     Scripts/asc.py state               # version state for both platforms
     Scripts/asc.py screenshots         # docs/screenshots/appstore → the listing
+    Scripts/asc.py review              # review notes, per platform → App Review
     Scripts/asc.py ready               # what is still missing before submission
 
 Credentials, which this never prints: the .p8 in ~/.appstoreconnect/private_keys,
@@ -193,6 +194,26 @@ def cmd_metadata() -> None:
             print(f"app info: updated {info['attributes']['locale']}.")
 
 
+def cmd_review() -> None:
+    """Pushes the review notes in docs/store/metadata.json, one set per platform.
+
+    The Mac and the phone are tried in different ways, so a reviewer on either gets
+    the steps for the device in front of them rather than both run together.
+    """
+    source = Path(__file__).resolve().parent.parent / "docs/store/metadata.json"
+    notes = json.loads(source.read_text())["review"]
+    app = app_id()
+    for version in call("GET", f"apps/{app}/appStoreVersions", limit=10)["data"]:
+        platform = version["attributes"]["platform"]
+        if platform not in notes:
+            continue
+        detail = call("GET", f"appStoreVersions/{version['id']}/appStoreReviewDetail")["data"]
+        call("PATCH", f"appStoreReviewDetails/{detail['id']}",
+             body={"data": {"type": "appStoreReviewDetails", "id": detail["id"],
+                            "attributes": {"notes": notes[platform]}}})
+        print(f"{platform}: review notes updated ({len(notes[platform])} characters).")
+
+
 # Which file belongs to which of Apple's display sizes. The name decides, so a new
 # screenshot needs no code — only the right prefix and the right pixels.
 SCREENSHOT_SETS = {
@@ -324,7 +345,7 @@ def cmd_ready() -> None:
 
 
 COMMANDS = {"state": cmd_state, "ready": cmd_ready, "builds": cmd_builds, "screenshots": cmd_screenshots,
-            "testflight": cmd_testflight, "metadata": cmd_metadata}
+            "testflight": cmd_testflight, "metadata": cmd_metadata, "review": cmd_review}
 
 if __name__ == "__main__":
     if len(sys.argv) != 2 or sys.argv[1] not in COMMANDS:

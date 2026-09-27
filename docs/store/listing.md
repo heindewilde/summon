@@ -123,32 +123,8 @@ exempt.
 
 ## Review notes
 
-```
-Summon is a library of things you reuse, with one purchase covering Mac, iPhone and iPad.
-
-ACCESSIBILITY PERMISSION (macOS)
-The Mac app asks for Accessibility for exactly one purpose: after you choose an item, it
-sends a single ⌘V to the app you were using, so the item lands where your cursor already
-was. It does not read the screen, observe typing, or record anything. Without the
-permission the app copies the item and shows "Press ⌘V" instead — the app is fully
-functional either way, and the permission is requested at the moment it would first help,
-never at launch.
-
-ICLOUD
-Sync uses the owner's own private CloudKit database. There is no account to create and no
-server operated by the developer. Items marked sensitive are encrypted on-device before
-they sync, with a key held in iCloud Keychain.
-
-HOW TO TRY IT
-1. Open the app; the library starts empty.
-2. Add something: the + button offers a new snippet, files, a photo, or "save what I
-   copied".
-3. Tap the item. It is copied to the clipboard — paste it into Notes to confirm.
-4. Tap the chevron to read it, Edit to change it.
-5. The share sheet in Safari or Files offers "Add to Summon".
-
-No demo account is required.
-```
+In `metadata.json` under `review`, one set per platform, because a Mac reviewer and an
+iPhone reviewer try the app in different ways. Pushed with `Scripts/asc.py review`.
 
 ## What's new (first release)
 
@@ -165,8 +141,11 @@ In `docs/screenshots/appstore/`, captured from the demo library — no real data
 
 | Where | Size Apple asks for | Have |
 |---|---|---|
-| iPhone | 6.9" (1320 × 2868) | `iphone-home`, `iphone-detail`, `iphone-fill`, `iphone-settings` |
+| iPhone | 6.9" (1320 × 2868) | `iphone-1-home`, `iphone-2-detail`, `iphone-3-settings` |
 | iPad | 13" (2064 × 2752) | `ipad-home` |
-| Mac | 2880 × 1800 | `docs/screenshots/*.png` — the panel, the library, the action menu |
+| Mac | 2880 × 1800 | `mac-1-panel-dark`, `mac-2-library-dark` |
+
+They upload in file-name order, which is the order the store shows them, hence the
+numbers.
 
 Re-capture with the recipe in `docs/screenshots/appstore/README.md`.

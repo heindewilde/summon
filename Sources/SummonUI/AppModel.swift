@@ -919,7 +919,7 @@ public final class AppModel {
     @discardableResult
     public func unlockInPlace(secret: String) async -> Bool {
         do {
-            try await vault.unlock(secret: secret)
+            try await vault.unlock(pin: secret)
             secretError = nil
             store.scrubSensitiveContent()
             store.refresh()
@@ -944,7 +944,7 @@ public final class AppModel {
         isBusy = true
         defer { isBusy = false }
         do {
-            try await vault.unlock(secret: secretEntry)
+            try await vault.unlock(pin: secretEntry)
             afterUnlock()
         } catch {
             secretError = (error as? VaultError)?.errorDescription ?? error.localizedDescription
@@ -1220,7 +1220,7 @@ public final class AppModel {
     public func verifySecret(_ secret: String) async -> Bool {
         let wasLocked = !vault.isUnlocked
         do {
-            try await vault.unlock(secret: secret)
+            try await vault.unlock(pin: secret)
             if wasLocked { vault.lock() }
             secretError = nil
             return true
@@ -1231,30 +1231,21 @@ public final class AppModel {
     }
 
     /// Re-keys the vault. Content stays encrypted throughout — the master key is
-    /// unwrapped with the old secret and re-wrapped with the new one, so nothing is
+    /// unwrapped with the old PIN and re-wrapped with the new one, so nothing is
     /// decrypted and rewritten.
-    ///
-    /// Switching between a PIN and a passphrase is the same operation, which is why
-    /// there is no separate "convert" path to get wrong.
     public func changeSecret(
         current: String,
         new: String,
-        kind: VaultSecretKind,
         onError: (String) -> Void
     ) async {
-        let wasKind = vault.secretKind
         do {
-            try await vault.changeSecret(current: current, new: new, kind: kind)
+            try await vault.changePIN(current: current, new: new)
         } catch {
             onError((error as? VaultError)?.errorDescription ?? error.localizedDescription)
             return
         }
         store.refresh()
-        show(Toast(
-            text: kind == wasKind ? "\(kind.displayName) changed" : "Now using a \(kind.noun)",
-            symbol: "lock.rotation",
-            tone: .success
-        ))
+        show(Toast(text: "PIN changed", symbol: "lock.rotation", tone: .success))
     }
 
     /// Turns protection off: everything sensitive is decrypted back to plaintext
@@ -1326,11 +1317,10 @@ public final class AppModel {
     /// throwing, so the sheet can show the reason next to the field.
     public func completeSecretSetup(
         secret: String,
-        kind: VaultSecretKind = .pin,
         onError: (String) -> Void
     ) async {
         do {
-            try await vault.setUpSecret(secret, kind: kind)
+            try await vault.setUpPIN(secret)
         } catch {
             onError((error as? VaultError)?.errorDescription ?? error.localizedDescription)
             return
@@ -1339,7 +1329,7 @@ public final class AppModel {
         store.scrubSensitiveContent()
         store.refresh()
         runSearch()
-        show(Toast(text: "\(kind.displayName) set", symbol: "lock.fill", tone: .success,
+        show(Toast(text: "PIN set", symbol: "lock.fill", tone: .success,
                    detail: "Sensitive items are encrypted with it."))
         let resume = afterUnlockAction
         afterUnlockAction = nil

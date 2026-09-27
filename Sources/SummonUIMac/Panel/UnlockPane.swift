@@ -39,9 +39,8 @@ public struct UnlockPane: View {
                     .frame(maxWidth: 380)
             }
 
-            // The same field as everywhere else, in whichever shape this vault uses.
-            SecretField(kind: model.vault.secretKind,
-                        secret: $model.secretEntry,
+            // The same field as everywhere else.
+            SecretField(secret: $model.secretEntry,
                         isError: model.secretError != nil,
                         onComplete: { model.submitSecret() })
 
@@ -79,10 +78,9 @@ public struct UnlockPane: View {
             let seconds = max(1, Int(until.timeIntervalSinceNow.rounded(.up)))
             return "Too many attempts. Try again in \(seconds)s."
         }
-        let noun = model.vault.secretKind.noun
         if model.vault.biometricsEnabled {
-            return "Use Touch ID, or enter your \(noun). Contents stay encrypted on this Mac until you do."
+            return "Use Touch ID, or enter your PIN. Contents stay encrypted on this Mac until you do."
         }
-        return "Enter your \(noun). Contents stay encrypted on this Mac until you do."
+        return "Enter your PIN. Contents stay encrypted on this Mac until you do."
     }
 }

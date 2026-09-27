@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import LocalAuthentication
 import Observation
@@ -11,9 +12,9 @@ public enum VaultState: Equatable, Sendable {
 
 /// Holds the master key while unlocked, and nothing at all while locked.
 ///
-/// The master key is wrapped two independent ways — under the PIN (PBKDF2) and in the
-/// Keychain behind Touch ID — so changing the PIN is instant (it re-wraps one key)
-/// and losing biometrics never loses data.
+/// The master key is wrapped two independent ways — under the PIN (PBKDF2, bound to
+/// this device) and in the Keychain behind Touch ID — so changing the PIN is instant
+/// (it re-wraps one key) and losing biometrics never loses data.
 @MainActor
 @Observable
 public final class Vault {
@@ -57,10 +58,17 @@ public final class Vault {
     /// account this Mac is signed in to.
     private let syncsMasterKey: Bool
 
-    public init(paths: LibraryPaths, syncsMasterKey: Bool? = nil) {
+    /// Nil where the Keychain cannot hold one — an unsigned build, or a test that did
+    /// not ask for one — and the PIN then wraps the key on its own.
+    private let deviceSecrets: DeviceSecretStore?
+
+    public init(paths: LibraryPaths, syncsMasterKey: Bool? = nil,
+                deviceSecrets: DeviceSecretStore? = nil) {
         self.paths = paths
         self.syncsMasterKey = syncsMasterKey
             ?? (!LibraryPaths.isDemoMode && paths.isInAppGroupContainer)
+        self.deviceSecrets = deviceSecrets
+            ?? (paths.isInAppGroupContainer ? KeychainDeviceSecret() : nil)
         reload()
     }
 
@@ -78,8 +86,23 @@ public final class Vault {
                 w.failedAttempts = throttle.failedAttempts
                 w.lastFailedAt = throttle.lastFailedAt
             }
-            wrapper = w
-            state = .locked
+            if w.isDeviceBound, deviceSecrets?.isKnownMissing() ?? true {
+                // Bound to a secret this device does not have: the file came from
+                // another Mac (Migration Assistant copies files, not device-only
+                // Keychain items) or the Keychain was reset. No PIN can open it, so
+                // offer setup instead — which adopts the synced master key, so the
+                // sealed items open again. Moved aside rather than deleted.
+                Log.vault.warning("Vault is bound to a device secret this device lacks; asking for a new PIN.")
+                let aside = paths.vaultKeyFile.appendingPathExtension("orphaned")
+                try? FileManager.default.removeItem(at: aside)
+                try? FileManager.default.moveItem(at: paths.vaultKeyFile, to: aside)
+                try? FileManager.default.removeItem(at: paths.vaultThrottleFile)
+                wrapper = nil
+                state = .notConfigured
+            } else {
+                wrapper = w
+                state = .locked
+            }
         } else {
             wrapper = nil
             state = .notConfigured
@@ -95,18 +118,13 @@ public final class Vault {
 
     // MARK: - Setup
 
-    /// Whether this vault is opened by a PIN or a passphrase.
-    public var secretKind: VaultSecretKind { wrapper?.kind ?? .pin }
-
     /// True when setting a secret adopted a master key this account already had,
     /// rather than generating one — i.e. this device just joined an existing vault and
     /// the sealed items that sync to it will open.
     public private(set) var joinedExistingVault = false
 
-    public func setUpSecret(_ secret: String, kind: VaultSecretKind) async throws {
-        guard VaultSecretPolicy.isValid(secret, kind: kind) else {
-            throw VaultSecretPolicy.violation(for: kind)
-        }
+    public func setUpPIN(_ pin: String) async throws {
+        guard PINPolicy.isValid(pin) else { throw VaultError.pinNotFourDigits }
         // A second device must wrap the *existing* master key, not a new one: the
         // items that sync to it are sealed under the first. The PIN is therefore
         // per-device — it wraps the shared key locally — which is also why a wrong
@@ -114,7 +132,8 @@ public final class Vault {
         let existing = syncedMasterKey()
         let master = existing ?? VaultKey.generate()
         joinedExistingVault = existing != nil
-        let w = try await VaultCrypto.wrap(master: master, secret: secret, kind: kind)
+        let w = try await VaultCrypto.wrap(master: master, secret: pin,
+                                           deviceSecret: deviceSecretForWrapping())
         try persist(w)
         publishMasterKey(master)
         wrapper = w
@@ -123,23 +142,16 @@ public final class Vault {
         lastActivity = Date()
     }
 
-    public func setUpPIN(_ pin: String) async throws {
-        try await setUpSecret(pin, kind: .pin)
-    }
-
-    /// Re-wraps the one master key under a new secret, optionally of a different kind.
+    /// Re-wraps the one master key under a new PIN.
     ///
-    /// Switching between a PIN and a passphrase is this same operation: nothing is
-    /// decrypted and nothing is rewritten, because the key sealing the content never
-    /// changes — only the key sealing *it* does.
-    public func changeSecret(current: String, new: String, kind: VaultSecretKind? = nil) async throws {
+    /// Nothing is decrypted and nothing is rewritten, because the key sealing the
+    /// content never changes — only the key sealing *it* does.
+    public func changePIN(current: String, new: String) async throws {
         guard let w = wrapper else { throw VaultError.notConfigured }
-        let newKind = kind ?? w.kind
-        guard VaultSecretPolicy.isValid(new, kind: newKind) else {
-            throw VaultSecretPolicy.violation(for: newKind)
-        }
+        guard PINPolicy.isValid(new) else { throw VaultError.pinNotFourDigits }
         let master = try await unwrapCounting(w, secret: current)
-        let fresh = try await VaultCrypto.wrap(master: master, secret: new, kind: newKind)
+        let fresh = try await VaultCrypto.wrap(master: master, secret: new,
+                                               deviceSecret: deviceSecretForWrapping())
         try persist(fresh)
         wrapper = fresh
         key = master
@@ -147,15 +159,12 @@ public final class Vault {
         lastActivity = Date()
     }
 
-    public func changePIN(current: String, new: String) async throws {
-        try await changeSecret(current: current, new: new, kind: .pin)
-    }
-
     /// Removes PIN protection entirely. Callers must decrypt content back to
     /// plaintext *before* calling this, or it becomes unreadable.
     public func removePIN() throws {
         try? FileManager.default.removeItem(at: paths.vaultKeyFile)
         try? FileManager.default.removeItem(at: paths.vaultThrottleFile)
+        deviceSecrets?.delete()
         disableBiometricUnlock()
         wrapper = nil
         key = nil
@@ -164,20 +173,26 @@ public final class Vault {
 
     // MARK: - Unlock / lock
 
-    public func unlock(secret: String) async throws {
+    public func unlock(pin: String) async throws {
         guard let w = wrapper else { throw VaultError.notConfigured }
-        let master = try await unwrapCounting(w, secret: secret)
+        let master = try await unwrapCounting(w, secret: pin)
         // Publishes on first successful unlock for a vault that predates syncing, so
         // an existing library can be joined from a phone without re-encrypting it.
         publishMasterKey(master)
+        // Same idea for a vault that predates device binding: the right PIN is in
+        // hand, so wrap again with this device's secret mixed in. Best effort — a
+        // failure leaves the old, working wrapper in place.
+        if !w.isDeviceBound, let deviceSecret = deviceSecretForWrapping(),
+           var bound = try? await VaultCrypto.wrap(master: master, secret: pin,
+                                                   deviceSecret: deviceSecret) {
+            bound.failedAttempts = wrapper?.failedAttempts ?? 0
+            bound.lastFailedAt = wrapper?.lastFailedAt
+            if (try? persist(bound)) != nil { wrapper = bound }
+        }
         key = master
         state = .unlocked
         lastActivity = Date()
         lastError = nil
-    }
-
-    public func unlock(pin: String) async throws {
-        try await unlock(secret: pin)
     }
 
     /// Unwraps a guess, and holds the cooldown to it.
@@ -193,7 +208,8 @@ public final class Vault {
         }
 
         do {
-            let master = try await VaultCrypto.unwrap(w, secret: secret)
+            let master = try await VaultCrypto.unwrap(w, secret: secret,
+                                                      deviceSecret: deviceSecrets?.load())
             w.failedAttempts = 0
             w.lastFailedAt = nil
             try? persist(w)
@@ -377,6 +393,15 @@ public final class Vault {
     }
 
     // MARK: - Private
+
+    /// This device's secret, created on first use. Nil when there is nowhere safe to
+    /// keep one, and the wrapper is then PIN-only.
+    private func deviceSecretForWrapping() -> Data? {
+        guard let deviceSecrets else { return nil }
+        if let existing = deviceSecrets.load() { return existing }
+        let fresh = Data(SymmetricKey(size: .bits256).withUnsafeBytes { Data($0) })
+        return deviceSecrets.save(fresh) ? fresh : nil
+    }
 
     /// Wrong guesses, kept on the device that heard them. See `vaultThrottleFile`.
     struct Throttle: Codable, Sendable {

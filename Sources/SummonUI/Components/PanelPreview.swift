@@ -71,7 +71,7 @@ public struct PanelPreview: View {
                 .foregroundStyle(Theme.secondaryText)
             Text("Contents are locked")
                 .font(Theme.Typography.body.weight(.medium))
-            Text("Press ↩ to unlock with Touch ID, a PIN or a passphrase.")
+            Text("Press ↩ to unlock with Touch ID or your PIN.")
                 .font(Theme.Typography.caption)
                 .foregroundStyle(Theme.secondaryText)
                 .multilineTextAlignment(.center)

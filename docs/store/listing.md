@@ -60,7 +60,7 @@ PRIVATE BY DESIGN
 • No account, no analytics, no tracking, no ads
 • Mark anything sensitive and it is encrypted on your device with AES-GCM, under a key Apple never sees
 • A locked item stays findable by name and reveals nothing of its contents, its file, or the text inside a scan
-• Unlock with a PIN, a passphrase, Face ID or Touch ID
+• Unlock with a PIN, Face ID or Touch ID
 • "Encrypt everything" applies the same protection to your whole library, including what syncs
 
 OPEN SOURCE

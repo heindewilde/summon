@@ -249,7 +249,7 @@ struct PrivacySettings: View {
                 Label("""
                 Touch ID unlock needs an Apple Developer ID. A locally-signed build \
                 can’t store a key behind the biometric sensor, so this Mac asks for \
-                your \(model.vault.secretKind.noun).
+                your PIN.
                 """, systemImage: "touchid")
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.secondaryText)
@@ -273,32 +273,15 @@ struct PrivacySettings: View {
                 .foregroundStyle(Theme.secondaryText)
         }
 
-        SettingsSection(model.vault.secretKind.displayName) {
+        SettingsSection("PIN") {
             // What it actually protects, so the section is not an abstraction.
             SettingsRow("Protecting", value: protectedSummary)
-
-            if model.vault.secretKind == .pin {
-                // Said plainly rather than left implied. Four digits is 10,000
-                // combinations, and the cooldown that makes that reasonable only
-                // applies to someone typing into this app — not to someone who has
-                // copied the library folder and can guess offline as fast as they like.
-                //
-                // A `Label` rather than bare `Text`, matching the Touch ID note above:
-                // in a grouped form a bare Text sits outside the row inset and breaks
-                // the card it appears to be part of.
-                Label("""
-                A PIN is quick, and enough to stop someone who wanders past your Mac. \
-                A passphrase is what holds up if someone ever has a copy of your disk.
-                """, systemImage: "key")
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.secondaryText)
-            }
 
             // Unlabelled: these are actions, and inventing a noun for the left column
             // ("Four digits", "Protection") only made the rows read like settings.
             HStack {
                 Spacer()
-                Button("Change \(model.vault.secretKind.displayName)…") { sheet = .change }
+                Button("Change PIN…") { sheet = .change }
                 Button("Turn Off…", role: .destructive) { sheet = .turnOff }
             }
         }
@@ -310,7 +293,7 @@ struct PrivacySettings: View {
     private var notConfigured: some View {
         SettingsSection("Sensitive items") {
             SettingsRow("Lock") {
-                Button("Set a PIN or passphrase…") { sheet = .create }
+                Button("Set a PIN…") { sheet = .create }
             }
             Text("Nothing is encrypted until you set one. Marking an item or a folder sensitive will ask for it.")
                 .font(Theme.Typography.caption)

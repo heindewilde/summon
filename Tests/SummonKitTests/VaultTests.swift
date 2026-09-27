@@ -81,49 +81,48 @@ struct VaultCryptoTests {
           arguments: [("1234", true), ("0000", true), ("123", false),
                       ("12345", false), ("482913", false), ("12a4", false), ("", false)])
     func pinPolicy(pin: String, valid: Bool) {
-        #expect(VaultSecretPolicy.isValid(pin, kind: .pin) == valid)
+        #expect(PINPolicy.isValid(pin) == valid)
     }
 
-    @Test("Passphrase policy holds the minimum length",
-          arguments: [("correct horse battery", true), ("twelvechars!", true),
-                      ("short", false), ("elevenchar", false), ("", false)])
-    func passphrasePolicy(passphrase: String, valid: Bool) {
-        #expect(VaultSecretPolicy.isValid(passphrase, kind: .passphrase) == valid)
+    @Test("A device-bound wrapper opens only with both the PIN and the device secret")
+    func deviceBoundNeedsBoth() async throws {
+        let master = VaultKey.generate()
+        let device = Data(repeating: 7, count: 32)
+        let wrapper = try await VaultCrypto.wrap(master: master, secret: "4829",
+                                                 deviceSecret: device, iterations: iters)
+        #expect(wrapper.isDeviceBound)
+        #expect(try await VaultCrypto.unwrap(wrapper, secret: "4829", deviceSecret: device) == master)
+
+        // The file alone — what a backup or a copied disk holds — is not enough, even
+        // with the right PIN. That is the whole point.
+        await #expect(throws: VaultError.wrongPIN) {
+            _ = try await VaultCrypto.unwrap(wrapper, secret: "4829")
+        }
+        await #expect(throws: VaultError.wrongPIN) {
+            _ = try await VaultCrypto.unwrap(wrapper, secret: "4829",
+                                             deviceSecret: Data(repeating: 8, count: 32))
+        }
     }
 
-    @Test("A four-digit PIN is not accepted as a passphrase, and vice versa")
-    func policiesDoNotOverlap() {
-        #expect(!VaultSecretPolicy.isValid("4829", kind: .passphrase))
-        #expect(!VaultSecretPolicy.isValid("correct horse battery", kind: .pin))
-    }
-
-    @Test("The wrapper records which kind of secret opens it")
-    func wrapperCarriesKind() async throws {
-        let pinned = try await VaultCrypto.wrap(master: .generate(), secret: "4829",
-                                          kind: .pin, iterations: iters)
-        let phrased = try await VaultCrypto.wrap(master: .generate(), secret: "correct horse battery",
-                                           kind: .passphrase, iterations: iters)
-        #expect(pinned.kind == .pin)
-        #expect(phrased.kind == .passphrase)
-    }
-
-    /// The compatibility case that matters: every vault written before passphrases
-    /// existed has no `kindRaw` at all, and has to keep opening as a PIN.
-    @Test("A wrapper written before passphrases existed still decodes, as a PIN")
-    func legacyWrapperDecodesAsPIN() async throws {
-        let wrapper = try await VaultCrypto.wrap(master: .generate(), secret: "4829",
-                                           kind: .pin, iterations: iters)
+    /// The compatibility case that matters: every vault written before device binding
+    /// has no `deviceBound` field at all, and has to keep opening with the PIN alone.
+    @Test("A wrapper written before device binding still decodes and opens")
+    func legacyWrapperDecodes() async throws {
+        let master = VaultKey.generate()
+        let wrapper = try await VaultCrypto.wrap(master: master, secret: "4829", iterations: iters)
         var fields = try #require(
             try JSONSerialization.jsonObject(with: JSONEncoder().encode(wrapper))
                 as? [String: Any]
         )
-        fields.removeValue(forKey: "kindRaw")
+        fields.removeValue(forKey: "deviceBound")
         let legacy = try JSONDecoder().decode(
             VaultWrapper.self,
             from: try JSONSerialization.data(withJSONObject: fields)
         )
-        #expect(legacy.kind == .pin)
-        #expect(legacy.sealedMaster == wrapper.sealedMaster)
+        #expect(!legacy.isDeviceBound)
+        // A device secret being available must not get in the way of an old wrapper.
+        #expect(try await VaultCrypto.unwrap(legacy, secret: "4829",
+                                             deviceSecret: Data(repeating: 7, count: 32)) == master)
     }
 }
 
@@ -401,46 +400,26 @@ struct SealedSummaryTests {
     }
 }
 
-@Suite("Passphrase option")
+@Suite("Changing the PIN and binding it to the device")
 @MainActor
-struct PassphraseTests {
-    private let phrase = "correct horse battery"
+struct PINChangeAndBindingTests {
 
-    @Test("A vault can be set up with a passphrase instead of a PIN")
-    func setUpWithPassphrase() async throws {
+    @Test("Setup refuses anything but four digits")
+    func setupEnforcesThePolicy() async throws {
         let paths = LibraryPaths.temporary()
         defer { paths.destroy() }
         let vault = Vault(paths: paths)
 
-        try await vault.setUpSecret(phrase, kind: .passphrase)
-        #expect(vault.secretKind == .passphrase)
-        #expect(vault.isUnlocked)
-
-        vault.lock()
-        await #expect(throws: VaultError.wrongPIN) { try await vault.unlock(secret: "4829") }
-        try await vault.unlock(secret: phrase)
-        #expect(vault.isUnlocked)
-    }
-
-    @Test("Each kind holds its own length rule at setup")
-    func setupEnforcesTheRightPolicy() async throws {
-        let paths = LibraryPaths.temporary()
-        defer { paths.destroy() }
-        let vault = Vault(paths: paths)
-
-        await #expect(throws: VaultError.passphraseTooShort) {
-            try await vault.setUpSecret("tooshort", kind: .passphrase)
-        }
         await #expect(throws: VaultError.pinNotFourDigits) {
-            try await vault.setUpSecret(phrase, kind: .pin)
+            try await vault.setUpPIN("correct horse battery")
         }
         #expect(!vault.isConfigured)
     }
 
-    /// The point of the switch being a re-wrap: content is sealed under the master
-    /// key, which never changes, so nothing has to be decrypted and rewritten.
-    @Test("Switching from a PIN to a passphrase leaves content sealed and readable")
-    func switchingKindKeepsContent() async throws {
+    /// The point of a change being a re-wrap: content is sealed under the master key,
+    /// which never changes, so nothing has to be decrypted and rewritten.
+    @Test("Changing the PIN leaves content sealed and readable")
+    func changingKeepsContent() async throws {
         let paths = LibraryPaths.temporary()
         defer { paths.destroy() }
         let vault = Vault(paths: paths)
@@ -451,46 +430,33 @@ struct PassphraseTests {
         let sealedBefore = item.sealedBody
         #expect(sealedBefore != nil)
 
-        try await vault.changeSecret(current: "4829", new: phrase, kind: .passphrase)
-        #expect(vault.secretKind == .passphrase)
+        try await vault.changePIN(current: "4829", new: "1379")
         // The very same ciphertext — this was a re-wrap, not a re-encrypt.
         #expect(item.sealedBody == sealedBefore)
 
         vault.lock()
-        try await vault.unlock(secret: phrase)
+        await #expect(throws: VaultError.wrongPIN) { try await vault.unlock(pin: "4829") }
+        try await vault.unlock(pin: "1379")
         #expect(store.resolveBodyText(item, key: vault.currentKey) == "NLD1234567")
     }
 
-    @Test("Switching back to a PIN works the same way")
-    func switchingBackToPIN() async throws {
-        let paths = LibraryPaths.temporary()
-        defer { paths.destroy() }
-        let vault = Vault(paths: paths)
-        try await vault.setUpSecret(phrase, kind: .passphrase)
-
-        try await vault.changeSecret(current: phrase, new: "1379", kind: .pin)
-        #expect(vault.secretKind == .pin)
-        vault.lock()
-        try await vault.unlock(secret: "1379")
-        #expect(vault.isUnlocked)
-    }
-
-    @Test("A wrong current secret cannot re-key the vault")
-    func changeNeedsTheCurrentSecret() async throws {
+    @Test("A wrong current PIN cannot re-key the vault")
+    func changeNeedsTheCurrentPIN() async throws {
         let paths = LibraryPaths.temporary()
         defer { paths.destroy() }
         let vault = Vault(paths: paths)
         try await vault.setUpPIN("4829")
 
         await #expect(throws: VaultError.wrongPIN) {
-            try await vault.changeSecret(current: "0000", new: phrase, kind: .passphrase)
+            try await vault.changePIN(current: "0000", new: "1111")
         }
-        #expect(vault.secretKind == .pin)
+        vault.lock()
+        try await vault.unlock(pin: "4829")
     }
 
-    /// `changeSecret` used to unwrap directly, with no counter and no cooldown, which
+    /// `changePIN` used to unwrap directly, with no counter and no cooldown, which
     /// made "change my PIN" an unthrottled oracle for the current one.
-    @Test("Changing the secret is throttled like any other guess")
+    @Test("Changing the PIN is throttled like any other guess")
     func changeIsThrottled() async throws {
         let paths = LibraryPaths.temporary()
         defer { paths.destroy() }
@@ -499,7 +465,7 @@ struct PassphraseTests {
 
         for _ in 0..<5 {
             await #expect(throws: VaultError.wrongPIN) {
-                try await vault.changeSecret(current: "0000", new: "1111", kind: .pin)
+                try await vault.changePIN(current: "0000", new: "1111")
             }
         }
         #expect(vault.failedAttempts == 5)
@@ -507,19 +473,83 @@ struct PassphraseTests {
 
         // And the cooldown applies to the change path, not only to unlocking.
         await #expect(throws: (any Error).self) {
-            try await vault.changeSecret(current: "4829", new: "1111", kind: .pin)
+            try await vault.changePIN(current: "4829", new: "1111")
         }
     }
 
-    @Test("Changing without naming a kind keeps the one already in use")
-    func changeKeepsKindByDefault() async throws {
+    private func wrapperOnDisk(_ paths: LibraryPaths) throws -> VaultWrapper {
+        try JSONDecoder().decode(VaultWrapper.self, from: Data(contentsOf: paths.vaultKeyFile))
+    }
+
+    @Test("With a device secret available, setup binds the PIN to it")
+    func setupBinds() async throws {
         let paths = LibraryPaths.temporary()
         defer { paths.destroy() }
-        let vault = Vault(paths: paths)
-        try await vault.setUpSecret(phrase, kind: .passphrase)
+        let secrets = InMemoryDeviceSecret()
+        let vault = Vault(paths: paths, syncsMasterKey: false, deviceSecrets: secrets)
 
-        try await vault.changeSecret(current: phrase, new: "a longer passphrase")
-        #expect(vault.secretKind == .passphrase)
+        try await vault.setUpPIN("4829")
+        #expect(try wrapperOnDisk(paths).isDeviceBound)
+        #expect(secrets.load() != nil)
+
+        vault.lock()
+        try await vault.unlock(pin: "4829")
+        #expect(vault.isUnlocked)
+    }
+
+    @Test("An unbound vault is bound on its next successful unlock")
+    func legacyVaultMigrates() async throws {
+        let paths = LibraryPaths.temporary()
+        defer { paths.destroy() }
+        // Set up the way every vault was before: no device secret to bind to.
+        let before = Vault(paths: paths, syncsMasterKey: false)
+        try await before.setUpPIN("4829")
+        let key = before.currentKey
+        #expect(try !wrapperOnDisk(paths).isDeviceBound)
+
+        let secrets = InMemoryDeviceSecret()
+        let after = Vault(paths: paths, syncsMasterKey: false, deviceSecrets: secrets)
+        await #expect(throws: VaultError.wrongPIN) { try await after.unlock(pin: "0000") }
+        #expect(try !wrapperOnDisk(paths).isDeviceBound)
+
+        try await after.unlock(pin: "4829")
+        #expect(after.currentKey == key)
+        #expect(try wrapperOnDisk(paths).isDeviceBound)
+
+        // And it still opens afterwards, now through the bound wrapper.
+        after.lock()
+        try await after.unlock(pin: "4829")
+        #expect(after.currentKey == key)
+    }
+
+    /// Migration Assistant copies `vault.wrap` but not device-only Keychain items. No
+    /// PIN can open a bound wrapper without its secret, so the vault must ask for a
+    /// new PIN rather than reject the right one forever.
+    @Test("A bound vault on a device without its secret asks to be set up again")
+    func missingSecretAsksForSetup() async throws {
+        let paths = LibraryPaths.temporary()
+        defer { paths.destroy() }
+        let original = Vault(paths: paths, syncsMasterKey: false, deviceSecrets: InMemoryDeviceSecret())
+        try await original.setUpPIN("4829")
+
+        let elsewhere = Vault(paths: paths, syncsMasterKey: false, deviceSecrets: InMemoryDeviceSecret())
+        #expect(elsewhere.state == .notConfigured)
+        #expect(!FileManager.default.fileExists(atPath: paths.vaultKeyFile.path))
+        // Moved aside, not deleted.
+        #expect(FileManager.default.fileExists(
+            atPath: paths.vaultKeyFile.appendingPathExtension("orphaned").path))
+    }
+
+    @Test("Turning the PIN off forgets the device secret")
+    func removeForgetsSecret() async throws {
+        let paths = LibraryPaths.temporary()
+        defer { paths.destroy() }
+        let secrets = InMemoryDeviceSecret()
+        let vault = Vault(paths: paths, syncsMasterKey: false, deviceSecrets: secrets)
+        try await vault.setUpPIN("4829")
+
+        try vault.removePIN()
+        #expect(secrets.load() == nil)
     }
 }
 
@@ -595,7 +625,7 @@ struct CooldownTests {
 
     private func wrapper(failures: Int, lastFailedAt: Date?) async throws -> VaultWrapper {
         var w = try await VaultCrypto.wrap(master: .generate(), secret: "4829",
-                                     kind: .pin, iterations: 1_000)
+                                     iterations: 1_000)
         w.failedAttempts = failures
         w.lastFailedAt = lastFailedAt
         return w
@@ -870,11 +900,11 @@ struct UnlockThreadingTests {
         defer { paths.destroy() }
         let vault = Vault(paths: paths)
 
-        try await vault.setUpSecret("correct horse battery", kind: .passphrase)
+        try await vault.setUpPIN("4829")
         let before = vault.currentKey
         vault.lock()
 
-        try await vault.unlock(secret: "correct horse battery")
+        try await vault.unlock(pin: "4829")
         #expect(vault.isUnlocked)
         #expect(vault.currentKey == before)
     }

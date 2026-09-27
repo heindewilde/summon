@@ -41,15 +41,7 @@ struct VaultSheet: View {
                 }
 
                 if !model.vault.isUnlocked {
-                    if model.vault.secretKind == .pin {
-                        PINField(digits: $secret, isError: error != nil) { Task { await unlock() } }
-                    } else {
-                        SecureField("Passphrase", text: $secret)
-                            .textFieldStyle(.roundedBorder)
-                            .submitLabel(.go)
-                            .onSubmit { Task { await unlock() } }
-                            .frame(maxWidth: 320)
-                    }
+                    PINField(digits: $secret, isError: error != nil) { Task { await unlock() } }
 
                     if let error {
                         Text(error)
@@ -103,7 +95,7 @@ struct VaultSheet: View {
         busy = true
         defer { busy = false }
         do {
-            try await model.vault.unlock(secret: secret)
+            try await model.vault.unlock(pin: secret)
             error = nil
             secret = ""
         } catch {

@@ -243,8 +243,7 @@ public struct ItemDetailView: View {
             // once, one of them inert behind the other, is not a question anyone can
             // answer confidently.
             if model.lockSheet == nil {
-                SecretField(kind: model.vault.secretKind,
-                            secret: $pin,
+                SecretField(secret: $pin,
                             isError: model.secretError != nil,
                             onComplete: submitSecret)
                     .onChange(of: pin) { _, _ in model.secretError = nil }
@@ -376,7 +375,7 @@ public struct ItemDetailView: View {
                 .animation(Theme.panelIn, value: snapshot?.isSensitive)
                 .help(inheritsSensitivity
                       ? "Its folder is sensitive, so everything inside it is encrypted."
-                      : "Encrypt this item’s contents behind your \(model.vault.secretKind.noun).")
+                      : "Encrypt this item’s contents behind your PIN.")
             }
 
             // Only where it means something. A snippet's byte count is noise; a file's

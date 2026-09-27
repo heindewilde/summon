@@ -61,13 +61,12 @@ enum LiveCapture {
             if let row = environment["SUMMON_LIVE_SELECT"], let index = Int(row) {
                 model.selectedIndex = min(index, max(0, model.results.count - 1))
             }
-            // SUMMON_LIVE_SECRET puts the panel in its unlock state with a vault of
-            // that kind. Set after the query, before the panel is shown, so the mode
-            // is already right when the pane first lays out.
-            if let kind = VaultSecretKind(rawValue: environment["SUMMON_LIVE_SECRET"] ?? "") {
+            // SUMMON_LIVE_SECRET=pin puts the panel in its unlock state. Set after the
+            // query, before the panel is shown, so the mode is already right when the
+            // pane first lays out.
+            if environment["SUMMON_LIVE_SECRET"] == "pin" {
                 if !model.vault.isConfigured {
-                    try? await model.vault.setUpSecret(
-                        kind == .pin ? "1379" : "correct horse battery", kind: kind)
+                    try? await model.vault.setUpPIN("1379")
                 }
                 model.vault.lock()
                 model.store.refresh()
@@ -145,12 +144,8 @@ enum LiveCapture {
             )
 
         case "locksheet":
-            // The sheet's picker and the passphrase field are both AppKit-backed, so
-            // `ImageRenderer` draws them as an unavailable placeholder. They can only
-            // be reviewed in a real window.
-            let sheetKind = VaultSecretKind(rawValue: environment2["SUMMON_LIVE_SECRET"] ?? "")
             window = present(
-                LockSheet(model: model, purpose: .create, initialKind: sheetKind ?? .pin)
+                LockSheet(model: model, purpose: .create)
                     .background(Theme.chrome),
                 size: CGSize(width: 400, height: 420)
             )
@@ -166,9 +161,7 @@ enum LiveCapture {
             // A PIN can be configured first, so the section that only exists once one
             // is set can actually be looked at.
             if environment2["SUMMON_LIVE_PIN"] == "1", !model.vault.isConfigured {
-                let kind = VaultSecretKind(rawValue: environment2["SUMMON_LIVE_SECRET"] ?? "") ?? .pin
-                try? await model.vault.setUpSecret(
-                    kind == .pin ? "1379" : "correct horse battery", kind: kind)
+                try? await model.vault.setUpPIN("1379")
             }
             let tab = SettingsView.Tab(rawValue: environment2["SUMMON_LIVE_TAB"] ?? "") ?? .general
             window = present(SettingsView(model: model, tab: tab),

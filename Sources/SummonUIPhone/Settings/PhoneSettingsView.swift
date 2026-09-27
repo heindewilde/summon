@@ -56,7 +56,7 @@ struct PhoneSettingsView: View {
                                 }
                             ))
                         }
-                        Button("Change \(model.vault.secretKind.noun)") { model.beginChangeSecret() }
+                        Button("Change PIN") { model.beginChangeSecret() }
                     } else {
                         // The PIN is per-device: it wraps a key this account already
                         // has, so setting one here opens the items that synced from

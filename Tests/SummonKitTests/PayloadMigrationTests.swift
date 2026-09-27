@@ -87,7 +87,7 @@ struct PayloadMigrationTests {
         let (store, paths) = try library()
         defer { paths.destroy() }
 
-        try await store.vault.setUpSecret("1234", kind: .pin)
+        try await store.vault.setUpPIN("1234")
         let key = try #require(store.vault.currentKey)
         let id = try legacyItem(store, name: "Passport.pdf", body: "passport scan", sealed: true)
 
@@ -160,7 +160,7 @@ struct PayloadMigrationTests {
     func sealingRevokesPlaintext() async throws {
         let (store, paths) = try library()
         defer { paths.destroy() }
-        try await store.vault.setUpSecret("1234", kind: .pin)
+        try await store.vault.setUpPIN("1234")
 
         let id = try legacyItem(store, name: "Passport.pdf", body: "passport scan")
         _ = store.migratePayloads()
